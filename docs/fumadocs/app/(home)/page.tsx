@@ -27,6 +27,7 @@ import {
   WORLDFOUNDRY_WECHAT_QR,
 } from '@/lib/site-links';
 import { modelRecipeIndex } from '@/lib/model-recipe-index';
+import { getModelRecipe } from '@/lib/model-recipes';
 import { catalogCoverage } from '@/lib/catalog-coverage';
 import { catalogReadinessLabel } from '@/lib/model-recipe-types';
 import { withBasePath } from '@/lib/site-path';
@@ -108,17 +109,27 @@ const featuredModels: HomeRecipeOption[] = [
   ),
 ]
   .slice(0, 8)
-  .map((recipe) => ({
-    id: recipe.id,
-    name: recipe.name,
-    provider: recipe.provider,
-    category: recipe.category,
-    tasks: recipe.tasks,
-    status: catalogReadinessLabel(recipe.status.group),
-    environment: recipe.runtime.environmentName,
-    python: recipe.runtime.python,
-    cuda: recipe.runtime.cudaLabel,
-  }));
+  .map((recipe) => {
+    const fullRecipe = getModelRecipe(recipe.id);
+    const inferenceTaskIds = Array.from(
+      new Set(
+        (fullRecipe?.inferenceTasks ?? [])
+          .map((task) => task.id.trim())
+          .filter(Boolean),
+      ),
+    );
+    return {
+      id: recipe.id,
+      name: recipe.name,
+      provider: recipe.provider,
+      category: recipe.category,
+      tasks: inferenceTaskIds.length > 0 ? inferenceTaskIds : recipe.tasks,
+      status: catalogReadinessLabel(recipe.status.group),
+      environment: recipe.runtime.environmentName,
+      python: recipe.runtime.python,
+      cuda: recipe.runtime.cudaLabel,
+    };
+  });
 
 const communityLinks = [
   {

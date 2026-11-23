@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import {
@@ -37,9 +38,9 @@ export function MetricQuickNav({
       <div className="pi-metric-quick-nav-body">
         <div className="pi-metric-quick-nav-sections">
           <span className="pi-metric-quick-nav-section-item">
-            <a href={referencePath}>
+            <Link href={referencePath}>
               {locale === 'zh' ? 'Registry 与参考' : 'Registry & reference'}
-            </a>
+            </Link>
           </span>
         </div>
 
@@ -52,7 +53,7 @@ export function MetricQuickNav({
             return (
               <section className="pi-metric-quick-nav-group" key={pageId}>
                 <h3 className="pi-metric-quick-nav-group-title">
-                  <a href={metricDocsPath(locale, meta.slug)}>{meta.label[locale]}</a>
+                  <Link href={metricDocsPath(locale, meta.slug)}>{meta.label[locale]}</Link>
                 </h3>
                 <p className="pi-metric-quick-nav-group-meta">
                   {count} {locale === 'zh' ? '个指标' : 'metrics'}
@@ -77,15 +78,14 @@ export function MetricQuickNav({
 
   const groups = page ? metricQuickNavGroupsForPage(page) : metricQuickNavGroups;
   const metricCount = groups.reduce((count, group) => count + group.items.length, 0);
-  const basePath = page ? metricDocsPath(locale, metricQuickNavPageMeta[page].slug) : '';
   const title = labels.title;
   const body = (
     <div className="pi-metric-quick-nav-body">
       <div className="pi-metric-quick-nav-sections">
         <span className="pi-metric-quick-nav-section-item">
-          <a href={metricDocsPath(locale, '/evaluation/metrics')}>
+          <Link href={metricDocsPath(locale, '/evaluation/metrics')}>
             {locale === 'zh' ? '指标概览' : 'Metrics overview'}
-          </a>
+          </Link>
         </span>
       </div>
 
@@ -94,11 +94,16 @@ export function MetricQuickNav({
           <section className="pi-metric-quick-nav-group" key={group.id}>
             <h3 className="pi-metric-quick-nav-group-title">{group.label[locale]}</h3>
             <ul className="pi-metric-quick-nav-list">
-              {group.items.map((item) => (
-                <li key={item.id[locale]}>
-                  <a href={`${basePath}#${item.id[locale]}`}>{item.label[locale]}</a>
-                </li>
-              ))}
+              {group.items.map((item) => {
+                const href = page
+                  ? `#${item.id[locale]}`
+                  : `${metricDocsPath(locale, metricQuickNavPageMeta[group.page].slug)}#${item.id[locale]}`;
+                return (
+                  <li key={item.id[locale]}>
+                    <Link href={href}>{item.label[locale]}</Link>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ))}

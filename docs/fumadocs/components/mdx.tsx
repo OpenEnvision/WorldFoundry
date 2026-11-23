@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import * as CalloutComponents from 'fumadocs-ui/components/callout';
 import * as CardComponents from 'fumadocs-ui/components/card';
 import * as StepsComponents from 'fumadocs-ui/components/steps';
@@ -90,6 +91,7 @@ export function getMDXComponents(components?: MDXComponents) {
     DedicatedEnvCatalog,
     DocsImage,
     DocsWelcomeAcknowledgements,
+    Link,
     MathBlock,
     MathInline,
     KvCatalog,

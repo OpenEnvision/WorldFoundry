@@ -7,6 +7,28 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FUMADOCS_SRC="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${FUMADOCS_SRC}/../.." && pwd)"
+
+ensure_npm() {
+  if [[ -n "${WF_DOCS_NODE_BIN:-}" ]]; then
+    case ":${PATH}:" in
+      *":${WF_DOCS_NODE_BIN}:"*) ;;
+      *) export PATH="${WF_DOCS_NODE_BIN}:${PATH}" ;;
+    esac
+  fi
+  if [[ -n "${WF_DOCS_NPM_BIN:-}" ]]; then
+    case ":${PATH}:" in
+      *":${WF_DOCS_NPM_BIN}:"*) ;;
+      *) export PATH="${WF_DOCS_NPM_BIN}:${PATH}" ;;
+    esac
+  fi
+  if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+    echo "node and npm are required; install Node.js or set WF_DOCS_NODE_BIN/WF_DOCS_NPM_BIN" >&2
+    exit 1
+  fi
+}
+
+ensure_npm
+
 DOCS_MIRROR_ID="$(node -e 'process.stdout.write(require("node:crypto").createHash("sha256").update(require("node:fs").realpathSync(process.argv[1])).digest("hex").slice(0,16))' "${FUMADOCS_SRC}")"
 LOCAL_ROOT="${WF_DOCS_LOCAL_ROOT:-/tmp/wf-docs-dev/${DOCS_MIRROR_ID}/WorldFoundry}"
 LOCAL_FUMADOCS="${LOCAL_ROOT}/docs/fumadocs"
@@ -20,6 +42,8 @@ RSYNC_EXCLUDES=(
   --exclude 'node_modules'
   --exclude 'tmp/'
   --exclude '.source/'
+  --exclude 'public/org-logos'
+  --exclude '.mirror-ready'
 )
 
 sync_repo_links() {
@@ -57,23 +81,9 @@ mirror_ready() {
     && [[ -d "${LOCAL_FUMADOCS}" ]]
 }
 
-ensure_npm() {
-  if [[ -n "${WF_DOCS_NODE_BIN:-}" ]]; then
-    export PATH="${WF_DOCS_NODE_BIN}:${PATH}"
-  fi
-  if [[ -n "${WF_DOCS_NPM_BIN:-}" ]]; then
-    export PATH="${WF_DOCS_NPM_BIN}:${PATH}"
-  fi
-  if ! command -v npm >/dev/null 2>&1; then
-    echo "npm is required; install Node.js or set WF_DOCS_NODE_BIN/WF_DOCS_NPM_BIN" >&2
-    exit 1
-  fi
-}
-
 run_predev() {
   (
     cd "${LOCAL_FUMADOCS}"
-    ensure_npm
     export WF_DOCS_SKIP_MDX=1
     node scripts/predev.mjs
   )
@@ -92,7 +102,6 @@ sync_to_local() {
 
   (
     cd "${LOCAL_FUMADOCS}"
-    ensure_npm
     if [[ ! -d node_modules ]]; then
       echo "Installing docs dependencies on local SSD"
       npm ci --prefer-offline --no-audit --no-fund
@@ -161,7 +170,10 @@ case "${1:-dev}" in
   sync) sync_to_local full ;;
   back) sync_back ;;
   clean) clean_local_caches; rm -f "${MIRROR_STAMP}" ;;
-  dev) shift; run_dev "$@" ;;
+  dev)
+    if (($# > 0)); then shift; fi
+    run_dev "$@"
+    ;;
   -h|--help|help) usage ;;
   *)
     echo "Unknown command: $1" >&2

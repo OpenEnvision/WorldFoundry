@@ -24,6 +24,7 @@
     "ssd:setup": "bash scripts/ssd-cache.sh setup",
     "ssd:status": "bash scripts/ssd-cache.sh status",
     "predev:fast": "WF_DOCS_SKIP_MDX=1 node scripts/predev.mjs",
+    "predev:turbo": "WF_DOCS_SKIP_MDX=1 node scripts/predev.mjs",
     "mdx:generate": "fumadocs-mdx",
     "models:check": "bash scripts/run-python.sh scripts/generate-model-recipes.py --check",
     "models:generate": "bash scripts/run-python.sh scripts/generate-model-recipes.py",

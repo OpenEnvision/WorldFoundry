@@ -65,7 +65,7 @@ The boundary rule is the same on every entry: a package exposes stable, serializ
           </div>
         </div>
         <p>Shared inference infrastructure: loading, attention, distributed, VRAM, kernels, memory, configuration, IO, safety. The only home for offload/distributed/kernel/quantization.</p>
-        <p className="pi-kv-read"><span>First file</span> <a href="/docs/maintainers/architecture/core-infrastructure">Core infrastructure</a></p>
+        <p className="pi-kv-read"><span>First file</span> <Link href="/docs/maintainers/architecture/core-infrastructure">Core infrastructure</Link></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -74,7 +74,7 @@ The boundary rule is the same on every entry: a package exposes stable, serializ
           </div>
         </div>
         <p>Inference-only model packages: <code>diffusion_model</code> (the single canonical diffusion kernel), <code>llm_mllm_core</code>, <code>perception_core</code>, <code>three_dimensions</code>. No training, datasets, or experiment scripts.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>{"base_models/diffusion_model/__init__.py"}</code>; <a href="/docs/maintainers/architecture/native-diffusion">Native diffusion</a></p>
+        <p className="pi-kv-read"><span>First file</span> <code>{"base_models/diffusion_model/__init__.py"}</code>; <Link href="/docs/maintainers/architecture/native-diffusion">Native diffusion</Link></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -101,7 +101,7 @@ The boundary rule is the same on every entry: a package exposes stable, serializ
           </div>
         </div>
         <p>In-tree runtime execution: hosted API wrappers, native runtime bridges, per-family <code>synthesis.py</code>, action surfaces, memory modules.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>synthesis/base_synthesis.py:31</code> <code>BaseSynthesis</code>; <a href="/docs/maintainers/architecture/runtime-assembly">Runtime assembly</a></p>
+        <p className="pi-kv-read"><span>First file</span> <code>synthesis/base_synthesis.py:31</code> <code>BaseSynthesis</code>; <Link href="/docs/maintainers/architecture/runtime-assembly">Runtime assembly</Link></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -110,7 +110,7 @@ The boundary rule is the same on every entry: a package exposes stable, serializ
           </div>
         </div>
         <p>Public contracts, execution runners, catalog loaders, metrics, reporting, scorecards. The benchmark side of the artifact boundary.</p>
-        <p className="pi-kv-read"><span>First file</span> <a href="/docs/maintainers/architecture/evaluation-core">Evaluation core</a></p>
+        <p className="pi-kv-read"><span>First file</span> <Link href="/docs/maintainers/architecture/evaluation-core">Evaluation core</Link></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -119,7 +119,7 @@ The boundary rule is the same on every entry: a package exposes stable, serializ
           </div>
         </div>
         <p>Interactive preview shell over the same catalog and runtime contracts. Presentation glue only.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>studio/cli.py:21</code> <code>main()</code>; <code>studio/inference/execution.py</code>, <code>studio/inference/catalog/discovery.py</code>; <a href="/docs/maintainers/architecture/studio-internals">Studio internals</a></p>
+        <p className="pi-kv-read"><span>First file</span> <code>studio/cli.py:21</code> <code>main()</code>; <code>studio/inference/execution.py</code>, <code>studio/inference/catalog/discovery.py</code>; <Link href="/docs/maintainers/architecture/studio-internals">Studio internals</Link></p>
       </li>
     </ul>
   </section>

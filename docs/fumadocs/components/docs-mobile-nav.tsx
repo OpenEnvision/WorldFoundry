@@ -1,5 +1,6 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -13,8 +14,13 @@ function getShell() {
 }
 
 export function DocsMobileNavToggle({ openLabel, closeLabel }: DocsMobileNavProps) {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     const shell = getShell();
@@ -62,18 +68,20 @@ export function DocsMobileNavToggle({ openLabel, closeLabel }: DocsMobileNavProp
   }, [open]);
 
   useEffect(() => {
-    const shell = getShell();
-    if (!shell) return;
+    if (!open) return;
+    const sidebar = getShell()?.querySelector<HTMLElement>('.pi-doc-sidebar');
+    if (!sidebar) return;
 
-    const close = () => setOpen(false);
-    shell.querySelectorAll<HTMLAnchorElement>('.pi-doc-sidebar a').forEach((link) => {
-      link.addEventListener('click', close);
-    });
+    const onSidebarClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('a[href]')) {
+        setOpen(false);
+      }
+    };
 
+    sidebar.addEventListener('click', onSidebarClick);
     return () => {
-      shell.querySelectorAll<HTMLAnchorElement>('.pi-doc-sidebar a').forEach((link) => {
-        link.removeEventListener('click', close);
-      });
+      sidebar.removeEventListener('click', onSidebarClick);
     };
   }, [open]);
 

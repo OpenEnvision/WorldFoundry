@@ -23,7 +23,7 @@ type CommandMode = 'prepare' | 'inspect' | 'run';
 function taskProfile(task: string) {
   const value = task.trim();
   if (!value || value === 'Not recorded') return 'default';
-  return value.replaceAll('_', '-');
+  return value;
 }
 
 function commandFor(mode: CommandMode, modelId: string, task: string) {
@@ -55,14 +55,16 @@ export function HomeRunConfigurator({
   const [task, setTask] = useState(model?.tasks[0] ?? '');
   const [mode, setMode] = useState<CommandMode>('run');
   const [copied, setCopied] = useState(false);
+  const activeTask =
+    model && model.tasks.includes(task) ? task : (model?.tasks[0] ?? '');
   const command = useMemo(
-    () => commandFor(mode, model?.id ?? modelId, task),
-    [mode, model, modelId, task],
+    () => commandFor(mode, model?.id ?? modelId, activeTask),
+    [mode, model, modelId, activeTask],
   );
 
   useEffect(() => {
     setTask(model?.tasks[0] ?? '');
-  }, [model?.id]);
+  }, [model?.id, model?.tasks]);
 
   async function copyCommand() {
     try {
@@ -98,7 +100,10 @@ export function HomeRunConfigurator({
           <select
             value={model.id}
             onChange={(event) => {
-              setModelId(event.target.value);
+              const nextId = event.target.value;
+              const nextModel = models.find((item) => item.id === nextId);
+              setModelId(nextId);
+              setTask(nextModel?.tasks[0] ?? '');
             }}
           >
             {models.map((item) => (
@@ -110,7 +115,7 @@ export function HomeRunConfigurator({
         </label>
         <label className="wf-home-configurator-field">
           <span>Task</span>
-          <select value={task} onChange={(event) => setTask(event.target.value)}>
+          <select value={activeTask} onChange={(event) => setTask(event.target.value)}>
             {(model.tasks.length > 0 ? model.tasks : ['Not recorded']).map((item) => (
               <option value={item} key={item}>
                 {item}
@@ -164,7 +169,7 @@ export function HomeRunConfigurator({
           <code>{command}</code>
         </pre>
         <footer>
-          <span>{task || 'Task not recorded'}</span>
+          <span>{activeTask || 'Task not recorded'}</span>
           <Link href={`/docs/guides/supported-models/${model.id}`}>
             Open full recipe
             <ExternalLink aria-hidden="true" size={12} />

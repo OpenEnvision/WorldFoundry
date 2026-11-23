@@ -35,6 +35,12 @@ function getScrollRoot() {
   return document.querySelector<HTMLElement>('.pi-doc-main');
 }
 
+export function isMainScrollable(main: HTMLElement | null): main is HTMLElement {
+  if (!main) return false;
+  const overflowY = getComputedStyle(main).overflowY;
+  return overflowY !== 'visible' && main.scrollHeight > main.clientHeight + 1;
+}
+
 export function resolveActiveHeading(ids: string[]) {
   let active = ids[0] ?? null;
   let bestTop = Number.NEGATIVE_INFINITY;
@@ -62,6 +68,7 @@ function subscribeToHeadingUpdates(onStoreChange: () => void) {
 
   const main = getScrollRoot();
   main?.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('scroll', schedule, { passive: true });
   window.addEventListener(DOCS_MAIN_SCROLL_EVENT, schedule);
   window.addEventListener('wheel', schedule, { passive: true, capture: true });
   window.addEventListener('resize', schedule);
@@ -80,6 +87,7 @@ function subscribeToHeadingUpdates(onStoreChange: () => void) {
   return () => {
     timers.forEach((timer) => window.clearTimeout(timer));
     main?.removeEventListener('scroll', schedule);
+    window.removeEventListener('scroll', schedule);
     window.removeEventListener(DOCS_MAIN_SCROLL_EVENT, schedule);
     window.removeEventListener('wheel', schedule, { capture: true });
     window.removeEventListener('resize', schedule);

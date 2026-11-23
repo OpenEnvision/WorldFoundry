@@ -65,7 +65,7 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
           </div>
         </div>
         <p>共享推理基础设施：加载、attention、分布式、VRAM、kernel、memory、配置、IO、安全。offload/distributed/kernel/quantization 的唯一归属。</p>
-        <p className="pi-kv-read"><span>首读</span> <a href="/zh/docs/maintainers/architecture/core-infrastructure">核心基础设施</a></p>
+        <p className="pi-kv-read"><span>首读</span> <Link href="/zh/docs/maintainers/architecture/core-infrastructure">核心基础设施</Link></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -74,7 +74,7 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
           </div>
         </div>
         <p>仅推理的模型包：<code>diffusion_model</code>（唯一的 canonical 扩散内核）、<code>llm_mllm_core</code>、<code>perception_core</code>、<code>three_dimensions</code>。不含训练、数据集或实验脚本。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>{"base_models/diffusion_model/__init__.py"}</code>；<a href="/zh/docs/maintainers/architecture/native-diffusion">原生扩散</a></p>
+        <p className="pi-kv-read"><span>首读</span> <code>{"base_models/diffusion_model/__init__.py"}</code>；<Link href="/zh/docs/maintainers/architecture/native-diffusion">原生扩散</Link></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -101,7 +101,7 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
           </div>
         </div>
         <p>树内 runtime 执行：hosted API wrapper、native runtime bridge、各 family 的 <code>synthesis.py</code>、动作面、memory 模块。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>synthesis/base_synthesis.py:31</code> <code>BaseSynthesis</code>；<a href="/zh/docs/maintainers/architecture/runtime-assembly">Runtime 组装</a></p>
+        <p className="pi-kv-read"><span>首读</span> <code>synthesis/base_synthesis.py:31</code> <code>BaseSynthesis</code>；<Link href="/zh/docs/maintainers/architecture/runtime-assembly">Runtime 组装</Link></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -110,7 +110,7 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
           </div>
         </div>
         <p>公共契约、执行 runner、catalog 加载、metric、reporting、scorecard。artifact 边界上 benchmark 一侧。</p>
-        <p className="pi-kv-read"><span>首读</span> <a href="/zh/docs/maintainers/architecture/evaluation-core">评测核心</a></p>
+        <p className="pi-kv-read"><span>首读</span> <Link href="/zh/docs/maintainers/architecture/evaluation-core">评测核心</Link></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -119,7 +119,7 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
           </div>
         </div>
         <p>复用同一 catalog/runtime 契约的交互式预览壳。仅展示层胶水。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>studio/cli.py:21</code> <code>main()</code>；<code>studio/inference/execution.py</code>、<code>studio/inference/catalog/discovery.py</code>；<a href="/zh/docs/maintainers/architecture/studio-internals">Studio 内部</a></p>
+        <p className="pi-kv-read"><span>首读</span> <code>studio/cli.py:21</code> <code>main()</code>；<code>studio/inference/execution.py</code>、<code>studio/inference/catalog/discovery.py</code>；<Link href="/zh/docs/maintainers/architecture/studio-internals">Studio 内部</Link></p>
       </li>
     </ul>
   </section>

@@ -1,6 +1,6 @@
 'use client';
 
-import { DOCS_MAIN_SCROLL_EVENT } from '@/lib/docs-toc-scroll-spy';
+import { DOCS_MAIN_SCROLL_EVENT, isMainScrollable } from '@/lib/docs-toc-scroll-spy';
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 
@@ -23,6 +23,8 @@ function findScrollContainer(node: Node | null): HTMLElement | null {
 }
 
 function forwardWheelToMain(main: HTMLElement, event: WheelEvent) {
+  if (!isMainScrollable(main)) return;
+
   // The sidebar/right-rail panels are `overflow: hidden` flex columns; the real
   // scroll happens on an inner container (e.g. `.pi-doc-list`), so scroll the
   // event target's scrollable ancestor first.
@@ -46,6 +48,11 @@ function forwardWheelToMain(main: HTMLElement, event: WheelEvent) {
   }
 }
 
+function getStickyHeaderOffset(): number {
+  const header = document.querySelector<HTMLElement>('.pi-doc-header');
+  return header ? header.getBoundingClientRect().height : 0;
+}
+
 function scrollMainToHash(main: HTMLElement, hash: string) {
   const id = decodeURIComponent(hash.replace(/^#/, ''));
   if (!id) return;
@@ -54,9 +61,16 @@ function scrollMainToHash(main: HTMLElement, hash: string) {
   if (!target || !main.contains(target)) return;
 
   const offset = 16;
-  const mainRect = main.getBoundingClientRect();
-  const targetRect = target.getBoundingClientRect();
-  main.scrollTop += targetRect.top - mainRect.top - offset;
+  if (isMainScrollable(main)) {
+    const mainRect = main.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    main.scrollTop += targetRect.top - mainRect.top - offset;
+    return;
+  }
+
+  const headerOffset = getStickyHeaderOffset();
+  const targetTop = target.getBoundingClientRect().top + window.scrollY - headerOffset - offset;
+  window.scrollTo({ top: Math.max(0, targetTop) });
 }
 
 export function DocsScrollBridge() {
@@ -72,6 +86,7 @@ export function DocsScrollBridge() {
     );
 
     const onShellWheel = (event: WheelEvent) => {
+      if (!isMainScrollable(main)) return;
       if (!(event.target instanceof Node) || main.contains(event.target)) {
         return;
       }
@@ -110,7 +125,11 @@ export function DocsScrollBridge() {
     };
 
     const panelCleanups = panels.map((panel) => {
-      const onPanelWheel = (event: WheelEvent) => forwardWheelToMain(main, event);
+      const onPanelWheel = (event: WheelEvent) => {
+        if (!isMainScrollable(main)) return;
+        forwardWheelToMain(main, event);
+        event.stopPropagation();
+      };
       panel.addEventListener('wheel', onPanelWheel, { passive: false });
       return () => panel.removeEventListener('wheel', onPanelWheel);
     });
@@ -127,7 +146,11 @@ export function DocsScrollBridge() {
         window.setTimeout(() => notifyMainScroll(main), 400);
       });
     } else {
-      main.scrollTop = 0;
+      if (isMainScrollable(main)) {
+        main.scrollTop = 0;
+      } else {
+        window.scrollTo({ top: 0 });
+      }
       notifyMainScroll(main);
     }
 

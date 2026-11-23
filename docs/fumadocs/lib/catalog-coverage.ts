@@ -35,4 +35,4 @@ export type CatalogCoverageData = {
 export const catalogCoverage: CatalogCoverageData = catalogCoverageData as CatalogCoverageData;
 
 /** Benchmark Hub pages currently missing from docs (catalog still lists them). */
-export const benchmarkHubMissingIds = new Set(['worldreasonbench', 'wrbench']);
+export const benchmarkHubMissingIds = new Set<string>();

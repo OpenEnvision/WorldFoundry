@@ -180,11 +180,66 @@ def test_local_ssd_dev_sync_refreshes_source_without_copying_dependency_trees() 
 
     assert "--exclude 'node_modules'" in source
     assert "--exclude 'tmp/'" in source
+    assert "--exclude 'public/org-logos'" in source
+    assert "--exclude '.mirror-ready'" in source
     assert "npm ci --prefer-offline --no-audit --no-fund" in source
     assert "run_predev()" in source
     assert "node scripts/predev.mjs" in source
+    assert source.index("ensure_npm\n") < source.index("DOCS_MIRROR_ID=")
     run_dev = source[source.index("run_dev() {") : source.index("\nusage() {")]
     assert "rsync -a" in run_dev
     assert "sync_to_local full" in run_dev
     assert run_dev.index("run_predev") < run_dev.index("exec npx")
     assert "CPFS" not in source
+
+
+def test_ssd_cache_keeps_source_and_next_local_and_predev_turbo_exists(tmp_path: Path) -> None:
+    scripts = json.loads((FUMADOCS / "package.json").read_text(encoding="utf-8"))["scripts"]
+    assert scripts["predev:turbo"] == "WF_DOCS_SKIP_MDX=1 node scripts/predev.mjs"
+
+    docs_root = tmp_path / "fumadocs"
+    ssd_root = tmp_path / "ssd"
+    legacy_source = tmp_path / "legacy-source"
+    docs_root.mkdir()
+    (docs_root / "node_modules").mkdir()
+    legacy_source.mkdir()
+    (legacy_source / "server.ts").write_text("// migrated\n", encoding="utf-8")
+    (docs_root / ".source").symlink_to(legacy_source)
+
+    env = {
+        **os.environ,
+        "WF_DOCS_ROOT": str(docs_root),
+        "WF_DOCS_SSD_ROOT": str(ssd_root),
+    }
+    setup = subprocess.run(
+        ["/bin/bash", str(FUMADOCS / "scripts" / "ssd-cache.sh"), "setup"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+        env=env,
+    )
+    assert setup.returncode == 0, setup.stderr
+    assert not (docs_root / ".source").is_symlink()
+    assert (docs_root / ".source" / "server.ts").read_text(encoding="utf-8") == "// migrated\n"
+    assert not (docs_root / "tmp").is_symlink()
+    assert (docs_root / "tmp" / "webpack").is_symlink()
+    assert (docs_root / "tmp" / "webpack").resolve() == (ssd_root / "webpack").resolve()
+    assert (docs_root / "node_modules" / ".cache").is_symlink()
+    assert (docs_root / "node_modules" / ".cache").resolve() == (ssd_root / "node-cache").resolve()
+
+    clean = subprocess.run(
+        ["/bin/bash", str(FUMADOCS / "scripts" / "ssd-cache.sh"), "clean", "--purge"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+        env=env,
+    )
+    assert clean.returncode == 0, clean.stderr
+    assert not (docs_root / "tmp" / "webpack").exists()
+    assert not (docs_root / "node_modules" / ".cache").exists()
+    assert not ssd_root.exists()
+    assert (docs_root / ".source" / "server.ts").is_file()

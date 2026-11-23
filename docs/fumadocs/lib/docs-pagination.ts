@@ -46,30 +46,36 @@ function getArchitectureChildSlugs(locale: Locale): readonly string[][] {
 
 export function getDocsPaginationPages(locale: Locale): DocsPage[] {
   const pages: DocsPage[] = [];
+  const seen = new Set<string>();
+
+  const appendPage = (slugs: readonly string[]) => {
+    const key = slugs.join('/');
+    if (seen.has(key)) return;
+    const page = source.getPage([...slugs], locale);
+    if (!page) return;
+    seen.add(key);
+    pages.push(page);
+  };
 
   for (const group of docsNavGroups) {
     for (const slugs of group.slugs) {
-      const page = source.getPage([...slugs], locale);
-      if (page) pages.push(page);
+      appendPage(slugs);
 
       if (slugs.join('/') === 'evaluation/benchmark-hub') {
         for (const childSlugs of getBenchmarkHubChildSlugs()) {
-          const child = source.getPage(childSlugs, locale);
-          if (child) pages.push(child);
+          appendPage(childSlugs);
         }
       }
 
       if (slugs.join('/') === 'evaluation/metrics') {
         for (const childSlugs of getMetricsChildSlugs(locale)) {
-          const child = source.getPage(childSlugs, locale);
-          if (child) pages.push(child);
+          appendPage(childSlugs);
         }
       }
 
       if (slugs.join('/') === 'maintainers/architecture') {
         for (const childSlugs of getArchitectureChildSlugs(locale)) {
-          const child = source.getPage(childSlugs, locale);
-          if (child) pages.push(child);
+          appendPage(childSlugs);
         }
       }
     }

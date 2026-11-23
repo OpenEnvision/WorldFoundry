@@ -85,9 +85,12 @@ export function CatalogCoverage({ modelCount }: { modelCount: number }) {
     const benchHits = benchmarkGroups.some((group) =>
       group.entries.some((entry) => matchesQuery(entry, deferredQuery)),
     );
-    if (surface === 'models' && !modelHits && benchHits) setSurface('benchmarks');
-    if (surface === 'benchmarks' && !benchHits && modelHits) setSurface('models');
-  }, [deferredQuery, isSearching, modelFamilies, benchmarkGroups, surface]);
+    setSurface((current) => {
+      if (current === 'models' && !modelHits && benchHits) return 'benchmarks';
+      if (current === 'benchmarks' && !benchHits && modelHits) return 'models';
+      return current;
+    });
+  }, [deferredQuery, isSearching, modelFamilies, benchmarkGroups]);
 
   const activeFamily = modelFamilies.find((family) => family.id === familyId) ?? modelFamilies[0];
   const activeGroup = benchmarkGroups.find((group) => group.id === groupId) ?? benchmarkGroups[0];
