@@ -1,8 +1,7 @@
 # Default unified WorldFoundry GPU environment.
 #
-# This is the only requirements entrypoint used by scripts/setup/conda_install.sh.
 # Torch, torchvision, and torchaudio are installed first from the selected CUDA
-# wheel bucket, so this file records only the Python layers above that runtime.
+# wheel bucket, followed by the extensions that build against that stack.
 # Model-specific vendor dependency captures live in runtime profile metadata, not
 # as separate files in this directory.
 
@@ -116,8 +115,6 @@ torcheval==0.0.7
 tqdm
 stable-worldmodel[train]
 
-# GigaWorld-0's released sparse-attention checkpoint. NATTEN 0.20 keeps the
-# stride-aware generic 3D API while remaining source-compatible with Torch 2.5;
-# build it for the CUDA architecture(s) available during environment setup.
-natten==0.20.1
+# Torch-linked extensions used by the native inference runtime.
+-r worldfoundry-cuda-extensions.txt
 giga-models @ git+https://github.com/open-gigaai/giga-models.git@b0e05c7353a2d5d06fa8a92d2103c0fdd52e2e4d

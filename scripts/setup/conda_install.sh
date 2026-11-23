@@ -279,7 +279,7 @@ if [[ "$VERIFY_ONLY" != "1" ]]; then
   TORCH_INDEX_URL="${WORLDFOUNDRY_TORCH_INDEX_URL:-https://download.pytorch.org/whl/${CUDA_PROFILE}}"
   PYPI_INDEX_URL="${WORLDFOUNDRY_PYPI_INDEX_URL:-https://pypi.org/simple}"
   PIP_CONFIG_FILE="${WORLDFOUNDRY_PIP_CONFIG_FILE:-/dev/null}" conda_run \
-    python -m pip install --no-cache-dir --index-url "$TORCH_INDEX_URL" --extra-index-url "$PYPI_INDEX_URL" \
+    python -m pip install --no-cache-dir --index-url "$TORCH_INDEX_URL" \
     "$TORCH_SPEC" "$TORCHVISION_SPEC" "$TORCHAUDIO_SPEC"
 
   # Freeze the exact CUDA-index torch stack before resolving the remaining
@@ -305,6 +305,23 @@ constraint_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 print("wrote torch constraint:", constraint_path)
 print("\n".join(lines))
 PY
+
+  # NATTEN's build backend imports Torch, and its CUDA sources include headers
+  # shipped with the Torch wheel's NVIDIA dependencies.
+  TORCH_CUDA_HEADERS="$(conda_run python - <<'PY'
+import os
+import sysconfig
+from pathlib import Path
+
+nvidia = Path(sysconfig.get_path("purelib")) / "nvidia"
+print(os.pathsep.join(str(path) for path in sorted(nvidia.glob("*/include")) if path.is_dir()))
+PY
+)"
+  CPATH="${TORCH_CUDA_HEADERS}${CPATH:+:$CPATH}" \
+    PIP_CONFIG_FILE="${WORLDFOUNDRY_PIP_CONFIG_FILE:-/dev/null}" conda_run \
+    python -m pip install --no-cache-dir --index-url "$PYPI_INDEX_URL" \
+    --constraint "$TORCH_CONSTRAINT_FILE" --no-build-isolation --no-deps \
+    -r requirements/worldfoundry-cuda-extensions.txt
 
   PIP_CONFIG_FILE="${WORLDFOUNDRY_PIP_CONFIG_FILE:-/dev/null}" conda_run \
     python -m pip install --no-cache-dir --index-url "$PYPI_INDEX_URL" \
@@ -358,6 +375,7 @@ mods = [
     "PIL",
     "pyarrow",
     "torch",
+    "torchaudio",
     "torchvision",
     "transformers",
     "diffusers",
