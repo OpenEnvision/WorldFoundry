@@ -821,6 +821,7 @@ workers use the replay script from that snapshot. Separate model processes
 share the host's physical-GPU lease locks, have per-case and suite time budgets,
 and undergo exact numerical and imported-source audits. The complete short
 matrix runs daily; an on-demand `--plan` can select affected cases instead.
+The saved plan must identify the exact commit resolved by the configured ref.
 `latest.json` records `running` before work starts and the final outcome; run
 logs, source revision and comparisons live under `runs/`. Retention keeps seven
 run directories by default and archives older compact reports under `history/`.
