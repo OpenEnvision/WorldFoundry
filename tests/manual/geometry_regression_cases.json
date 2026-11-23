@@ -8628,8 +8628,13 @@
       "return_dict": true
     },
     "assets": {
-      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/hkchengrex--MMAudio",
-      "video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/mmaudio/video.mp4"
+      "video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/mmaudio/video.mp4",
+      "flow_weights": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/hkchengrex--MMAudio/weights/mmaudio_small_16k.pth",
+      "synchformer_weights": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/hkchengrex--MMAudio/ext_weights/synchformer_state_dict.pth",
+      "vae_weights": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/hkchengrex--MMAudio/ext_weights/v1-16.pth",
+      "clip_config": "${WORLDFOUNDRY_CKPT_DIR}/apple--DFN5B-CLIP-ViT-H-14-384/open_clip_config.json",
+      "clip_weights": "${WORLDFOUNDRY_CKPT_DIR}/apple--DFN5B-CLIP-ViT-H-14-384/open_clip_pytorch_model.bin",
+      "vocoder_weights": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/hkchengrex--MMAudio/ext_weights/best_netG.pt"
     },
     "required_outputs": [
       "export.audio.flac.samples",
@@ -8639,7 +8644,16 @@
     "export_artifacts": [
       "audio.flac"
     ],
-    "scope": "Released small 16k video-conditioned audio, native fixed demo seed 42 and twenty-five steps. Compare all decoded int32 FLAC PCM samples, sample rate and channel count exactly; includes the native Synchformer and VAE/vocoder forwards."
+    "scope": "Released small 16k video-conditioned audio, native fixed demo seed 42 and twenty-five steps. Compare all decoded int32 FLAC PCM samples, sample rate and channel count exactly; includes the native Synchformer and VAE/vocoder forwards.",
+    "asset_sha256": {
+      "video": "d482dcd283e8523d96a001a705d14626a26989db7270815e1d2bf00eff9d9a0e",
+      "flow_weights": "61987bcbd6fc689af063075d7efaef29425f65df155dac589c07fa8173a03c1c",
+      "synchformer_weights": "8aff082f2df5c3bc52759db0c865c7ee772ae6400b860d1b7e90413f2defb67c",
+      "vae_weights": "15ad082c714ccf3771898a771fc6eebdc1d9c8d5c6154726906a97f43603d62c",
+      "clip_config": "e043bd1129b97d3afc77eef2e8bfda940af588dabf2cbaacc21e956345402f67",
+      "clip_weights": "c07a17b547d461c60a3cce5062b26bf8545b13de602c4c59d8490361eb716033",
+      "vocoder_weights": "970ca75ee4d5ce583e9396a4534acb14971ea2b4f1c22e038f476680c868a789"
+    }
   },
   "mmaudio-small-44k-video-audio-short": {
     "id": "mmaudio-small-44k-video-audio-short",
@@ -8663,8 +8677,14 @@
       "return_dict": true
     },
     "assets": {
-      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/hkchengrex--MMAudio",
-      "video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/mmaudio/video.mp4"
+      "video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/mmaudio/video.mp4",
+      "flow_weights": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/hkchengrex--MMAudio/weights/mmaudio_small_44k.pth",
+      "synchformer_weights": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/hkchengrex--MMAudio/ext_weights/synchformer_state_dict.pth",
+      "vae_weights": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/hkchengrex--MMAudio/ext_weights/v1-44.pth",
+      "clip_config": "${WORLDFOUNDRY_CKPT_DIR}/apple--DFN5B-CLIP-ViT-H-14-384/open_clip_config.json",
+      "clip_weights": "${WORLDFOUNDRY_CKPT_DIR}/apple--DFN5B-CLIP-ViT-H-14-384/open_clip_pytorch_model.bin",
+      "vocoder_config": "${WORLDFOUNDRY_CKPT_DIR}/nvidia--bigvgan_v2_44khz_128band_512x/config.json",
+      "vocoder_weights": "${WORLDFOUNDRY_CKPT_DIR}/nvidia--bigvgan_v2_44khz_128band_512x/bigvgan_generator.pt"
     },
     "required_outputs": [
       "export.audio.flac.samples",
@@ -8674,7 +8694,17 @@
     "export_artifacts": [
       "audio.flac"
     ],
-    "scope": "Released small 44k video-conditioned audio, native fixed demo seed 42 and twenty-five steps. Compare all decoded int32 FLAC PCM samples, sample rate and channel count exactly; includes the native Synchformer and VAE/vocoder forwards."
+    "scope": "Released small 44k video-conditioned audio, native fixed demo seed 42 and twenty-five steps. Compare all decoded int32 FLAC PCM samples, sample rate and channel count exactly; includes the native Synchformer and VAE/vocoder forwards.",
+    "asset_sha256": {
+      "video": "d482dcd283e8523d96a001a705d14626a26989db7270815e1d2bf00eff9d9a0e",
+      "flow_weights": "11fd92e860a58f0fac972706dd06034e49dceff2e1450bbde5703785c812b0f1",
+      "synchformer_weights": "8aff082f2df5c3bc52759db0c865c7ee772ae6400b860d1b7e90413f2defb67c",
+      "vae_weights": "ab6cc15dc31947675f75c950c41f4dcfd0d6d1817555ac871f809ec388e4651a",
+      "clip_config": "e043bd1129b97d3afc77eef2e8bfda940af588dabf2cbaacc21e956345402f67",
+      "clip_weights": "c07a17b547d461c60a3cce5062b26bf8545b13de602c4c59d8490361eb716033",
+      "vocoder_config": "65b7f487bfaf15256056a75f6667ef5f640214c981922a111927873705ea4ddb",
+      "vocoder_weights": "d9fe7ec6bd0b44ed9d66973d5012d8181c1570b01e5c72df51973e241dccd357"
+    }
   },
   "nwm-recon-one-second": {
     "id": "nwm-recon-one-second",

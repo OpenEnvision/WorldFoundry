@@ -23,6 +23,14 @@ from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mma
     Activation1d,
 )
 from worldfoundry.base_models.perception_core.general_perception.dino.models.vision_transformer import Mlp
+from worldfoundry.synthesis.visual_generation.mmaudio.checkpoints import (
+    BIGVGAN_MODEL_ID,
+    BIGVGAN_REQUIRED_FILES,
+    DFN5B_MODEL_ID,
+    DFN5B_REQUIRED_FILES,
+    resolve_bigvgan_v2_checkpoint,
+    resolve_dfn5b_checkpoint,
+)
 from worldfoundry.synthesis.visual_generation.mmaudio.mmaudio.ext.autoencoder import autoencoder
 from worldfoundry.synthesis.visual_generation.mmaudio.mmaudio.ext.autoencoder.vae import VAE
 from worldfoundry.synthesis.visual_generation.mmaudio.mmaudio.ext.bigvgan.bigvgan import BigVGAN
@@ -92,3 +100,26 @@ def test_mmaudio_synchformer_uses_dino_mlp() -> None:
     assert vit_helper.Mlp is Mlp
     block = vit_helper.DividedSpaceTimeBlock(dim=8, num_heads=2, qkv_bias=True)
     assert isinstance(block.mlp, Mlp)
+
+
+@pytest.mark.parametrize("rate", ["16k", "44k"])
+def test_mmaudio_replay_hashes_the_resolved_support_weights(
+    rate: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(tmp_path))
+    repositories = [(DFN5B_MODEL_ID, DFN5B_REQUIRED_FILES, resolve_dfn5b_checkpoint)]
+    if rate == "44k":
+        repositories.append((BIGVGAN_MODEL_ID, BIGVGAN_REQUIRED_FILES, resolve_bigvgan_v2_checkpoint))
+    required = set()
+    for model_id, files, resolve in repositories:
+        directory = tmp_path / model_id.replace("/", "--")
+        directory.mkdir()
+        for name in files:
+            (directory / name).touch()
+        required.update(resolve() / name for name in files)
+
+    matrix = Path(__file__).resolve().parents[1] / "manual" / "geometry_regression_cases.json"
+    case = json.loads(matrix.read_text(encoding="utf-8"))[f"mmaudio-small-{rate}-video-audio-short"]
+    staged = {Path(path.replace("${WORLDFOUNDRY_CKPT_DIR}", str(tmp_path))) for path in case["assets"].values()}
+    assert required <= staged
+    assert set(case["asset_sha256"]) == set(case["assets"])

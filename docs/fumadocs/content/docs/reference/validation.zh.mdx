@@ -199,6 +199,9 @@ MMAudio FLAC 产物通过延迟导入的 SoundFile 无损解码为 `int32` PCM �
 在 `export.<file>.samples`、`.sample_rate` 和 `.channels` 下记录采样值、采样率与
 通道数。即使设置浮点容差，也要求采样值和元数据完全一致；容器标签不影响比较。
 空音频验证失败。16k 与 44k 路线分别声明 GPU 用例。
+两个用例均固定实际加载的权重文件，包括本地 OpenCLIP 导出文件。
+将 OpenCLIP 和 44 kHz BigVGAN 导出文件放在 `WORLDFOUNDRY_CKPT_DIR` 下，
+以便回放核验运行时实际加载的文件。
 
 生成视频音轨通过 `audio_outputs: ["video.mp4"]` 显式选择。PyAV 将所选音轨
 解码为 `audio.<file>.samples` 下的 float32 PCM，同时记录采样率、通道数与通道布局。

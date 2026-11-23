@@ -384,6 +384,9 @@ PCM arrays, sample rate and channel count under `export.<file>.samples`,
 `.sample_rate` and `.channels`. Samples and metadata compare exactly even
 with floating-point tolerances; container tags do not affect the comparison.
 Empty audio fails validation. The 16k and 44k routes have separate GPU cases.
+Both cases pin the consumed checkpoint files, including the local OpenCLIP
+export. Prepare OpenCLIP and the 44 kHz BigVGAN export under
+`WORLDFOUNDRY_CKPT_DIR` so the replay checks the files the runtime loads.
 
 For generated video soundtracks, declare `audio_outputs: ["video.mp4"]`.
 PyAV decodes the selected stream to float32 PCM under `audio.<file>.samples`,
