@@ -392,6 +392,10 @@ The short Show-o replay pins the Show-o and MAGVIT configurations and weights
 plus the Phi-1.5 configuration and tokenizer files used to load the released
 model. Stage these files in their three local checkpoint directories.
 
+AnimateDiff V3 pins the SD1.5 files, motion module, RealisticVision checkpoint,
+and OpenAI CLIP ViT-L/14 configuration and weights used during replay. Stage
+the CLIP pair under `WORLDFOUNDRY_CKPT_DIR/openai--clip-vit-large-patch14`.
+
 For generated video soundtracks, declare `audio_outputs: ["video.mp4"]`.
 PyAV decodes the selected stream to float32 PCM under `audio.<file>.samples`,
 with exact sample-rate, channel-count and channel-layout metadata. PCM compares

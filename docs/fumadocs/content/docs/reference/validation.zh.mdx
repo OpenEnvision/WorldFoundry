@@ -206,6 +206,10 @@ MMAudio FLAC 产物通过延迟导入的 SoundFile 无损解码为 `int32` PCM �
 Show-o 的短回放固定 Show-o 和 MAGVIT 的配置与权重，以及加载发布模型所需的
 Phi-1.5 配置和 tokenizer 文件。这些文件分别放在各自的本地 checkpoint 目录。
 
+AnimateDiff V3 固定回放读取的 SD1.5 文件、运动模块、RealisticVision checkpoint
+及 OpenAI CLIP ViT-L/14 的配置和权重。将两份 CLIP 文件放在
+`WORLDFOUNDRY_CKPT_DIR/openai--clip-vit-large-patch14` 下。
+
 生成视频音轨通过 `audio_outputs: ["video.mp4"]` 显式选择。PyAV 将所选音轨
 解码为 `audio.<file>.samples` 下的 float32 PCM，同时记录采样率、通道数与通道布局。
 即使设置浮点容差，也要求 PCM 完全一致；缺失或空音轨验证失败。HyperFlow 同时
