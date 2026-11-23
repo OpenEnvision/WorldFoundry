@@ -535,13 +535,20 @@ def interruption_cleanup():
 
 
 def validate_plan(
-    selection: dict, matrix: Path, dependencies: Path, source: Path, tree: str,
-    *, history_root: Path | None = None,
+    selection: dict,
+    matrix: Path,
+    dependencies: Path,
+    source: Path,
+    tree: str,
+    *,
+    source_revision: str,
+    history_root: Path | None = None,
 ) -> list[str]:
     if selection.get("status") not in {"planned", "no_inference_changes"}:
         raise ValueError("Uncovered or failed impact plan cannot authorize replays")
     if (
-        selection.get("source_tree") != tree
+        selection.get("source_revision") != source_revision
+        or selection.get("source_tree") != tree
         or selection.get("matrix_sha256") != impact.digest(matrix)
         or selection.get("dependencies_sha256") != impact.digest(dependencies)
     ):
@@ -619,7 +626,8 @@ def run_suite(
         lease = None
         cleanup_safe = True
         try:
-            report.update(snapshot_source(profile, root / "source"))
+            snapshot = snapshot_source(profile, root / "source")
+            report.update(snapshot)
             source = root / "source"
             matrix, dependencies = source / profile["matrix"], source / profile["dependencies"]
             cases, _ = impact.load_definitions(matrix, dependencies)
@@ -637,7 +645,12 @@ def run_suite(
                     raise ValueError("Do not combine a saved plan with explicit case ids")
                 selection = json.loads(plan.read_text())
                 selected = validate_plan(
-                    selection, matrix, dependencies, source, report["source_tree"],
+                    selection,
+                    matrix,
+                    dependencies,
+                    source,
+                    snapshot["source_tree"],
+                    source_revision=snapshot["source_revision"],
                     history_root=Path(profile["source_root"]),
                 )
                 write_json(root / "impact-plan.json", selection)

@@ -276,11 +276,28 @@ def test_snapshot_and_merge_gate_recompute_proofs_and_reject_omitted_cpu_contrac
     gate.verify_checkout_plan(result, root, root / "matrix.json", root / "dependencies.json")
     snapshot = tmp_path / "snapshot"
     shutil.copytree(root, snapshot, ignore=shutil.ignore_patterns(".git"))
-    assert suite.validate_plan(result, snapshot / "matrix.json", snapshot / "dependencies.json",
-                               snapshot, result["source_tree"], history_root=root) == []
+    assert (
+        suite.validate_plan(
+            result,
+            snapshot / "matrix.json",
+            snapshot / "dependencies.json",
+            snapshot,
+            result["source_tree"],
+            source_revision=result["source_revision"],
+            history_root=root,
+        )
+        == []
+    )
     result["required_cpu_contracts"] = []
     with pytest.raises(ValueError, match="required CPU proof"):
         gate.verify_checkout_plan(result, root, root / "matrix.json", root / "dependencies.json")
     with pytest.raises(ValueError, match="required CPU proof"):
-        suite.validate_plan(result, snapshot / "matrix.json", snapshot / "dependencies.json",
-                            snapshot, result["source_tree"], history_root=root)
+        suite.validate_plan(
+            result,
+            snapshot / "matrix.json",
+            snapshot / "dependencies.json",
+            snapshot,
+            result["source_tree"],
+            source_revision=result["source_revision"],
+            history_root=root,
+        )

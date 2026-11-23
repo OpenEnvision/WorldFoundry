@@ -308,16 +308,18 @@ def test_saved_plan_cannot_omit_affected_model_or_lie_about_empty_selection(repl
     source = Path(replay_host["source_root"])
     matrix, deps = source / "matrix.json", source / "dependencies.json"
     plan = suite.impact.select_cases(matrix, deps, source, ["worldfoundry/core/new.py"])
-    assert suite.validate_plan(plan, matrix, deps, source, plan["source_tree"]) == ["a", "b"]
+    assert suite.validate_plan(
+        plan, matrix, deps, source, plan["source_tree"], source_revision=plan["source_revision"]
+    ) == ["a", "b"]
     plan["selected_cases"] = ["a"]
     with pytest.raises(ValueError, match="omits required"):
-        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"])
+        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"], source_revision=plan["source_revision"])
     plan["selected_cases"] = []
     with pytest.raises(ValueError, match="contradicts"):
-        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"])
+        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"], source_revision=plan["source_revision"])
     plan["status"] = "no_inference_changes"
     with pytest.raises(ValueError, match="omits required"):
-        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"])
+        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"], source_revision=plan["source_revision"])
 
 
 def test_stale_policy_plan_is_rejected(replay_host):
@@ -326,7 +328,7 @@ def test_stale_policy_plan_is_rejected(replay_host):
     plan = suite.impact.select_cases(matrix, deps, source, ["worldfoundry/a.py"])
     deps.write_text(deps.read_text() + "\n")
     with pytest.raises(ValueError, match="stale"):
-        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"])
+        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"], source_revision=plan["source_revision"])
 
 
 def test_only_documented_recipe_defaults_and_scope_can_change(replay_host):
@@ -581,6 +583,42 @@ def test_no_inference_plan_never_probes_gpu(replay_host, tmp_path, monkeypatch):
     suite.write_json(plan_file, plan)
     monkeypatch.setattr(suite, "acquire_gpu", lambda *args: pytest.fail("no inference changes must not acquire GPU"))
     assert suite.run_suite(replay_host, plan=plan_file)["status"] == "no_inference_changes"
+
+
+@pytest.mark.parametrize("advance_ref", [False, True])
+def test_suite_requires_exact_plan_commit_with_identical_trees(
+    replay_host: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, advance_ref: bool
+) -> None:
+    source = Path(replay_host["source_root"])
+    git = ["git", "-C", str(source)]
+    base = suite.impact.revision(source)
+    (source / "worldfoundry/a.py").write_text("class Model: changed = True\n")
+    subprocess.run([*git, "commit", "-qam", "candidate"], check=True)
+    planned = suite.impact.revision(source)
+    assert base and planned
+    changed_paths = suite.impact.changed_paths(source, base, planned)
+    plan = suite.impact.select_cases(
+        source / "matrix.json", source / "dependencies.json", source, changed_paths, base=base, head=planned
+    )
+    assert plan["status"] == "planned" and plan["selected_cases"] == ["a"]
+    plan.update(base_revision=base, head_revision=planned)
+    plan_file = tmp_path / "plan.json"
+    suite.write_json(plan_file, plan)
+    if advance_ref:
+        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "same tree on new commit"], check=True)
+        assert suite.impact.revision(source) != planned
+        assert suite.impact.revision(source, "HEAD^{tree}") == plan["source_tree"]
+
+    events, _ = no_gpu(monkeypatch)
+    report = suite.run_suite(replay_host, plan=plan_file)
+    assert report["source_revision"] == suite.impact.revision(source)
+    if advance_ref:
+        assert report["status"] == "failed", report
+        assert "stale for this snapshot" in report["error"]
+        assert "stop" not in events
+    else:
+        assert report["status"] == "passed", report
+        assert events == ["stop", "release", "restore"]
 
 
 @pytest.mark.parametrize("field", ["cudnn", "packages"])
