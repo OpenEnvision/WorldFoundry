@@ -12,6 +12,7 @@ import hashlib
 import importlib.util
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -179,6 +180,39 @@ def coverage(root: Path, matrix: Path) -> dict:
     }
 
 
+def verify_committed_inputs(root: Path, matrix: Path, head: str) -> None:
+    if not matrix.is_relative_to(root):
+        raise ValueError("Commit-diff coverage requires committed inputs: matrix is outside the checkout")
+    path = matrix.relative_to(root).as_posix()
+    committed = subprocess.run(["git", "-C", str(root), "cat-file", "blob", f"{head}:{path}"], capture_output=True)
+    if committed.returncode or matrix.read_bytes() != committed.stdout:
+        raise ValueError("Commit-diff coverage requires committed inputs: matrix differs from the candidate")
+    status = subprocess.run(
+        [
+            "git",
+            "--no-optional-locks",
+            "-C",
+            str(root),
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--",
+            "tests/manual/geometry_regression_dependencies.json",
+            ":(glob)worldfoundry/data/models/catalog/video/*.y*ml",
+            ":(glob)worldfoundry/data/models/catalog/world_models/*.y*ml",
+            ":(glob)worldfoundry/data/models/bindings/pipelines/*.y*ml",
+            ":(glob)worldfoundry/data/models/runtime/profiles/*.y*ml",
+            ":(glob)worldfoundry/**/*.py",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if status.returncode:
+        raise ValueError("Could not verify committed inputs for coverage")
+    if status.stdout:
+        raise ValueError("Commit-diff coverage requires committed inputs. Changed coverage sources:\n" + status.stdout)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, default=Path.cwd())
@@ -193,7 +227,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         root = args.source_root.resolve()
-        matrix = args.matrix if args.matrix.is_absolute() else root / args.matrix
+        matrix = (args.matrix if args.matrix.is_absolute() else root / args.matrix).resolve()
         baseline = args.baseline if args.baseline.is_absolute() else root / args.baseline
         policy = _coverage_policy()
         if args.base and args.changed_file:
@@ -208,13 +242,14 @@ def main() -> int:
             base = impact.revision(root, args.base + "^{commit}")
             if base is None:
                 raise ValueError("Diff base must resolve to a commit")
+            verify_committed_inputs(root, matrix, head)
             changed = impact.changed_paths(root, base, head)
             revisions = {
                 "base_revision": base,
                 "source_revision": head,
                 "source_tree": impact.revision(root, head + "^{tree}"),
             }
-        report = coverage(root, matrix.resolve())
+        report = coverage(root, matrix)
         report.update(revisions)
         report["policy"] = policy.evaluate_policy(report, json.loads(matrix.read_text()),
                                                  policy.load_frozen_baseline(baseline), root, changed, args.affected_model)
