@@ -418,6 +418,12 @@ bundle in `assets` to pin its referenced camera media as well. JSON inputs apply
 to single-call recipes; legacy cases need no changes. Observation materialization
 and accepted-reference receipts remain GPU-host prerequisites.
 
+For an uploaded observation bundle with absolute paths from another host, set
+`WORLDFOUNDRY_REGRESSION_ORIGINAL_INPUT_ROOT` to its former input root and
+`WORLDFOUNDRY_REGRESSION_INPUT_ROOT` to the copied root in the case environment.
+The runner resolves matching paths to declared local files after checking the
+JSON pin. The observation JSON and the accompanying asset hashes are retained.
+
 File-backed native inputs use `asset_sha256`, a mapping from declared `assets`
 names to required lowercase SHA256 pins or operator-supplied pin variables.
 The runner checks these pins before hashing checkpoints or loading the model;

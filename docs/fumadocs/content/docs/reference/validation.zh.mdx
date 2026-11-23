@@ -228,6 +228,11 @@ pin、未声明的输入文件，以及与显式 `call` 参数冲突的条目，
 相机媒体。JSON 输入用于单次调用用例，原有用例无需修改。实际观测数据和已接受参考
 凭证仍须在 GPU 主机上准备。
 
+如果已上传的观测包包含原主机的绝对路径，在用例环境中将
+`WORLDFOUNDRY_REGRESSION_ORIGINAL_INPUT_ROOT` 设为原输入根目录，将
+`WORLDFOUNDRY_REGRESSION_INPUT_ROOT` 设为复制后的根目录。执行器验证 JSON pin 后，
+会将匹配的路径解析为已声明的本地文件。观测 JSON 及随附资源的哈希保持有效。
+
 原生文件输入使用 `asset_sha256`，将已声明的 `assets` 名称映射到必需的小写 SHA256
 pin 或操作者提供的 pin 变量。工具在计算权重哈希和加载模型前验证这些 pin，
 不改写输入内容。单次调用可用 `result_outputs`（例如 `["actions"]`）只选择生成字段，
