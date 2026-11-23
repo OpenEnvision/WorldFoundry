@@ -139,7 +139,7 @@ def reference_index(profile: dict) -> dict:
     return index
 
 
-def verify_reference(root: Path, name: str, index: dict) -> None:
+def verify_reference(root: Path, name: str, index: dict) -> list[str]:
     files = index["cases"][name]["files"]
     if not isinstance(files, dict) or not {"manifest.json", "arrays.npz"}.issubset(files):
         raise ValueError(f"Incomplete accepted reference index: {name}")
@@ -155,6 +155,8 @@ def verify_reference(root: Path, name: str, index: dict) -> None:
         impact.relative_path(path)
         if replay.sha256(root / path) != expected:
             raise ValueError(f"Accepted reference file was modified: {name}/{path}")
+    manifest = json.loads((root / "manifest.json").read_text())
+    return replay.accepted_export_paths(root.resolve(), manifest.get("exported_files", []), actual)
 
 
 def resolve_case(value, env: dict):
@@ -638,8 +640,9 @@ def run_suite(
             configurations = {name: case_configuration(profile, name) for name in selected}
             recipes = {}
             index = reference_index(profile)
+            verified_exports = {}
             for name in selected:
-                verify_reference(Path(profile["reference"]) / name, name, index)
+                verified_exports[name] = verify_reference(Path(profile["reference"]) / name, name, index)
                 recipes[name] = materialize_case(
                     cases[name], Path(profile["reference"]) / name, child_environment(configurations[name])
                 )
@@ -694,7 +697,14 @@ def run_suite(
                         raise RuntimeError(f"Replay process exited with status {exit_code}")
                     single = root / f"{name}-matrix.json"
                     write_json(single, {name: recipes[name]})
-                    result = replay.audit_matrix(single, Path(profile["reference"]), root / "candidate", source, [])
+                    result = replay.audit_matrix(
+                        single,
+                        Path(profile["reference"]),
+                        root / "candidate",
+                        source,
+                        [],
+                        verified_reference_exports=verified_exports,
+                    )
                     if result["status"] != "passed":
                         raise ValueError(json.dumps(result["cases"][name]))
                     report["cases"][name] = result["cases"][name]

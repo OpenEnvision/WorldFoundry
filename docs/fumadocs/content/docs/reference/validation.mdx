@@ -757,6 +757,11 @@ private host profile such as `~/.config/worldfoundry/geometry-regression.json`:
 }
 ```
 
+A transferred accepted reference can use its original index SHA-256 when the
+archive preserves the indexed files byte for byte. Scheduled replay verifies
+the complete inventory and resolves recorded absolute export paths only when
+every export maps to an indexed file under a single original output root.
+
 The optional `gpu_holder` object configures an existing `gg` script using an
 absolute `script`, string-list `start_args`, its `env` (including `GG_PYTHON`),
 and optional log `ready_patterns`. The runner stops that script for replays and

@@ -393,6 +393,8 @@ python3 tests/manual/geometry_regression_schedule.py import-reference \
 }
 ```
 
+跨主机复制已接受的参考归档时，索引文件及其记录的文件均逐字节保留，即可继续使用原索引的 SHA-256。定时回放先核对完整索引，再根据同一个原输出目录解析所有绝对导出路径，每条路径都须对应索引内的文件。
+
 可选的 `gpu_holder` 配置指定原有 `gg` 脚本的绝对 `script`、字符串列表 `start_args`、包括 `GG_PYTHON` 的 `env`，以及可选的日志就绪标记 `ready_patterns`。回放期间停止该脚本；成功、失败、超时或中断后，以独立 session 恢复。若推理子进程无法清理或 GPU 租约无法释放，执行器报告失败，并推迟占卡脚本恢复，直到残留资源清理完成。
 
 将必要的 `LD_LIBRARY_PATH`、`CUDA_HOME` 等运行变量保存在私有 profile 的 `env` 中。cron 任务保留已准备的工具 PATH。CUDA 预检查会在加载权重和停止占卡脚本前，逐项检查 Python、Torch、CUDA、cuDNN、GPU 和包版本是否与全部选中基准一致；环境变化直接失败，不放宽比较条件。
