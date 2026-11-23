@@ -236,9 +236,9 @@ def affected_variants(
     native = {variant_key(row) for row in rows}
     impact = _load_impact_module()
     manifest = root / "tests/manual/geometry_regression_dependencies.json"
-    ignored_paths = (
-        json.loads(manifest.read_text()).get("ignored_paths", []) if changed_paths and manifest.is_file() else []
-    )
+    declarations = json.loads(manifest.read_text()) if changed_paths and manifest.is_file() else {}
+    ignored_paths = declarations.get("ignored_paths", [])
+    evaluation_paths = impact.evaluation_only_paths(declarations)
     if not isinstance(ignored_paths, list):
         raise ValueError("Ignored paths must be a list of repository patterns")
     for pattern in ignored_paths:
@@ -293,7 +293,7 @@ def affected_variants(
             )
             if matched:
                 affected.update(variant_key(row) for row in matched)
-            else:
+            elif path not in evaluation_paths:
                 unknown.append(path)
             # Incomplete static analysis cannot rule out a changed dependency.
             affected.update(variant_key(row) for row in rows if closures[row.get("target")] is None)

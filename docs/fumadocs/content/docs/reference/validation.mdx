@@ -550,6 +550,10 @@ These declarations supplement static imports. Unknown paths still expand
 selection conservatively and fail when an affected native variant lacks a
 real checkpoint replay.
 
+The `evaluation_only_paths` list records exact files used by evaluation. A
+matching inference import or declared runtime dependency still selects the
+affected case or variant.
+
 Appending recipes and their component declarations selects the added cases
 only when the exact committed before/after definitions prove that every
 existing recipe, ownership and global rule is unchanged. Changed test

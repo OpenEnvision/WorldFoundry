@@ -147,6 +147,29 @@ def test_unknown_inference_dependency_expands_conservatively(project):
     assert result["status"] == "failed"
 
 
+def test_evaluation_dependencies_only_exempt_files_without_an_inference_owner(project):
+    root, _, cases, report, baseline = project
+    path = "worldfoundry/base_models/scorer.py"
+    source = root / path
+    source.parent.mkdir()
+    source.write_text("class Scorer: pass\n")
+    manifest = root / "tests/manual/geometry_regression_dependencies.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({"evaluation_only_paths": [path]}))
+
+    evaluation = policy.evaluate_policy(report, cases, baseline, root, [path])
+    assert evaluation["affected_variants"] == []
+    assert evaluation["unknown_inference_paths"] == []
+    assert evaluation["status"] == "passed"
+
+    (root / "worldfoundry/pipelines/example.py").write_text(
+        "from worldfoundry.base_models.scorer import Scorer\nclass Pipeline: pass\n"
+    )
+    inference = policy.evaluate_policy(report, cases, baseline, root, [path])
+    assert inference["affected_variants"] == ["large@large", "small@small"]
+    assert inference["status"] == "failed"
+
+
 @pytest.fixture
 def project_with_ignored_paths(
     project: tuple[Path, Path, dict, dict, dict],

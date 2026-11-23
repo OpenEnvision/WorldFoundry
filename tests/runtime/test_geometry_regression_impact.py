@@ -372,6 +372,25 @@ def test_conditional_relative_lazy_and_declared_dynamic_dependencies_select_mode
     assert plan["selected_cases"] == ["a"]
 
 
+def test_evaluation_only_paths_yield_to_inference_imports(project):
+    root, matrix, policy = project
+    path = "worldfoundry/models/scorer.py"
+    (root / path).write_text("")
+    git(root, "add", path)
+    declarations = json.loads(policy.read_text())
+    declarations["evaluation_only_paths"] = [path]
+    policy.write_text(json.dumps(declarations))
+    evaluation = impact.select_cases(matrix, policy, root, [path])
+    assert evaluation["status"] == "no_inference_changes"
+    assert evaluation["ignored_paths"] == [path]
+    assert impact.select_cases(matrix, policy, root, ["worldfoundry/models/other.py"])["status"] == "uncovered"
+
+    (root / "worldfoundry/models/b.py").write_text("from . import scorer\n")
+    inference = impact.select_cases(matrix, policy, root, [path])
+    assert inference["ignored_paths"] == []
+    assert inference["selected_cases"] == ["b"]
+
+
 @pytest.mark.parametrize(
     "path",
     [

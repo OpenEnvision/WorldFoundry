@@ -300,6 +300,8 @@ license-gated 本地检出、无法 vendor 的外部源码检出或仅能从外�
 
 Runtime profile 按声明的 model ID 和 pipeline binding 识别归属，并纳入 `source_repos[].in_tree_path`，覆盖静态 import 图无法发现的子进程代码。这些声明补充静态依赖；未知路径仍保守扩大选择，受影响的 native 变体没有真实权重回放时仍失败。
 
+`evaluation_only_paths` 逐项登记评测所用的文件。推理 import 或已声明运行时依赖命中这些路径时，仍会选中受影响的案例或变体。
+
 追加案例及组件声明时，只有实际提交前后的定义能证明全部既有配方、归属和全局规则未变，才只选择新增案例。测试编排工具改动还要求提交中的 runtime、环境和 assets 不变，工作文件与提交一致，并通过对应 CPU 契约和真实 MG2 smoke 回放。生产代码变更仍独立加入选择；未提交定义、删除或重新分类都会保留完整回放范围。
 
 InSpatio、LingBot Cam/Act/V2 和 ATI 案例分别加载各自发布的 checkpoint。`WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT` 指向含 `video_example_00/input/{video.mp4,target_tcw.txt}` 的已验收场景；`WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS` 包含 21 帧的 `poses.npy`、`intrinsics.npy`，Act 还使用 `action.npy`。ATI 的固定量化 packed-NPZ tracks 文件由 `WORLDFOUNDRY_REGRESSION_ATI_TRACKS` 指定。输入与权重均保存哈希；这些短数值案例不代表完整 demo 质量或其他 variant 已通过。

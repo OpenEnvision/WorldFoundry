@@ -56,6 +56,18 @@ def environment_variants(policy: dict) -> dict[str, list[str]]:
     return mappings
 
 
+def evaluation_only_paths(policy: dict) -> set[str]:
+    """Read exact evaluation dependencies without overriding inference ownership."""
+    paths = policy.get("evaluation_only_paths", [])
+    if not isinstance(paths, list):
+        raise ValueError("Evaluation-only dependencies must be a list of exact paths")
+    for path in paths:
+        relative_path(path)
+        if any(char in path for char in "*?["):
+            raise ValueError(f"Evaluation-only dependencies need exact paths: {path}")
+    return set(paths)
+
+
 def load_definitions(matrix: Path, dependencies: Path) -> tuple[dict, dict]:
     cases = json.loads(matrix.read_text())
     policy = json.loads(dependencies.read_text())
@@ -817,6 +829,7 @@ def select_cases(
     cases, policy = load_definitions(matrix, dependencies)
     changes = sorted({relative_path(path) for path in changes})
     environments = environment_variants(policy)
+    evaluation_paths = evaluation_only_paths(policy)
     for rule in [*policy.get("cpu_only_components", []), *policy.get("relocation_contracts", [])]:
         for contract in rule["required_cpu_contracts"]:
             test = source_root / contract
@@ -926,7 +939,7 @@ def select_cases(
                     {"path": path, "reason": rule["reason"], "required_cpu_contracts": rule["required_cpu_contracts"]}
                     for rule in declared_cpu
                 )
-            elif matches(path, policy["ignored_paths"]):
+            elif path in evaluation_paths or matches(path, policy["ignored_paths"]):
                 ignored.append(path)
             else:
                 uncovered.append(path)
