@@ -218,6 +218,11 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
         )
         missing, unexpected = target.load_state_dict(target_state, strict=False)
         if missing:
+            # A safetensors checkpoint can store a tied parameter under only one of its names.
+            model_state = target.state_dict(keep_vars=True)
+            populated = {id(model_state[key]) for key in model_state.keys() & target_state.keys()}
+            missing = [key for key in missing if key not in model_state or id(model_state[key]) not in populated]
+        if missing:
             logger.warn(f"Depth Anything 3 checkpoint did not populate {len(missing)} parameters/buffers.")
         if unexpected:
             logger.warn(f"Depth Anything 3 checkpoint had {len(unexpected)} unexpected parameters/buffers.")
