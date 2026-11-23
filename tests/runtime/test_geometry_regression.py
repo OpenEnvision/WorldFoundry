@@ -500,6 +500,36 @@ def test_pinned_json_observation_is_materialized_as_data(tmp_path: Path, monkeyp
     assert case["call"] == {"prompt": "Lift the block", "seed": 42}
 
 
+def test_archived_observation_paths_resolve_without_changing_input_bytes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    local = tmp_path / "inputs"
+    bundle = local / "episode"
+    bundle.mkdir(parents=True)
+    camera = bundle / "front.png"
+    camera.write_bytes(b"accepted camera data")
+    recorded = {"views": [{"path": "/archive/inputs/episode/front.png"}], "state": [0.25]}
+    observation = bundle / "observation.json"
+    observation.write_text(json.dumps(recorded), encoding="utf-8")
+    case = {
+        "call": {},
+        "assets": {"bundle": str(bundle), "observation": str(observation)},
+        "input_json": {"observation": {"path": str(observation), "sha256": replay.sha256(observation)}},
+    }
+    original_inventory = replay.hash_assets(case["assets"])
+    monkeypatch.setenv("WORLDFOUNDRY_REGRESSION_INPUT_ROOT", str(local))
+    monkeypatch.setenv("WORLDFOUNDRY_REGRESSION_ORIGINAL_INPUT_ROOT", "/archive/inputs")
+
+    call = replay.materialize_input_json(case, tmp_path)
+
+    assert call == {"observation": {"views": [{"path": str(camera)}], "state": [0.25]}}
+    assert replay.hash_assets(case["assets"]) == original_inventory
+    del case["assets"]["bundle"]
+    with pytest.raises(ValueError, match="outside the declared input assets"):
+        replay.materialize_input_json(case, tmp_path)
+
+
 @pytest.mark.parametrize("fault", ["undeclared", "collision", "nonhex", "mismatch", "unset"])
 def test_json_input_pin_failures_precede_model_loading(
     tmp_path: Path, artifact_pipeline: tuple[Path, Path, Any], monkeypatch: pytest.MonkeyPatch, fault: str

@@ -78,6 +78,29 @@ def verify_asset_pins(case: dict) -> None:
             raise ValueError(f"Asset SHA256 differs: {name}")
 
 
+def relocate_observation_paths(value: Any, original: Path, local: Path, declared: set[Path]) -> Any:
+    """Resolve archived observation file references against the local declared assets."""
+    if isinstance(value, dict):
+        return {key: relocate_observation_paths(item, original, local, declared) for key, item in value.items()}
+    if isinstance(value, list):
+        return [relocate_observation_paths(item, original, local, declared) for item in value]
+    if not isinstance(value, str):
+        return value
+    archived = Path(value)
+    if not archived.is_relative_to(original):
+        return value
+
+    copied = (local / archived.relative_to(original)).resolve()
+    covered = any(
+        copied == asset
+        or (asset.is_dir() and copied.is_relative_to(asset) and ".cache" not in copied.relative_to(asset).parts)
+        for asset in declared
+    )
+    if not copied.is_relative_to(local) or not covered or not copied.is_file():
+        raise ValueError(f"Relocated observation file is missing or outside the declared input assets: {copied}")
+    return str(copied)
+
+
 def materialize_input_json(case: dict, output_dir: Path) -> dict:
     """Load declared observation data only after verifying its required content pin."""
     call = dict(case["call"])
@@ -93,7 +116,14 @@ def materialize_input_json(case: dict, output_dir: Path) -> dict:
             raise ValueError(f"JSON input needs a SHA256 pin: {argument}")
         if sha256(path) != expected:
             raise ValueError(f"JSON input SHA256 differs: {argument}")
-        call[argument] = expand(json.loads(path.read_text(encoding="utf-8")), output_dir)
+        value = expand(json.loads(path.read_text(encoding="utf-8")), output_dir)
+        if original_root := os.environ.get("WORLDFOUNDRY_REGRESSION_ORIGINAL_INPUT_ROOT"):
+            original = Path(original_root)
+            local = Path(os.environ.get("WORLDFOUNDRY_REGRESSION_INPUT_ROOT", ""))
+            if not original.is_absolute() or not local.is_absolute():
+                raise ValueError("Archived and local observation input roots must be absolute")
+            value = relocate_observation_paths(value, original, local.resolve(), declared)
+        call[argument] = value
     return call
 
 

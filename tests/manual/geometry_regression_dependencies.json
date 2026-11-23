@@ -50,6 +50,8 @@
     "worldfoundry/studio/cli.py",
     "worldfoundry/studio/visualization/launch_config.py",
     "worldfoundry/studio/visualization/launcher.py",
+    "worldfoundry/data/base_models/capabilities/geometry.yaml",
+    "worldfoundry/data/base_models/stacks.yaml",
     "worldfoundry/data/models/**",
     "pyproject.toml",
     "MANIFEST.in",

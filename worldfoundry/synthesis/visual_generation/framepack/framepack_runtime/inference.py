@@ -206,7 +206,7 @@ def worker(
         if not high_vram:
             load_model_as_complete(vae, target_device=gpu)
 
-        start_latent = vae_encode(input_image_pt, vae)
+        start_latent = vae_encode(input_image_pt, vae, seed=seed)
 
         # CLIP Vision
 

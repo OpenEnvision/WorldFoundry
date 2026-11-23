@@ -37,6 +37,8 @@ Official in-tree runner defaults, taken from the upstream UI quality recipe:
 | Seed | **31337** |
 | TeaCache | **on** |
 
+The request seed controls VAE sampling for the starting image and the noise used to denoise each section.
+
 ## Running in WorldFoundry
 
 Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `lllyasviel/FramePackI2V_HY` and `lllyasviel/FramePack_F1_I2V_HY_20250503` locally, then run `wf run framepack`. No VRAM requirement is recorded.
