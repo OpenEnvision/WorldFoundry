@@ -96,7 +96,8 @@ def test_historical_gap_stays_visible_and_does_not_fail_unaffected_changes(proje
 
 
 @pytest.mark.parametrize(
-    "checkout", ["committed", "stale_head", "draft_docs", "dirty_policy", "staged_matrix", "untracked_binding"]
+    "checkout",
+    ["committed", "stale_head", "draft_docs", "dirty_policy", "staged_matrix", "untracked_binding", "ignored_binding"],
 )
 def test_commit_diff_coverage_requires_committed_inputs(
     project: tuple, monkeypatch: pytest.MonkeyPatch, checkout: str
@@ -125,6 +126,11 @@ def test_commit_diff_coverage_requires_committed_inputs(
     head = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
     if checkout == "draft_docs":
         guide.write_text("Draft guide\n")
+        cache = root / "worldfoundry/operators/__pycache__/helper.cpython-311.pyc"
+        cache.parent.mkdir()
+        cache.write_bytes(b"local bytecode")
+        (root / "docs/draft.yaml").write_text("draft: true\n")
+        (root / ".git/info/exclude").write_text("__pycache__/\n/docs/draft.yaml\n")
     elif checkout == "dirty_policy":
         dependencies.write_text('{"ignored_paths":["worldfoundry/operators/helper.py"]}')
     elif checkout == "staged_matrix":
@@ -132,9 +138,13 @@ def test_commit_diff_coverage_requires_committed_inputs(
         cases["large-short"] = _recipe("large")
         matrix.write_text(json.dumps(cases))
         subprocess.run([*git, "add", str(matrix)], check=True)
-    elif checkout == "untracked_binding":
+    elif checkout in {"untracked_binding", "ignored_binding"}:
         added = root / "worldfoundry/data/models/bindings/pipelines/new.yaml"
         added.write_text(yaml.safe_dump({"model_id": "new", "pipeline": {"target": _recipe()["target"]}}))
+        if checkout == "ignored_binding":
+            relative = added.relative_to(root).as_posix()
+            (root / ".git/info/exclude").write_text("/" + relative + "\n")
+            subprocess.run([*git, "check-ignore", "--quiet", relative], check=True)
 
     baseline_path = root / "frozen.json"
     baseline_path.write_text(json.dumps(baseline))
@@ -158,7 +168,7 @@ def test_commit_diff_coverage_requires_committed_inputs(
     if checkout == "stale_head":
         assert status == 1, report
         assert "must match the inspected checkout" in report["error"]
-    elif checkout in {"dirty_policy", "staged_matrix", "untracked_binding"}:
+    elif checkout in {"dirty_policy", "staged_matrix", "untracked_binding", "ignored_binding"}:
         assert status == 1, report
         assert "committed inputs" in report["error"]
     else:

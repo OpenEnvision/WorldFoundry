@@ -187,6 +187,12 @@ def verify_committed_inputs(root: Path, matrix: Path, head: str) -> None:
     committed = subprocess.run(["git", "-C", str(root), "cat-file", "blob", f"{head}:{path}"], capture_output=True)
     if committed.returncode or matrix.read_bytes() != committed.stdout:
         raise ValueError("Commit-diff coverage requires committed inputs: matrix differs from the candidate")
+    manifests = [
+        ":(glob)worldfoundry/data/models/catalog/video/*.y*ml",
+        ":(glob)worldfoundry/data/models/catalog/world_models/*.y*ml",
+        ":(glob)worldfoundry/data/models/bindings/pipelines/*.y*ml",
+        ":(glob)worldfoundry/data/models/runtime/profiles/*.y*ml",
+    ]
     status = subprocess.run(
         [
             "git",
@@ -198,10 +204,7 @@ def verify_committed_inputs(root: Path, matrix: Path, head: str) -> None:
             "--untracked-files=all",
             "--",
             "tests/manual/geometry_regression_dependencies.json",
-            ":(glob)worldfoundry/data/models/catalog/video/*.y*ml",
-            ":(glob)worldfoundry/data/models/catalog/world_models/*.y*ml",
-            ":(glob)worldfoundry/data/models/bindings/pipelines/*.y*ml",
-            ":(glob)worldfoundry/data/models/runtime/profiles/*.y*ml",
+            *manifests,
             ":(glob)worldfoundry/**/*.py",
         ],
         capture_output=True,
@@ -211,6 +214,16 @@ def verify_committed_inputs(root: Path, matrix: Path, head: str) -> None:
         raise ValueError("Could not verify committed inputs for coverage")
     if status.stdout:
         raise ValueError("Commit-diff coverage requires committed inputs. Changed coverage sources:\n" + status.stdout)
+    # Inventory globs also see YAML files ignored by the normal status query.
+    ignored = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "--others", "--ignored", "--exclude-standard", "--", *manifests],
+        capture_output=True,
+        text=True,
+    )
+    if ignored.returncode:
+        raise ValueError("Could not verify committed inputs for coverage")
+    if ignored.stdout:
+        raise ValueError("Commit-diff coverage requires committed inputs. Ignored coverage sources:\n" + ignored.stdout)
 
 
 def main() -> int:
