@@ -210,6 +210,10 @@ AnimateDiff V3 固定回放读取的 SD1.5 文件、运动模块、RealisticVisi
 及 OpenAI CLIP ViT-L/14 的配置和权重。将两份 CLIP 文件放在
 `WORLDFOUNDRY_CKPT_DIR/openai--clip-vit-large-patch14` 下。
 
+Echo-Infinity 固定从 `wan_models/Wan2.1-T2V-1.3B` 加载的去噪器配置和权重、
+VAE、T5 编码器以及 tokenizer 文件。生成器 checkpoint 的 SHA256 由回放配置提供。
+这个明确的文件清单需要使用同一配方记录的已验收参考。
+
 生成视频音轨通过 `audio_outputs: ["video.mp4"]` 显式选择。PyAV 将所选音轨
 解码为 `audio.<file>.samples` 下的 float32 PCM，同时记录采样率、通道数与通道布局。
 即使设置浮点容差，也要求 PCM 完全一致；缺失或空音轨验证失败。HyperFlow 同时

@@ -396,6 +396,11 @@ AnimateDiff V3 pins the SD1.5 files, motion module, RealisticVision checkpoint,
 and OpenAI CLIP ViT-L/14 configuration and weights used during replay. Stage
 the CLIP pair under `WORLDFOUNDRY_CKPT_DIR/openai--clip-vit-large-patch14`.
 
+Echo-Infinity pins the Wan2.1-T2V-1.3B denoiser configuration and weights,
+VAE, T5 encoder and tokenizer files loaded from `wan_models/Wan2.1-T2V-1.3B`.
+The replay profile supplies the generator checkpoint SHA256. The explicit file
+inventory requires an accepted reference recorded with this recipe.
+
 For generated video soundtracks, declare `audio_outputs: ["video.mp4"]`.
 PyAV decodes the selected stream to float32 PCM under `audio.<file>.samples`,
 with exact sample-rate, channel-count and channel-layout metadata. PCM compares
