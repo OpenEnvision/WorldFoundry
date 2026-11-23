@@ -105,6 +105,8 @@ const state = {
   presentedFrames: 0,
   segmentPresentedFrames: 0,
   pendingChunkDone: null,
+  pendingChunkDones: [],
+  inflightSegments: 0,
   keySources: new Map(),
   stickKeys: { move: new Set(), look: new Set() },
   stickPointers: { move: null, look: null },
@@ -450,20 +452,24 @@ function updateControlAvailability() {
   // A running continuous rollout already advances every chunk; STEP applies
   // while it is paused, and after it completes the server explains why not.
   const autoAdvancing = state.continuous && !state.paused && !rolloutComplete();
+  const segmentLocked = state.promptScheduled && !state.continuous && state.segmentBusy;
   if (el.stepButton) {
     el.stepButton.disabled = !connected || !state.capabilities.no_action_step
-      || Boolean(state.pendingStepRequestId) || autoAdvancing;
+      || Boolean(state.pendingStepRequestId) || autoAdvancing || segmentLocked;
     el.stepButton.title = !state.capabilities.no_action_step
       ? "This model requires explicit segment controls"
-      : autoAdvancing
-        ? "Pause the rollout to generate one chunk at a time"
-        : "Generate exactly one chunk without a keyboard action";
+      : segmentLocked
+        ? "Wait for the current segment to finish playing"
+        : autoAdvancing
+          ? "Pause the rollout to generate one chunk at a time"
+          : "Generate exactly one chunk without a keyboard action";
   }
   if (el.pauseButton) {
     el.pauseButton.disabled = !connected || Boolean(state.pendingPauseRequestId) || rolloutComplete();
   }
   el.eventTriggerBar?.querySelectorAll("button").forEach((button) => {
-    button.disabled = !connected || !state.capabilities.text_events || Boolean(state.pendingEventRequestId);
+    button.disabled = !connected || !state.capabilities.text_events
+      || Boolean(state.pendingEventRequestId) || segmentLocked;
   });
   if (el.addEventButton) el.addEventButton.disabled = !state.capabilities.text_events || Boolean(state.pendingCatalogRequestId);
   if (el.applyEventsButton) el.applyEventsButton.disabled = !state.capabilities.text_events || Boolean(state.pendingCatalogRequestId);
@@ -847,12 +853,34 @@ function resetSocketPlayback() {
   state.nextPresentationAt = 0;
   state.segmentPresentedFrames = 0;
   state.pendingChunkDone = null;
+  state.pendingChunkDones.length = 0;
+  state.inflightSegments = 0;
   state.lastVideoFrameAt = 0;
   state.stats.fps = 0;
 }
 
+function sensorLayoutSignature(layout) {
+  if (!Array.isArray(layout) || !layout.length) return "";
+  return JSON.stringify(
+    layout.map((view) => [
+      String(view.key ?? ""),
+      String(view.label ?? ""),
+      String(view.kind ?? ""),
+      Number(view.channel_index ?? 0),
+      Number(view.x ?? 0),
+      Number(view.y ?? 0),
+      Number(view.width ?? 0),
+      Number(view.height ?? 0),
+    ]),
+  );
+}
+
 function setSensorLayout(layout) {
-  state.sensorLayout = Array.isArray(layout) ? layout : [];
+  const next = Array.isArray(layout) ? layout : [];
+  if (sensorLayoutSignature(next) === sensorLayoutSignature(state.sensorLayout)) {
+    return;
+  }
+  state.sensorLayout = next;
   if (!state.sensorLayout.some((view) => view.key === state.focusedSensor)) state.focusedSensor = "";
   state.sensorCanvases.clear();
   el.sensorGrid.replaceChildren();
@@ -922,22 +950,50 @@ function waitMilliseconds(delay) {
     : Promise.resolve();
 }
 
-function finishSegmentPlayback(message) {
-  state.pendingChunkDone = null;
+function finishSegmentPlayback(message, keepBusy = false) {
   state.segmentIndex = Number(message.chunk_index || state.segmentIndex + 1);
-  state.segmentBusy = false;
-  if (state.queuedSegments) {
-    el.startButton.classList.remove("is-hidden");
-    el.startButton.disabled = false;
-    el.startButton.textContent = "EXTEND";
-    clearQueuedControlSelection();
-    setStatus(`SEGMENT ${state.segmentIndex} READY`, true);
-  } else if (state.continuous) {
-    setStatus(continuousStatus(), true);
+  if (keepBusy) {
+    state.segmentBusy = true;
+    if (state.continuous) {
+      setStatus(continuousStatus(), true);
+    } else {
+      setStatus(`GENERATING SEGMENT ${state.segmentIndex + 1}`, true);
+    }
   } else {
-    setStatus(`SEGMENT ${state.segmentIndex} READY · EDIT PROMPT + ENTER`, true);
+    state.segmentBusy = false;
+    if (state.queuedSegments) {
+      el.startButton.classList.remove("is-hidden");
+      el.startButton.disabled = false;
+      el.startButton.textContent = "EXTEND";
+      clearQueuedControlSelection();
+      setStatus(`SEGMENT ${state.segmentIndex} READY`, true);
+    } else if (state.continuous) {
+      setStatus(continuousStatus(), true);
+    } else {
+      setStatus(`SEGMENT ${state.segmentIndex} READY · EDIT PROMPT + ENTER`, true);
+    }
   }
+  updateControlAvailability();
   renderStats();
+}
+
+function drainPendingChunkCompletions() {
+  while (state.pendingChunkDones.length) {
+    const pending = state.pendingChunkDones[0];
+    const required = Math.max(Number(pending.frames || 0), 0);
+    if (state.segmentPresentedFrames < required) {
+      state.pendingChunkDone = pending;
+      return false;
+    }
+    state.pendingChunkDones.shift();
+    state.pendingChunkDone = state.pendingChunkDones[0] || null;
+    const hasMore = state.pendingChunkDones.length > 0 || state.inflightSegments > 0;
+    if (hasMore) {
+      state.segmentPresentedFrames = Math.max(state.segmentPresentedFrames - required, 0);
+    }
+    finishSegmentPlayback(pending, hasMore);
+  }
+  return true;
 }
 
 async function pumpSocketFrames(epoch) {
@@ -954,6 +1010,7 @@ async function pumpSocketFrames(epoch) {
       try {
         bitmap = await createImageBitmap(blob);
       } catch (error) {
+        if (epoch !== state.socketPlaybackEpoch) break;
         console.error(`JPEG decode failed: ${error.message || error}`);
         state.stats.dropped += 1;
         continue;
@@ -968,6 +1025,10 @@ async function pumpSocketFrames(epoch) {
         state.nextPresentationAt = now;
       }
       await waitMilliseconds(Math.max(state.nextPresentationAt - now, 0));
+      if (epoch !== state.socketPlaybackEpoch) {
+        bitmap.close();
+        break;
+      }
       state.nextPresentationAt += interval;
       if (el.canvas.width !== bitmap.width) el.canvas.width = bitmap.width;
       if (el.canvas.height !== bitmap.height) el.canvas.height = bitmap.height;
@@ -981,6 +1042,7 @@ async function pumpSocketFrames(epoch) {
       el.image.classList.remove("is-visible");
       el.canvas.classList.add("is-visible");
       const presentedAt = await waitForAnimationFrame();
+      if (epoch !== state.socketPlaybackEpoch) break;
       if (state.lastVideoFrameAt > 0) {
         const instant = 1000 / Math.max(presentedAt - state.lastVideoFrameAt, 1);
         state.stats.fps = state.stats.fps
@@ -992,10 +1054,7 @@ async function pumpSocketFrames(epoch) {
       state.segmentPresentedFrames += 1;
       window.__worldfoundryPresentedFrames = state.presentedFrames;
       renderStats();
-      const pending = state.pendingChunkDone;
-      if (pending && state.segmentPresentedFrames >= Number(pending.frames || 0)) {
-        finishSegmentPlayback(pending);
-      }
+      drainPendingChunkCompletions();
     }
   } finally {
     state.socketFramePump = false;
@@ -1258,9 +1317,15 @@ function bindKeyboard() {
   });
   window.addEventListener("keyup", (event) => {
     const key = normalizeKey(event.key);
+    const source = `keyboard:${key}`;
+    if (state.keySources.get(key)?.has(source)) {
+      setKeyHeld(key, source, false);
+      if (!shouldIgnoreKey(event)) event.preventDefault();
+      return;
+    }
     if (event.defaultPrevented || shouldIgnoreKey(event) || !allowedKeys.has(key)) return;
     event.preventDefault();
-    setKeyHeld(key, `keyboard:${key}`, false);
+    setKeyHeld(key, source, false);
   });
   window.addEventListener("blur", releaseAllInputs);
 }
@@ -1593,6 +1658,7 @@ function markConnected(transport) {
   state.connected = true;
   if (transport === "RTC") state.transportStatsTimer = window.setInterval(pollTransportStats, 2000);
   state.connecting = false;
+  state.fallbackStarted = false;
   state.sessionStartedAt = Date.now();
   appendRuntimeLog(`${transport} channel connected`, "live", `Playback target ${state.playbackFps} FPS`);
   el.startButton.classList.toggle("is-hidden", !state.queuedSegments);
@@ -1624,11 +1690,31 @@ function markDisconnected(message = "DISCONNECTED · START A NEW SESSION") {
   state.heartbeatTimer = null;
   window.clearTimeout(state.connectionTimer);
   state.connectionTimer = null;
+  const axisChannel = state.axisChannel;
+  const channel = state.channel;
+  const socket = state.socket;
+  const peer = state.peer;
+  state.axisChannel = null;
+  state.channel = null;
+  state.socket = null;
+  state.peer = null;
+  if (axisChannel && axisChannel.readyState !== "closed") axisChannel.close();
+  if (channel && channel !== socket && channel.readyState !== "closed") channel.close();
+  if (socket && socket.readyState !== (WebSocket.CLOSED ?? 3) && socket.readyState !== "closed") socket.close();
+  if (peer && peer.connectionState !== "closed") peer.close();
   state.connected = false;
   state.connecting = false;
+  state.fallbackStarted = false;
   state.segmentBusy = false;
   state.sessionStartedAt = 0;
   state.segmentIndex = 0;
+  state.uploadedPath = "";
+  state.denseUploadedPath = "";
+  state.sparseUploadedPath = "";
+  state.inflightDenseFile = null;
+  state.inflightDensePath = "";
+  state.inflightSparseFile = null;
+  state.inflightSparsePath = "";
   resetPresentationMetrics();
   resetSocketPlayback();
   clearAllPending();
@@ -1759,19 +1845,27 @@ function handleServerMessage(raw) {
     el.startButton.disabled = true;
     el.startButton.textContent = "QUEUED";
     setStatus(`SEGMENT ${message.segment_index || state.segmentIndex + 1} QUEUED`, true);
+    updateControlAvailability();
   } else if (message.type === "segment_started") {
+    const idle = !state.pendingChunkDones.length && state.inflightSegments === 0 && !state.socketFrameQueue.length;
+    state.inflightSegments += 1;
     state.segmentBusy = true;
-    state.segmentPresentedFrames = 0;
-    state.pendingChunkDone = null;
-    state.nextPresentationAt = 0;
+    if (idle) {
+      state.segmentPresentedFrames = 0;
+      state.pendingChunkDone = null;
+      state.nextPresentationAt = 0;
+    }
     if (state.queuedSegments) {
       el.startButton.disabled = true;
       el.startButton.textContent = "RUNNING";
     }
-    setStatus(
-      state.continuous ? "GENERATING NEXT CHUNK" : `GENERATING SEGMENT ${message.segment_index || state.segmentIndex + 1}`,
-      true,
-    );
+    if (idle) {
+      setStatus(
+        state.continuous ? "GENERATING NEXT CHUNK" : `GENERATING SEGMENT ${message.segment_index || state.segmentIndex + 1}`,
+        true,
+      );
+    }
+    updateControlAvailability();
   } else if (message.type === "segment_progress") {
     const seconds = Math.max(Number(message.elapsed_ms || 0) / 1000, 0);
     const label = state.continuous ? "NEXT CHUNK" : `SEGMENT ${message.segment_index || state.segmentIndex + 1}`;
@@ -1784,7 +1878,14 @@ function handleServerMessage(raw) {
     state.stats.latencyMs = Number(message.control_latency_ms || 0);
     state.stats.queueDepth = Number(message.queue_depth || 0);
     state.stats.dropped = Number(message.dropped_frames || 0);
-    if (message.resolution) state.outputResolution = message.resolution;
+    if (message.resolution) {
+      const previous = resolutionValue(state.outputResolution);
+      state.outputResolution = message.resolution;
+      const current = resolutionValue(state.outputResolution);
+      if (current !== previous || (el.resolutionSelect && el.resolutionSelect.value !== current)) {
+        renderResolutionOptions(state.outputResolutionOptions);
+      }
+    }
     const chunkIndex = Number(message.chunk_index || state.segmentIndex + 1);
     const frames = Number(message.frames || 0);
     const generation = state.stats.generationMs >= 10000
@@ -1796,12 +1897,12 @@ function handleServerMessage(raw) {
       `${frames} frames · gen ${generation} · queue ${state.stats.queueDepth} · dropped ${state.stats.dropped}`,
     );
     if (state.queuedSegments || state.promptScheduled) {
-      state.pendingChunkDone = message;
-      if (state.segmentPresentedFrames >= Number(message.frames || 0)) {
-        finishSegmentPlayback(message);
-      } else {
+      state.inflightSegments = Math.max(state.inflightSegments - 1, 0);
+      state.pendingChunkDones.push(message);
+      if (!drainPendingChunkCompletions()) {
+        const activePending = state.pendingChunkDones[0];
         setStatus(
-          `PLAYING SEGMENT ${message.chunk_index || state.segmentIndex + 1} · ${state.segmentPresentedFrames}/${message.frames || 0}`,
+          `PLAYING SEGMENT ${activePending.chunk_index || state.segmentIndex + 1} · ${state.segmentPresentedFrames}/${activePending.frames || 0}`,
           true,
         );
       }
@@ -1812,15 +1913,21 @@ function handleServerMessage(raw) {
     }
     renderStats();
   } else if (message.type === "segment_rejected") {
-    state.segmentBusy = false;
+    state.inflightSegments = Math.max(state.inflightSegments - 1, 0);
+    if (state.inflightSegments === 0 && !state.pendingChunkDones.length) {
+      state.segmentBusy = false;
+    }
     el.startButton.disabled = false;
     el.startButton.textContent = state.segmentIndex ? "EXTEND" : "RUN";
     setStatus(`SEGMENT REJECTED: ${message.message || "invalid inputs"}`, false, true);
+    updateControlAvailability();
   } else if (message.type === "error") {
+    state.inflightSegments = 0;
     state.segmentBusy = false;
     el.startButton.disabled = false;
     el.startButton.textContent = state.segmentIndex ? "EXTEND" : "RUN";
     setStatus(`STREAM ERROR: ${message.message || "unknown"}`, false, true);
+    updateControlAvailability();
     console.error(message.message || message);
   }
 }
@@ -1870,11 +1977,11 @@ async function connectSocket(session) {
     });
     socket.addEventListener("close", () => {
       if (state.socket !== socket) return;
-      markDisconnected();
       if (!settled) {
         settled = true;
         reject(new Error("same-port realtime connection closed"));
       }
+      markDisconnected();
     });
   });
 }
@@ -1882,13 +1989,20 @@ async function connectSocket(session) {
 async function fallbackToSocket(session, pc) {
   if (state.fallbackStarted || state.connected || state.peer !== pc) return;
   state.fallbackStarted = true;
+  state.connecting = true;
   setStatus("SWITCHING TO TUNNEL MODE", true);
-  await closePeer(false);
-  await api("/api/session/reset", {
-    method: "POST",
-    body: JSON.stringify({ preserve_uploads: true }),
-  }).catch(() => {});
-  await connectSocket(session);
+  try {
+    await closePeer(false, { keepConnecting: true });
+    await api("/api/session/reset", {
+      method: "POST",
+      body: JSON.stringify({ preserve_uploads: true }),
+    }).catch(() => {});
+    await connectSocket(session);
+  } catch (error) {
+    state.fallbackStarted = false;
+    markDisconnected(`START ERROR: ${error.message || error}`);
+    throw error;
+  }
 }
 
 async function uploadSelectedInput() {
@@ -1964,6 +2078,7 @@ async function loadModel() {
     state.modelLoaded = true;
     el.loadModelButton.textContent = "READY";
     setStatus("READY");
+    await syncRuntimeStatus().catch(() => false);
   } catch (error) {
     state.modelLoaded = false;
     el.loadModelButton.textContent = "RETRY LOAD";
@@ -2055,17 +2170,23 @@ async function connectSession() {
     });
     channel.addEventListener("message", (event) => handleServerMessage(event.data));
     channel.addEventListener("close", () => {
-      if (!state.fallbackStarted) markDisconnected();
+      if (state.channel === channel && !state.fallbackStarted) markDisconnected();
     });
     pc.addEventListener("track", (event) => {
+      if (state.peer !== pc) return;
       const [stream] = event.streams;
       attachRemoteStream(stream || new MediaStream([event.track]));
     });
     pc.addEventListener("connectionstatechange", () => {
+      if (state.peer !== pc) return;
       if (pc.connectionState === "failed") {
-        fallbackToSocket(session, pc).catch((error) => {
-          setStatus(`START ERROR: ${error.message || error}`, false, true);
-        });
+        if (state.connected) {
+          markDisconnected();
+        } else {
+          fallbackToSocket(session, pc).catch((error) => {
+            setStatus(`START ERROR: ${error.message || error}`, false, true);
+          });
+        }
       } else if (["closed", "disconnected"].includes(pc.connectionState)) {
         if (!state.fallbackStarted) markDisconnected();
       }
@@ -2091,6 +2212,7 @@ async function connectSession() {
     }
   } catch (error) {
     state.connecting = false;
+    state.fallbackStarted = false;
     state.segmentBusy = false;
     el.startButton.disabled = false;
     el.startButton.textContent = state.queuedSegments ? "RUN" : "START";
@@ -2134,28 +2256,36 @@ async function extendQueuedSegment() {
   } catch (error) {
     state.segmentBusy = false;
     el.startButton.disabled = false;
-    el.startButton.textContent = "EXTEND";
+    el.startButton.textContent = state.segmentIndex ? "EXTEND" : "RUN";
     setStatus(`EXTEND ERROR: ${error.message || error}`, false, true);
     throw error;
   }
 }
 
-async function closePeer(notify = true) {
+async function closePeer(notify = true, { keepConnecting = false } = {}) {
   releaseAllKeys();
   window.clearInterval(state.heartbeatTimer);
   state.heartbeatTimer = null;
   window.clearTimeout(state.connectionTimer);
   state.connectionTimer = null;
   if (notify) send({ type: "disconnect" });
-  if (state.axisChannel && state.axisChannel.readyState !== "closed") state.axisChannel.close();
-  if (state.channel && state.channel.readyState !== "closed") state.channel.close();
-  if (state.peer && state.peer.connectionState !== "closed") state.peer.close();
+  const axisChannel = state.axisChannel;
+  const channel = state.channel;
+  const socket = state.socket;
+  const peer = state.peer;
   state.peer = null;
   state.socket = null;
   state.channel = null;
   state.axisChannel = null;
+  if (axisChannel && axisChannel.readyState !== "closed") axisChannel.close();
+  if (channel && channel !== socket && channel.readyState !== "closed") channel.close();
+  if (socket && socket.readyState !== (WebSocket.CLOSED ?? 3) && socket.readyState !== "closed") socket.close();
+  if (peer && peer.connectionState !== "closed") peer.close();
   state.connected = false;
-  state.connecting = false;
+  if (!keepConnecting) {
+    state.connecting = false;
+    state.fallbackStarted = false;
+  }
   stopAxisInputs();
   state.rolloutChunks = 0;
   state.paused = false;
@@ -2205,6 +2335,13 @@ async function resetSession() {
   state.segmentBusy = false;
   state.segmentIndex = 0;
   state.activeEventId = null;
+  state.uploadedPath = "";
+  state.denseUploadedPath = "";
+  state.sparseUploadedPath = "";
+  state.inflightDenseFile = null;
+  state.inflightDensePath = "";
+  state.inflightSparseFile = null;
+  state.inflightSparsePath = "";
   state.stats = { fps: 0, generationMs: 0, enqueueMs: 0, latencyMs: 0, queueDepth: 0, dropped: 0 };
   state.lastVideoFrameAt = 0;
   if (state.streamFrameUrl) URL.revokeObjectURL(state.streamFrameUrl);
@@ -2255,6 +2392,7 @@ function bindInputPickers() {
   el.imageInput.addEventListener("change", (event) => {
     const [file] = event.target.files || [];
     if (!file) return;
+    event.target.value = "";
     if (state.previewUrl.startsWith("blob:")) URL.revokeObjectURL(state.previewUrl);
     state.previewUrl = URL.createObjectURL(file);
     state.selectedFile = file;
@@ -2269,6 +2407,7 @@ function bindInputPickers() {
   el.videoInput.addEventListener("change", (event) => {
     const [file] = event.target.files || [];
     if (!file) return;
+    event.target.value = "";
     if (state.previewUrl.startsWith("blob:")) URL.revokeObjectURL(state.previewUrl);
     state.previewUrl = URL.createObjectURL(file);
     state.selectedFile = file;
@@ -2281,6 +2420,7 @@ function bindInputPickers() {
   el.denseVideoInput.addEventListener("change", (event) => {
     const [file] = event.target.files || [];
     if (!file) return;
+    event.target.value = "";
     state.denseFile = file;
     state.denseUploadedPath = "";
     el.denseInputLabel.textContent = file.name;
@@ -2290,6 +2430,7 @@ function bindInputPickers() {
   el.sparseVideoInput.addEventListener("change", (event) => {
     const [file] = event.target.files || [];
     if (!file) return;
+    event.target.value = "";
     state.sparseFile = file;
     state.sparseUploadedPath = "";
     el.sparseInputLabel.textContent = file.name;
@@ -2417,6 +2558,25 @@ function updateTimer() {
 
 async function syncRuntimeStatus() {
   const status = await api("/api/runtime/status");
+  if (status.capabilities && typeof status.capabilities === "object") {
+    const previousTextEvents = Boolean(state.capabilities.text_events);
+    state.capabilities = { ...state.capabilities, ...status.capabilities };
+    const currentTextEvents = Boolean(state.capabilities.text_events);
+    if (currentTextEvents !== previousTextEvents) {
+      if (currentTextEvents) {
+        setCatalogStatus(
+          state.textEvents.length
+            ? `${state.textEvents.length} EVENT${state.textEvents.length === 1 ? "" : "S"} READY`
+            : "EMPTY CATALOG",
+          "ok",
+        );
+      } else {
+        setCatalogStatus("MODEL HAS NO STATE-PRESERVING TEXT UPDATE", "error");
+      }
+      renderEventTriggers();
+      updateControlAvailability();
+    }
+  }
   if (status.error) {
     state.runtimePhase = "error";
     state.modelLoaded = false;

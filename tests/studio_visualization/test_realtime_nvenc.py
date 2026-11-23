@@ -23,13 +23,13 @@ def _install_media_stubs(monkeypatch):
         def __init__(self, payload):
             self.payload = payload
 
-    aiortc = ModuleType("aiortc")
+    aiortc: Any = ModuleType("aiortc")
     aiortc.MediaStreamTrack = type("MediaStreamTrack", (), {})
-    streams = ModuleType("aiortc.mediastreams")
+    streams: Any = ModuleType("aiortc.mediastreams")
     streams.MediaStreamError = MediaStreamError
-    av = ModuleType("av")
+    av: Any = ModuleType("av")
     av.VideoFrame = SimpleNamespace(from_ndarray=lambda *args, **kwargs: None)
-    packet = ModuleType("av.packet")
+    packet: Any = ModuleType("av.packet")
     packet.Packet = Packet
     for name, module in (("aiortc", aiortc), ("aiortc.mediastreams", streams), ("av", av), ("av.packet", packet)):
         monkeypatch.setitem(sys.modules, name, module)
@@ -131,7 +131,8 @@ def test_nvenc_negotiates_h264_rtp_instead_of_default_video_codec(monkeypatch):
 
     _install_media_stubs(monkeypatch)
     codecs = [SimpleNamespace(mimeType=mime) for mime in ("video/VP8", "video/H264", "video/rtx")]
-    sys.modules["aiortc"].RTCRtpSender = SimpleNamespace(getCapabilities=lambda kind: SimpleNamespace(codecs=codecs))
+    aiortc_mod: Any = sys.modules["aiortc"]
+    aiortc_mod.RTCRtpSender = SimpleNamespace(getCapabilities=lambda kind: SimpleNamespace(codecs=codecs))
     track = SimpleNamespace(preserves_cuda_frames=True)
     selected = []
     transceiver = SimpleNamespace(sender=SimpleNamespace(track=track), setCodecPreferences=selected.append)
@@ -167,7 +168,7 @@ def test_encoder_sdk_contract_waits_for_pixels_routes_gpu_and_preserves_input_cl
         def synchronize(self):
             calls.append("synchronize")
 
-    sdk = ModuleType("PyNvVideoCodec")
+    sdk: Any = ModuleType("PyNvVideoCodec")
     sdk.FORCEIDR = 7
     sdk.GetEncoderCaps = lambda **kwargs: {"width_min": 1, "height_min": 1}
     bitstreams = iter([b"", b"packet"])
@@ -179,7 +180,7 @@ def test_encoder_sdk_contract_waits_for_pixels_routes_gpu_and_preserves_input_cl
 
     native = SimpleNamespace(Encode=encode, EndEncode=lambda: calls.append("close"))
     sdk.CreateEncoder = lambda **kwargs: (calls.append(kwargs) or native)
-    torch_stub = ModuleType("torch")
+    torch_stub: Any = ModuleType("torch")
     torch_stub.cuda = SimpleNamespace(Event=Event, current_stream=lambda device: f"stream:{device}")
     monkeypatch.setitem(sys.modules, "PyNvVideoCodec", sdk)
     monkeypatch.setitem(sys.modules, "torch", torch_stub)
@@ -354,11 +355,11 @@ def test_native_track_close_survives_repeated_caller_cancellation_and_releases_r
         session_refs.append(weakref.ref(session))
         return session
 
-    sdk = ModuleType("PyNvVideoCodec")
+    sdk: Any = ModuleType("PyNvVideoCodec")
     sdk.FORCEIDR = 7
     sdk.GetEncoderCaps = lambda **kwargs: {"width_min": 1, "height_min": 1}
     sdk.CreateEncoder = create_encoder
-    torch_stub = ModuleType("torch")
+    torch_stub: Any = ModuleType("torch")
     torch_stub.cuda = SimpleNamespace(Event=Event, current_stream=lambda device: device)
     monkeypatch.setitem(sys.modules, "PyNvVideoCodec", sdk)
     monkeypatch.setitem(sys.modules, "torch", torch_stub)
@@ -371,9 +372,9 @@ def test_native_track_close_survives_repeated_caller_cancellation_and_releases_r
             self.shutdown_calls = 0
             workers.append(self)
 
-        def shutdown(self, **kwargs):
+        def shutdown(self, wait: bool = True, *, cancel_futures: bool = False) -> None:
             self.shutdown_calls += 1
-            return super().shutdown(**kwargs)
+            return super().shutdown(wait=wait, cancel_futures=cancel_futures)
 
     monkeypatch.setattr(nvenc, "ThreadPoolExecutor", RecordingExecutor)
 
@@ -580,3 +581,51 @@ def test_feedback_is_applied_on_encoder_worker_and_retains_frame_identity(monkey
     assert [call[1] for call in calls if call[0] == "encode"] == [True, True, False, False]
     assert [call[1] for call in calls if call[0] == "bitrate"] == [400_000, 1_000_000]
     assert len({call[2] for call in calls}) == 1
+
+
+@pytest.mark.unit
+def test_nvenc_hold_last_strips_delivery_context_on_repeated_frames(monkeypatch: pytest.MonkeyPatch) -> None:
+    from worldfoundry.studio.serving.realtime.media import LatestFrameBuffer
+    from worldfoundry.studio.serving.realtime.telemetry import FrameContext, PresentationFrame
+
+    Packet, _ = _install_media_stubs(monkeypatch)
+
+    class Encoder:
+        def __init__(self, **kwargs: Any) -> None:
+            del kwargs
+
+        def encode_frame(
+            self,
+            frame: Any,
+            *,
+            force_keyframe: bool,
+            on_packet: Callable[[Any], None],
+            pts: int,
+        ) -> None:
+            del frame, force_keyframe
+            packet = Packet(b"packet")
+            packet.pts = pts
+            on_packet(packet)
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(nvenc, "NVENCFrameEncoder", Encoder)
+
+    async def exercise() -> None:
+        frames = LatestFrameBuffer(maxsize=2)
+        track = nvenc.build_nvenc_track(frames=frames, fps=1000, presentation_mode="hold-last")
+        context = FrameContext(1, 0, ("ctrl-1",), asyncio.get_running_loop().time())
+        try:
+            await frames.put_chunk([PresentationFrame(np.full((4, 4, 3), 12, np.uint8), context)])
+            await asyncio.wait_for(track.recv(), 1)
+            assert track.delivery_context is context
+            await asyncio.wait_for(track.recv(), 1)
+            assert track.delivery_context is None
+            await asyncio.wait_for(track.recv(), 1)
+            assert track.delivery_context is None
+        finally:
+            await track.close()
+            frames.close()
+
+    asyncio.run(exercise())

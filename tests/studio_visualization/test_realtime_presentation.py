@@ -4,6 +4,7 @@ import asyncio
 import json
 import sys
 import types
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -41,9 +42,9 @@ def test_presentation_mode_aliases_and_validation() -> None:
 
 def test_peer_manager_defaults_to_compatible_hold_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("WORLDFOUNDRY_REALTIME_PRESENTATION_MODE", raising=False)
-    compatible = RealtimePeerManager(runtime=None, fps=16, chunk_frames=2)  # type: ignore[arg-type]
+    compatible = RealtimePeerManager(runtime=cast(Any, None), fps=16, chunk_frames=2)
     experimental = RealtimePeerManager(
-        runtime=None,  # type: ignore[arg-type]
+        runtime=cast(Any, None),
         fps=16,
         chunk_frames=2,
         presentation_mode="real-frames",
@@ -78,7 +79,7 @@ def test_client_only_websocket_mode_does_not_pace_on_server() -> None:
         active.frame_packets.put_nowait(b"first")
         active.frame_packets.put_nowait(b"second")
         manager = RealtimePeerManager(
-            runtime=None,  # type: ignore[arg-type]
+            runtime=cast(Any, None),
             fps=1,
             chunk_frames=2,
         )
@@ -146,7 +147,7 @@ def test_socket_config_selects_client_only_pacing() -> None:
     async def exercise() -> None:
         socket = Socket()
         manager = RealtimePeerManager(
-            runtime=Runtime(),  # type: ignore[arg-type]
+            runtime=cast(Any, Runtime()),
             fps=16,
             chunk_frames=3,
         )
@@ -192,7 +193,7 @@ def test_explicit_socket_disconnect_does_not_wait_for_a_nonreading_client(
     async def exercise() -> None:
         runtime = Runtime()
         manager = RealtimePeerManager(
-            runtime=runtime,  # type: ignore[arg-type]
+            runtime=cast(Any, runtime),
             fps=20,
             chunk_frames=3,
         )
@@ -217,7 +218,8 @@ def test_explicit_socket_disconnect_does_not_wait_for_a_nonreading_client(
         site = web.TCPSite(runner, "127.0.0.1", 0)
         await site.start()
         assert site._server is not None
-        port = site._server.sockets[0].getsockname()[1]
+        server: Any = site._server
+        port = server.sockets[0].getsockname()[1]
 
         try:
             async with ClientSession() as session:
@@ -252,7 +254,7 @@ def test_explicit_socket_disconnect_does_not_wait_for_a_nonreading_client(
 
 
 def test_create_answer_selects_real_frame_presentation(monkeypatch: pytest.MonkeyPatch) -> None:
-    peers_created: list[object] = []
+    peers_created: list[Any] = []
 
     class FakeMediaStreamTrack:
         pass
@@ -299,16 +301,16 @@ def test_create_answer_selects_real_frame_presentation(monkeypatch: pytest.Monke
         async def close(self) -> None:
             self.connectionState = "closed"
 
-    aiortc = types.ModuleType("aiortc")
+    aiortc: Any = types.ModuleType("aiortc")
     aiortc.MediaStreamTrack = FakeMediaStreamTrack
     aiortc.MediaStreamError = FakeMediaStreamError
     aiortc.RTCConfiguration = lambda **kwargs: types.SimpleNamespace(**kwargs)
     aiortc.RTCIceServer = lambda **kwargs: types.SimpleNamespace(**kwargs)
     aiortc.RTCPeerConnection = FakePeerConnection
     aiortc.RTCSessionDescription = lambda **kwargs: types.SimpleNamespace(**kwargs)
-    mediastreams = types.ModuleType("aiortc.mediastreams")
+    mediastreams: Any = types.ModuleType("aiortc.mediastreams")
     mediastreams.MediaStreamError = FakeMediaStreamError
-    av = types.ModuleType("av")
+    av: Any = types.ModuleType("av")
     av.VideoFrame = FakeVideoFrame
     monkeypatch.setitem(sys.modules, "aiortc", aiortc)
     monkeypatch.setitem(sys.modules, "aiortc.mediastreams", mediastreams)
@@ -337,7 +339,7 @@ def test_create_answer_selects_real_frame_presentation(monkeypatch: pytest.Monke
 
     async def exercise() -> None:
         manager = RealtimePeerManager(
-            runtime=Runtime(),  # type: ignore[arg-type]
+            runtime=cast(Any, Runtime()),
             fps=16,
             chunk_frames=3,
         )
@@ -367,7 +369,7 @@ def test_presentation_buffer_replaces_only_the_complete_pending_chunk() -> None:
 
         assert buffer.dropped_chunks == 1
         assert buffer.dropped_frames == 2
-        values = [int((await asyncio.wait_for(buffer.get(), timeout=0.5))[0, 0, 0]) for _ in range(5)]
+        values = [int(cast(np.ndarray, await asyncio.wait_for(buffer.get(), timeout=0.5))[0, 0, 0]) for _ in range(5)]
         assert values == [1, 2, 3, 6, 7]
         assert buffer.presented_frames == 5
         assert buffer.qsize() == 0
@@ -389,7 +391,7 @@ def test_presentation_buffer_bounds_sender_lag_to_two_real_frames() -> None:
 
         assert buffer.qsize() == 2
         assert buffer.dropped_frames == 3
-        assert [int((await buffer.get())[0, 0, 0]) for _ in range(2)] == [3, 4]
+        assert [int(cast(np.ndarray, await buffer.get())[0, 0, 0]) for _ in range(2)] == [3, 4]
         buffer.close()
 
     asyncio.run(exercise())
@@ -408,9 +410,9 @@ def test_ordered_presentation_backpressures_at_chunk_boundary() -> None:
         await asyncio.sleep(0)
         assert blocked.done() is False
 
-        first = [int((await buffer.get())[0, 0, 0]) for _ in range(3)]
+        first = [int(cast(np.ndarray, await buffer.get())[0, 0, 0]) for _ in range(3)]
         assert await asyncio.wait_for(blocked, timeout=0.5) == 1
-        rest = [int((await buffer.get())[0, 0, 0]) for _ in range(3)]
+        rest = [int(cast(np.ndarray, await buffer.get())[0, 0, 0]) for _ in range(3)]
         assert first + rest == [1, 2, 3, 4, 5, 6]
         assert buffer.dropped_frames == 0
         assert buffer.dropped_chunks == 0
@@ -437,11 +439,11 @@ def test_real_frame_track_blocks_instead_of_repeating(monkeypatch: pytest.Monkey
             assert format == "rgb24"
             return cls(array)
 
-    aiortc = types.ModuleType("aiortc")
+    aiortc: Any = types.ModuleType("aiortc")
     aiortc.MediaStreamTrack = FakeMediaStreamTrack
-    mediastreams = types.ModuleType("aiortc.mediastreams")
+    mediastreams: Any = types.ModuleType("aiortc.mediastreams")
     mediastreams.MediaStreamError = FakeMediaStreamError
-    av = types.ModuleType("av")
+    av: Any = types.ModuleType("av")
     av.VideoFrame = FakeVideoFrame
     monkeypatch.setitem(sys.modules, "aiortc", aiortc)
     monkeypatch.setitem(sys.modules, "aiortc.mediastreams", mediastreams)
@@ -471,5 +473,58 @@ def test_real_frame_track_blocks_instead_of_repeating(monkeypatch: pytest.Monkey
         buffer.close()
         with pytest.raises(FakeMediaStreamError):
             await track.recv()
+
+    asyncio.run(exercise())
+
+
+def test_hold_last_track_repeats_pixels_without_reemitting_delivery_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from worldfoundry.studio.serving.realtime.media import LatestFrameBuffer
+    from worldfoundry.studio.serving.realtime.telemetry import FrameContext, PresentationFrame
+
+    class FakeMediaStreamTrack:
+        pass
+
+    class FakeMediaStreamError(Exception):
+        pass
+
+    class FakeVideoFrame:
+        def __init__(self, array: np.ndarray) -> None:
+            self.array = array
+            self.pts: int | None = None
+            self.time_base = None
+
+        @classmethod
+        def from_ndarray(cls, array: np.ndarray, *, format: str) -> "FakeVideoFrame":
+            assert format == "rgb24"
+            return cls(array)
+
+    aiortc: Any = types.ModuleType("aiortc")
+    aiortc.MediaStreamTrack = FakeMediaStreamTrack
+    mediastreams: Any = types.ModuleType("aiortc.mediastreams")
+    mediastreams.MediaStreamError = FakeMediaStreamError
+    av: Any = types.ModuleType("av")
+    av.VideoFrame = FakeVideoFrame
+    monkeypatch.setitem(sys.modules, "aiortc", aiortc)
+    monkeypatch.setitem(sys.modules, "aiortc.mediastreams", mediastreams)
+    monkeypatch.setitem(sys.modules, "av", av)
+
+    async def exercise() -> None:
+        buffer = LatestFrameBuffer(maxsize=2)
+        context = FrameContext(1, 0, ("ctrl-1",), asyncio.get_running_loop().time())
+        await buffer.put_chunk([PresentationFrame(_frame(7), context)])
+        track = _build_video_track(
+            frames=buffer,
+            fps=1000,
+            presentation_mode=RealtimePresentationMode.HOLD_LAST,
+        )
+        first = await asyncio.wait_for(track.recv(), timeout=0.5)
+        assert int(first.array[0, 0, 0]) == 7
+        assert track.delivery_context is context
+        repeated = await asyncio.wait_for(track.recv(), timeout=0.5)
+        assert int(repeated.array[0, 0, 0]) == 7
+        assert track.delivery_context is None
+        buffer.close()
 
     asyncio.run(exercise())

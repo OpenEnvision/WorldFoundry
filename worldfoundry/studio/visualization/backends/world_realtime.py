@@ -1459,6 +1459,8 @@ class ResidentWorldRuntime:
                     dense_video_path=dense_video_path,
                     sparse_video_path=sparse_video_path,
                 )
+            except ValueError:
+                raise
             except BaseException:
                 if self._generation_inflight:
                     self._reset_request = self._base_request
@@ -1482,7 +1484,12 @@ class ResidentWorldRuntime:
             raise RuntimeError("Realtime runtime is not configured.")
         if self.queued_segment_generation:
             call_kwargs = {**self._base_request.call_kwargs, "seed": int(seed)}
-            if not self._first_stream_step:
+            if self._first_stream_step:
+                if dense_video_path:
+                    call_kwargs["dense_video"] = dense_video_path
+                if sparse_video_path:
+                    call_kwargs["sparse_video"] = sparse_video_path
+            else:
                 if not dense_video_path or not sparse_video_path:
                     raise ValueError(
                         "Every EXTEND request needs a new dense depth video and sparse pointmap/track video."
@@ -2089,6 +2096,10 @@ class RealtimePeerManager:
             active.rollout_chunks = 0
         if active.max_chunks is not None and active.rollout_chunks >= active.max_chunks:
             active.pending_steps = 0
+            telemetry = getattr(active, "telemetry", None)
+            if telemetry is not None:
+                telemetry.step_controls.clear()
+            active.action_arrivals.clear()
             return False
         return True
 
@@ -2314,11 +2325,23 @@ class RealtimePeerManager:
 
     def _detach_active_locked(
         self,
+        *,
+        expected: _ActivePeer | _ActiveSocket | None = None,
     ) -> tuple[_ActivePeer | None, _ActiveSocket | None, bool, bool]:
-        active = self._active
-        self._active = None
-        active_socket = self._active_socket
-        self._active_socket = None
+        if expected is not None:
+            if expected is not self._active and expected is not self._active_socket:
+                return None, None, False, False
+            active = self._active if self._active is expected else None
+            if active is not None:
+                self._active = None
+            active_socket = self._active_socket if self._active_socket is expected else None
+            if active_socket is not None:
+                self._active_socket = None
+        else:
+            active = self._active
+            self._active = None
+            active_socket = self._active_socket
+            self._active_socket = None
         has_session = not ((active is None or active.closed) and (active_socket is None or active_socket.closed))
         if has_session:
             self._draining = True
@@ -2333,11 +2356,23 @@ class RealtimePeerManager:
         _retain_shutdown_task(task, self._shutdown_tasks)
         return task
 
-    def _schedule_deferred_close(self) -> None:
+    def _schedule_deferred_close(
+        self,
+        *,
+        expected: _ActivePeer | _ActiveSocket | None = None,
+    ) -> None:
+        timeout_s = _realtime_shutdown_timeout_s()
+        if expected is not None:
+            if expected is not self._active and expected is not self._active_socket:
+                return
+            self._spawn_background_task(
+                self._deferred_close_after_lock(timeout_s, expected=expected),
+                name="world-realtime-deferred-close",
+            )
+            return
         existing = self._deferred_close_task
         if existing is not None and not existing.done():
             return
-        timeout_s = _realtime_shutdown_timeout_s()
         task = self._spawn_background_task(
             self._deferred_close_after_lock(timeout_s),
             name="world-realtime-deferred-close",
@@ -2350,10 +2385,15 @@ class RealtimePeerManager:
 
         task.add_done_callback(clear_deferred)
 
-    async def _deferred_close_after_lock(self, timeout_s: float) -> None:
+    async def _deferred_close_after_lock(
+        self,
+        timeout_s: float,
+        *,
+        expected: _ActivePeer | _ActiveSocket | None = None,
+    ) -> None:
         await self._lock.acquire()
         try:
-            detached = self._detach_active_locked()
+            detached = self._detach_active_locked(expected=expected)
         finally:
             self._lock.release()
         deadline = asyncio.get_running_loop().time() + timeout_s
@@ -2461,7 +2501,14 @@ class RealtimePeerManager:
                 self._draining = False
                 self._drain_done.set()
 
-    async def close_active(self, *, deadline: float | None = None) -> None:
+    async def close_active(
+        self,
+        *,
+        deadline: float | None = None,
+        expected: _ActivePeer | _ActiveSocket | None = None,
+    ) -> None:
+        if expected is not None and expected is not self._active and expected is not self._active_socket:
+            return
         deadline = _shutdown_deadline(deadline)
         acquired = await _acquire_lock_by_shutdown_deadline(
             self._lock,
@@ -2472,10 +2519,10 @@ class RealtimePeerManager:
             # The caller's absolute deadline still wins, but preserve the
             # close intent. A single retained task will detach and tear down
             # the session when an in-flight setup operation releases _lock.
-            self._schedule_deferred_close()
+            self._schedule_deferred_close(expected=expected)
             return
         try:
-            detached = self._detach_active_locked()
+            detached = self._detach_active_locked(expected=expected)
         finally:
             self._lock.release()
         await self._finish_active_close(*detached, deadline=deadline)
@@ -2614,8 +2661,10 @@ class RealtimePeerManager:
 
                 @channel.on("close")
                 def on_close() -> None:
+                    if self._active is not active:
+                        return
                     active.close_task = self._spawn_background_task(
-                        self.close_active(),
+                        self.close_active(expected=active),
                         name="world-realtime-channel-close",
                     )
 
@@ -2645,8 +2694,8 @@ class RealtimePeerManager:
 
             @pc.on("connectionstatechange")
             async def on_connectionstatechange() -> None:
-                if pc.connectionState in {"failed", "closed", "disconnected"}:
-                    await self.close_active()
+                if pc.connectionState in {"failed", "closed", "disconnected"} and self._active is active:
+                    await self.close_active(expected=active)
 
             try:
                 await pc.setRemoteDescription(RTCSessionDescription(sdp=str(offer["sdp"]), type=str(offer["type"])))
@@ -2674,7 +2723,12 @@ class RealtimePeerManager:
                 await self.runtime.reset()
                 raise
 
-    async def serve_socket(self, socket: Any) -> None:
+    async def serve_socket(
+        self,
+        socket: Any,
+        *,
+        on_accepted: Callable[[], None] | None = None,
+    ) -> None:
         """Run a same-origin fallback session when UDP ICE cannot cross a tunnel."""
 
         from aiohttp import WSMsgType
@@ -2769,6 +2823,8 @@ class RealtimePeerManager:
                 max_chunks=self.runtime.realtime_spec.max_chunks,
             )
             self._active_socket = active
+            if on_accepted is not None:
+                on_accepted()
 
         active.generation_task = asyncio.create_task(
             self._socket_generation_worker(active),
@@ -2811,7 +2867,7 @@ class RealtimePeerManager:
                     break
         finally:
             if self._active_socket is active:
-                await self.close_active()
+                await self.close_active(expected=active)
 
     async def _handle_socket_message(self, active: _ActiveSocket, raw: str) -> None:
         if active.closed:
@@ -2826,7 +2882,8 @@ class RealtimePeerManager:
         message_type = str(payload.get("type") or "").lower()
         if message_type == "disconnect":
             active.disconnect_requested = True
-            await self.close_active()
+            if self._active_socket is active:
+                await self.close_active(expected=active)
             return
         if message_type in {"heartbeat", "ping"}:
             return
@@ -2834,7 +2891,7 @@ class RealtimePeerManager:
         if acknowledgement is not None:
             await self._socket_send(active, acknowledgement)
             return
-        if message_type == "prompt_update" and active.prompt_scheduled:
+        if message_type == "prompt_update" and (active.prompt_scheduled or active.continuous):
             prompt = str(payload.get("prompt") or "").strip()
             if prompt:
                 arrival = asyncio.get_running_loop().time()
@@ -2973,6 +3030,7 @@ class RealtimePeerManager:
                     elif not self._auto_advance_due(active):
                         active.segment_inflight = False
                         active.first_action.clear()
+                        active.action_arrivals.clear()
                         continue
                     if prompt_changed:
                         prompt_event_id = active.active_event_id
@@ -3029,6 +3087,7 @@ class RealtimePeerManager:
                     ):
                         if not active.resampler.has_pending_input:
                             active.first_action.clear()
+                            active.action_arrivals.clear()
                         continue
                     if not self._begin_rollout_chunk(active, next_prompt):
                         active.first_action.clear()
@@ -3200,7 +3259,8 @@ class RealtimePeerManager:
                 active,
                 {"type": "error", "message": f"{type(exc).__name__}: {exc}"},
             )
-            await self.close_active()
+            if self._active_socket is active:
+                await self.close_active(expected=active)
 
     async def _socket_sender(self, active: _ActiveSocket) -> None:
         loop = asyncio.get_running_loop()
@@ -3223,7 +3283,8 @@ class RealtimePeerManager:
         except asyncio.CancelledError:
             raise
         except Exception:
-            await self.close_active()
+            if self._active_socket is active:
+                await self.close_active(expected=active)
 
     @staticmethod
     async def _socket_send(active: _ActiveSocket, payload: Mapping[str, Any]) -> None:
@@ -3254,7 +3315,8 @@ class RealtimePeerManager:
             return
         message_type = str(payload.get("type") or "").lower()
         if message_type == "disconnect":
-            await self.close_active()
+            if self._active is active:
+                await self.close_active(expected=active)
             return
         if message_type in {"heartbeat", "ping"}:
             return
@@ -3277,7 +3339,7 @@ class RealtimePeerManager:
                     active.telemetry.pending_prompt_control = control_id
             self._send(active.channel, acknowledgement)
             return
-        if message_type == "prompt_update" and active.prompt_scheduled:
+        if message_type == "prompt_update" and (active.prompt_scheduled or active.continuous):
             prompt = str(payload.get("prompt") or "").strip()
             if prompt:
                 arrival = asyncio.get_running_loop().time()
@@ -3319,7 +3381,8 @@ class RealtimePeerManager:
             while not active.closed:
                 await asyncio.sleep(interval)
                 if asyncio.get_running_loop().time() - active.last_client_message_at > timeout:
-                    await self.close_active()
+                    if self._active is active:
+                        await self.close_active(expected=active)
                     return
         except asyncio.CancelledError:
             raise
@@ -3346,7 +3409,8 @@ class RealtimePeerManager:
             "Realtime peer completed signaling but opened no DataChannel within %ds; closing the half-open session.",
             timeout,
         )
-        await self.close_active()
+        if self._active is active:
+            await self.close_active(expected=active)
 
     async def _generation_worker(self, active: _ActivePeer) -> None:
         loop = asyncio.get_running_loop()
@@ -3378,6 +3442,7 @@ class RealtimePeerManager:
                         forced_step = True
                     elif not self._auto_advance_due(active):
                         active.first_action.clear()
+                        active.action_arrivals.clear()
                         continue
                     if prompt_changed:
                         prompt_event_id = active.active_event_id
@@ -3385,6 +3450,8 @@ class RealtimePeerManager:
                         active.pending_prompt = None
                         active.pending_prompt_dirty = False
                     if not self._begin_rollout_chunk(active, next_prompt):
+                        if prompt_changed and active.telemetry is not None:
+                            active.telemetry.pending_prompt_control = None
                         continue
                     interactions: list[str] = []
                 else:
@@ -3424,8 +3491,13 @@ class RealtimePeerManager:
                     ):
                         if not active.resampler.has_pending_input:
                             active.first_action.clear()
+                            if active.telemetry is not None:
+                                active.telemetry.key_control = None
+                            active.action_arrivals.clear()
                         continue
                     if not self._begin_rollout_chunk(active, next_prompt):
+                        if prompt_changed and active.telemetry is not None:
+                            active.telemetry.pending_prompt_control = None
                         active.first_action.clear()
                         continue
                 action_arrival = active.action_arrivals[0] if active.action_arrivals else None
@@ -3536,7 +3608,8 @@ class RealtimePeerManager:
             raise
         except Exception as exc:
             self._send(active.channel, {"type": "error", "message": f"{type(exc).__name__}: {exc}"})
-            await self.close_active()
+            if self._active is active:
+                await self.close_active(expected=active)
 
     @staticmethod
     def _send(channel: Any | None, payload: Mapping[str, Any]) -> None:
@@ -3607,11 +3680,14 @@ def _build_video_track(
 
         async def recv(self) -> VideoFrame:
             loop = asyncio.get_running_loop()
+            context: FrameContext | None = None
             if self._presentation_mode is RealtimePresentationMode.REAL_FRAMES:
                 try:
-                    frame_array = await frames.get()
+                    queued = await frames.get()
                 except EOFError as exc:
                     raise MediaStreamError from exc
+                context = frame_context(queued)
+                pixels = frame_pixels(queued)
                 now = loop.time()
                 if self._first_real_frame_at is None:
                     self._first_real_frame_at = now
@@ -3619,9 +3695,11 @@ def _build_video_track(
             else:
                 if self._last_array is None:
                     try:
-                        self._last_array = await frames.get()
+                        queued = await frames.get()
                     except EOFError as exc:
                         raise MediaStreamError from exc
+                    context = frame_context(queued)
+                    self._last_array = frame_pixels(queued)
                     self._deadline = loop.time()
                 else:
                     assert self._deadline is not None
@@ -3632,24 +3710,24 @@ def _build_video_track(
                     elif now - self._deadline > self._interval:
                         self._deadline = now
                     try:
-                        self._last_array = frames.get_nowait()
+                        queued = frames.get_nowait()
                     except asyncio.QueueEmpty:
-                        # Keep a constant RTP clock even between generated chunks.
-                        # Besides giving the browser a stable live stream, the
-                        # repeated hold frame flushes the encoder's final source
-                        # frame instead of leaving it buffered until the next user
-                        # action arrives.
+                        # Keep a constant RTP clock between generated chunks
+                        # without re-emitting delivery receipts for held frames.
                         pass
                     except EOFError as exc:
                         raise MediaStreamError from exc
-                frame_array = self._last_array
+                    else:
+                        context = frame_context(queued)
+                        self._last_array = frame_pixels(queued)
+                pixels = self._last_array
                 pts = self._pts
             # Frames are already resized in the generation worker. Keep the
             # aiortc cadence path free of synchronous resize/canvas work; a
             # held frame is therefore repeated at zero additional scale cost.
-            self.delivery_context = frame_context(frame_array)
+            self.delivery_context = context
             self.delivery_started_at = loop.time()
-            frame = VideoFrame.from_ndarray(frame_pixels(frame_array), format="rgb24")
+            frame = VideoFrame.from_ndarray(np.asarray(pixels), format="rgb24")
             frame.pts = pts
             frame.time_base = self._time_base
             self._pts = pts + 1
@@ -3888,6 +3966,18 @@ def serve_realtime_world_frontend(
             }
         )
 
+    async def healthz(_: Any) -> Any:
+        return web.json_response(
+            {
+                "ok": True,
+                "frontend": "world",
+                "model_id": entry.model_id,
+                "ready": runtime.ready,
+                "loading": not runtime.ready and runtime.preload_error is None,
+                "error": runtime.preload_error,
+            }
+        )
+
     async def runtime_status(_: Any) -> Any:
         return web.json_response(
             {
@@ -3899,11 +3989,21 @@ def serve_realtime_world_frontend(
                 "draining": peers.draining,
                 "postprocess": list(runtime.postprocess_names),
                 "realtime_spec": runtime.realtime_spec.to_payload(),
+                "capabilities": {
+                    "text_events": runtime.supports_text_events,
+                },
             }
         )
 
     async def load_runtime(_: Any) -> Any:
-        await runtime.preload()
+        try:
+            await runtime.preload()
+        except Exception as exc:
+            message = str(exc) or type(exc).__name__
+            return web.json_response(
+                {"loaded": False, "ready": False, "error": message},
+                status=500,
+            )
         return web.json_response({"loaded": True, "ready": True})
 
     async def upload_input(request: Any) -> Any:
@@ -3970,8 +4070,14 @@ def serve_realtime_world_frontend(
     async def websocket(request: Any) -> Any:
         socket = web.WebSocketResponse(autoping=True, heartbeat=10, max_msg_size=1024**2)
         await socket.prepare(request)
+        accepted = False
+
+        def mark_accepted() -> None:
+            nonlocal accepted
+            accepted = True
+
         try:
-            await peers.serve_socket(socket)
+            await peers.serve_socket(socket, on_accepted=mark_accepted)
         except Exception as exc:
             if not socket.closed:
                 await socket.send_str(
@@ -3983,7 +4089,8 @@ def serve_realtime_world_frontend(
                 )
                 await socket.close(code=1011, message=b"realtime session failed")
         finally:
-            await cleanup_owned_uploads()
+            if accepted:
+                await cleanup_owned_uploads()
         return socket
 
     async def reset_session(request: Any) -> Any:
@@ -4035,6 +4142,7 @@ def serve_realtime_world_frontend(
         )
 
     app.router.add_get("/", index)
+    app.router.add_get("/healthz", healthz)
     app.router.add_get("/world.css", css)
     app.router.add_get("/world.js", js)
     app.router.add_get("/favicon.svg", favicon)

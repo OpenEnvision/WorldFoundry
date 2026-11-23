@@ -28,7 +28,7 @@ from worldfoundry.studio.serving.realtime.input import RealtimeInputChunk
 from worldfoundry.studio.serving.realtime.media import FrameQueuePolicy
 from worldfoundry.studio.serving.realtime.telemetry import DeliveryTelemetry
 from worldfoundry.studio.visualization.backends import world_realtime as realtime_backend
-from worldfoundry.studio.visualization.backends.world import world_frontend_html, world_frontend_js
+from worldfoundry.studio.visualization.backends.world import world_frontend_css, world_frontend_html, world_frontend_js
 from worldfoundry.studio.visualization.backends.world_realtime import (
     LatestFrameBuffer,
     OutputResolutionState,
@@ -3177,3 +3177,417 @@ def test_serve_socket_maps_continuous_spec_onto_the_session() -> None:
         assert socket.closed is True
 
     asyncio.run(exercise())
+
+
+def test_realtime_http_healthz_status_load_and_duplicate_ws_upload_preservation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from aiohttp import ClientSession, FormData, WSMsgType, web
+
+    monkeypatch.setenv("WORLDFOUNDRY_REALTIME_WEBSOCKET_ONLY", "1")
+    captured: dict[str, Any] = {}
+
+    def fake_run_app(app: web.Application, **_kwargs: Any) -> None:
+        captured["app"] = app
+
+    monkeypatch.setattr(web, "run_app", fake_run_app)
+
+    preload_state = {"fail": True, "calls": 0}
+    entry = find_entry("matrix-game-2")
+
+    class FakeManager:
+        workspace_root = str(tmp_path / "studio")
+
+        def prepare_inputs(self, **kwargs: Any) -> PreparedInputs:
+            return PreparedInputs(
+                prompt=str(kwargs.get("prompt") or ""),
+                input_path=str(kwargs.get("input_path") or ""),
+                image=kwargs.get("image"),
+                image_path=str(kwargs.get("input_path") or "") or None,
+                video_path=kwargs.get("video"),
+                last_frame=None,
+                last_frame_path=None,
+                reference_images=[],
+                reference_image_paths=[],
+                interactions=[],
+                camera_view=None,
+                task_type="",
+                intrinsics=None,
+                meta_path="",
+                panorama_path="",
+                scene_name="",
+                fps=16,
+                num_frames=9,
+                output_dir=str(tmp_path / "out"),
+                output_path=str(tmp_path / "out" / "out.mp4"),
+                call_kwargs={},
+                load_kwargs={},
+                model_ref="",
+                backend="from_pretrained",
+                endpoint="",
+                api_key="",
+                device="cpu",
+            )
+
+        def run_realtime(self, *, entry: Any, request: Any, action: str) -> dict[str, Any]:
+            del entry, request
+            if action == "configure":
+                preload_state["calls"] += 1
+                if preload_state["fail"]:
+                    raise RuntimeError("missing weights on disk")
+                return {
+                    "status": "configured",
+                    "realtime_spec": RealtimeSpec(controls=("prompt_update",), keys=()).to_payload(),
+                }
+            if action == "reset":
+                return {"status": "reset"}
+            return {"video": np.zeros((1, 4, 4, 3), dtype=np.uint8)}
+
+    realtime_backend.serve_realtime_world_frontend(
+        entry=entry,
+        launch_config=StudioLaunchConfig(model_id=entry.model_id, frontend="world", device="cpu"),
+        manager=cast(Any, FakeManager()),
+        host="127.0.0.1",
+        port=0,
+        demo_images=(),
+        allowed_roots=(tmp_path,),
+    )
+    app: web.Application = captured["app"]
+
+    async def exercise() -> None:
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", 0)
+        await site.start()
+        assert site._server is not None
+        server: Any = site._server
+        port = server.sockets[0].getsockname()[1]
+        base = f"http://127.0.0.1:{port}"
+        try:
+            async with ClientSession() as client:
+                # Wait for initial startup preload failure to settle.
+                async def wait_error() -> None:
+                    while True:
+                        async with client.get(f"{base}/healthz") as resp:
+                            body = await resp.json()
+                            if body["error"] is not None:
+                                return
+                        await asyncio.sleep(0.01)
+
+                await asyncio.wait_for(wait_error(), timeout=5)
+
+                async with client.get(f"{base}/healthz") as resp:
+                    assert resp.status == 200
+                    health = await resp.json()
+                    assert health == {
+                        "ok": True,
+                        "frontend": "world",
+                        "model_id": entry.model_id,
+                        "ready": False,
+                        "loading": False,
+                        "error": "missing weights on disk",
+                    }
+
+                async with client.get(f"{base}/api/runtime/status") as resp:
+                    status = await resp.json()
+                    assert status["capabilities"] == {"text_events": False}
+
+                # POST /api/runtime/load returns structured JSON error instead of bare HTTP 500.
+                async with client.post(f"{base}/api/runtime/load", json={}) as resp:
+                    assert resp.status == 500
+                    body = await resp.json()
+                    assert body == {"loaded": False, "ready": False, "error": "missing weights on disk"}
+
+                # Retry after fixing the failure updates both /healthz and capabilities.text_events.
+                preload_state["fail"] = False
+                async with client.post(f"{base}/api/runtime/load", json={}) as resp:
+                    assert resp.status == 200
+                    assert await resp.json() == {"loaded": True, "ready": True}
+
+                async with client.get(f"{base}/healthz") as resp:
+                    health = await resp.json()
+                    assert health["ok"] is True
+                    assert health["ready"] is True
+                    assert health["loading"] is False
+                    assert health["error"] is None
+
+                async with client.get(f"{base}/api/runtime/status") as resp:
+                    status = await resp.json()
+                    assert status["ready"] is True
+                    assert status["capabilities"] == {"text_events": True}
+
+                # Upload an image and hold an active WebSocket session.
+                image_bytes = io.BytesIO()
+                Image.new("RGB", (8, 8), "blue").save(image_bytes, format="PNG")
+                form = FormData()
+                form.add_field("file", image_bytes.getvalue(), filename="seed.png", content_type="image/png")
+                async with client.post(f"{base}/api/session/input", data=form) as resp:
+                    assert resp.status == 200
+                    uploaded = Path((await resp.json())["path"])
+                assert uploaded.is_file()
+
+                ws1 = await client.ws_connect(f"{base}/api/realtime/ws")
+                await ws1.send_json({"type": "configure", "session": {"init_image_path": str(uploaded)}})
+                while True:
+                    msg = await asyncio.wait_for(ws1.receive(), timeout=5)
+                    assert msg.type is WSMsgType.TEXT
+                    if json.loads(msg.data).get("type") == "ready":
+                        break
+
+                # A rejected duplicate tab must not delete the active tab's uploads.
+                ws2 = await client.ws_connect(f"{base}/api/realtime/ws")
+                await ws2.send_json({"type": "configure", "session": {}})
+                messages_ws2: list[dict[str, Any]] = []
+                async for msg in ws2:
+                    if msg.type is WSMsgType.TEXT:
+                        messages_ws2.append(json.loads(msg.data))
+                assert any(
+                    item.get("type") == "error" and "already active" in str(item.get("message", ""))
+                    for item in messages_ws2
+                )
+                assert uploaded.is_file(), "rejected duplicate websocket must not delete active session uploads"
+
+                # Closing the accepted session cleans up the owned upload.
+                await ws1.close()
+                await asyncio.wait_for(_wait_for_condition(lambda: not uploaded.exists()), timeout=5)
+        finally:
+            await runner.cleanup()
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("transport", ["socket", "webrtc"])
+def test_continuous_non_prompt_scheduled_session_accepts_prompt_update(transport: str) -> None:
+    async def exercise() -> None:
+        sink = _AxisSink()
+        runtime = _ContinuousRuntime()
+        fields: dict[str, Any] = {
+            "resampler": RealtimeControlResampler(fps=16, start_time=0.0),
+            "prompt_scheduled": False,
+            "base_prompt": "fox",
+            "continuous": True,
+            "max_chunks": 2,
+        }
+        active: _ActivePeer | _ActiveSocket
+        if transport == "socket":
+            active = _ActiveSocket(socket=sink, frame_packets=asyncio.Queue(maxsize=64), **fields)
+        else:
+            active = _ActivePeer(peer=None, channel=sink, frames=LatestFrameBuffer(maxsize=64), **fields)
+        active.first_action.set()
+        peers = RealtimePeerManager(runtime=cast(Any, runtime), fps=16, chunk_frames=4)
+        worker = _start_worker(peers, active)
+        try:
+            await asyncio.wait_for(_wait_for_condition(lambda: len(_chunks_done(sink)) >= 2), 5)
+            await _settle()
+            assert runtime.prompts == [None, None]
+            await _handle_axis_message(peers, active, {"type": "prompt_update", "prompt": "owl"})
+            await asyncio.wait_for(_wait_for_condition(lambda: len(_chunks_done(sink)) >= 4), 5)
+            await _settle()
+            assert runtime.prompts == [None, None, "owl", None]
+            assert [chunk["rollout_chunks"] for chunk in _chunks_done(sink)] == [1, 2, 1, 2]
+        finally:
+            await _stop_worker(active, worker)
+
+    asyncio.run(exercise())
+
+
+def test_queued_segment_value_error_preserves_session_and_applies_segment1_retry_paths(tmp_path: Path) -> None:
+    entry = find_entry("longvie-2")
+    calls: list[tuple[str, PreparedInputs]] = []
+    mode = {"behavior": "value_error"}
+
+    class Manager:
+        workspace_root = str(tmp_path)
+
+        def run_realtime(self, *, entry: Any, request: PreparedInputs, action: str) -> dict[str, Any]:
+            del entry
+            calls.append((action, request))
+            if action == "reset":
+                return {"status": "reset"}
+            if mode["behavior"] == "value_error":
+                raise ValueError("bad depth video length")
+            if mode["behavior"] == "fatal":
+                raise RuntimeError("cuda device fault")
+            return {
+                "video": np.zeros((4, 2, 3, 3), dtype=np.uint8),
+                "realtime_spec": {
+                    "fps": 16,
+                    "first_chunk_frames": 4,
+                    "steady_chunk_frames": 4,
+                    "controls": ["dense_depth_video", "sparse_pointmap_or_track_video"],
+                    "transport": "queued-segment-rgb",
+                },
+            }
+
+    request = PreparedInputs(
+        prompt="first segment",
+        input_path="/uploads/seed.png",
+        image=Image.new("RGB", (3, 2), "white"),
+        image_path="/uploads/seed.png",
+        video_path=None,
+        last_frame=None,
+        last_frame_path=None,
+        reference_images=[],
+        reference_image_paths=[],
+        interactions=[],
+        camera_view=None,
+        task_type="image-to-video",
+        intrinsics=None,
+        meta_path="",
+        panorama_path="",
+        scene_name="",
+        fps=16,
+        num_frames=4,
+        output_dir=str(tmp_path / "unused"),
+        output_path=str(tmp_path / "unused" / "out.mp4"),
+        call_kwargs={
+            "num_frames": 4,
+            "dense_video": "/uploads/bad-depth.mp4",
+            "sparse_video": "/uploads/bad-track.mp4",
+            "return_dict": True,
+        },
+        load_kwargs={},
+        model_ref="",
+        backend="from_pretrained",
+        endpoint="",
+        api_key="",
+        device="cpu",
+    )
+    runtime = ResidentWorldRuntime(
+        manager=cast(Any, Manager()),
+        entry=entry,
+        launch_config=StudioLaunchConfig(model_id=entry.model_id, frontend="world"),
+        fps=16,
+    )
+    runtime._base_request = request
+    runtime._configured = True
+
+    async def exercise() -> None:
+        with pytest.raises(ValueError, match="bad depth video length"):
+            await runtime.generate([], seed=1)
+        assert runtime._configured is True
+        assert runtime._base_request is request
+        assert runtime._first_stream_step is True
+
+        mode["behavior"] = "ok"
+        frames1, _ = await runtime.generate(
+            [],
+            seed=2,
+            prompt="retried segment 1",
+            dense_video_path="/uploads/fixed-depth.mp4",
+            sparse_video_path="/uploads/fixed-track.mp4",
+        )
+        assert len(frames1) == 4
+        assert runtime._first_stream_step is False
+
+        frames2, _ = await runtime.generate(
+            [],
+            seed=3,
+            prompt="segment 2",
+            dense_video_path="/uploads/depth-2.mp4",
+            sparse_video_path="/uploads/track-2.mp4",
+        )
+        assert len(frames2) == 4
+
+        mode["behavior"] = "fatal"
+        with pytest.raises(RuntimeError, match="cuda device fault"):
+            await runtime.generate(
+                [],
+                seed=4,
+                prompt="segment 3",
+                dense_video_path="/uploads/depth-3.mp4",
+                sparse_video_path="/uploads/track-3.mp4",
+            )
+        assert runtime._configured is False
+        assert runtime._base_request is None
+        await runtime.close()
+
+    asyncio.run(exercise())
+
+    assert [action for action, _ in calls[:4]] == ["run", "run", "stream", "stream"]
+    assert calls[1][1].prompt == "retried segment 1"
+    assert calls[1][1].call_kwargs["dense_video"] == "/uploads/fixed-depth.mp4"
+    assert calls[1][1].call_kwargs["sparse_video"] == "/uploads/fixed-track.mp4"
+    assert calls[1][1].image is not None
+    assert calls[2][1].image is None
+    assert calls[2][1].call_kwargs["dense_video"] == "/uploads/depth-2.mp4"
+
+
+def test_stale_session_teardown_callbacks_cannot_close_newer_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    peers_created = _install_fake_aiortc(monkeypatch)
+
+    class Runtime:
+        queued_segment_generation = False
+        entry = types.SimpleNamespace(default_prompt="", default_call_kwargs={})
+        realtime_spec = RealtimeSpec(fps=16, first_chunk_frames=2, steady_chunk_frames=2)
+        transport_native_resolution = None
+        supports_text_events = False
+        last_generation_metrics: dict[str, float] = {}
+        preserve_cuda_frames = False
+
+        async def configure(self, **_kwargs: Any) -> None:
+            pass
+
+        async def reset(self) -> None:
+            pass
+
+        def steady_chunk_frames(self, _default: int) -> int:
+            return 2
+
+    async def exercise() -> None:
+        manager = RealtimePeerManager(runtime=cast(Any, Runtime()), fps=16, chunk_frames=2)
+        await manager.create_answer(offer={"sdp": "offer-1", "type": "offer"}, session={})
+        old_peer_conn = peers_created[0]
+        old_active = manager._active
+        assert old_active is not None
+        old_channel = _FakeChannel("controls")
+        old_peer_conn.handlers["datachannel"](old_channel)
+
+        await manager.close_active()
+        assert manager._active is None
+
+        await manager.create_answer(offer={"sdp": "offer-2", "type": "offer"}, session={})
+        new_active = manager._active
+        assert new_active is not None and new_active is not old_active
+
+        # Late callbacks from the previous peer must not touch the replacement session.
+        old_peer_conn.connectionState = "failed"
+        await old_peer_conn.handlers["connectionstatechange"]()
+        old_channel.handlers["close"]()
+        await manager.close_active(expected=old_active)
+        await asyncio.sleep(0)
+
+        assert manager._active is new_active
+        assert new_active.closed is False
+
+        # Same identity guard applies to WebSocket teardown.
+        await manager.close_active()
+        old_socket = _ActiveSocket(
+            socket=types.SimpleNamespace(closed=False, close=lambda: asyncio.sleep(0)),
+            resampler=RealtimeControlResampler(fps=16, start_time=0.0),
+            frame_packets=asyncio.Queue(maxsize=4),
+        )
+        new_socket = _ActiveSocket(
+            socket=types.SimpleNamespace(closed=False, close=lambda: asyncio.sleep(0)),
+            resampler=RealtimeControlResampler(fps=16, start_time=0.0),
+            frame_packets=asyncio.Queue(maxsize=4),
+        )
+        manager._active_socket = new_socket
+        await manager.close_active(expected=old_socket)
+        assert manager._active_socket is new_socket
+        assert new_socket.closed is False
+        await manager.close_active()
+
+    asyncio.run(exercise())
+
+
+def test_world_css_sensor_grid_rows_and_immersive_top_controls_do_not_overlap() -> None:
+    css = world_frontend_css()
+    assert "grid-auto-rows: minmax(0, 1fr);" in css
+    assert ".sensor-tile { position: relative; min-width: 0; min-height: 0;" in css
+    control_bar_block = css.split(".is-immersive .realtime-control-bar {", 1)[1].split("}", 1)[0]
+    session_actions_block = css.split(".is-immersive .session-actions {", 1)[1].split("}", 1)[0]
+    control_top = next(line.strip() for line in control_bar_block.splitlines() if line.strip().startswith("top:"))
+    actions_top = next(line.strip() for line in session_actions_block.splitlines() if line.strip().startswith("top:"))
+    assert control_top != actions_top

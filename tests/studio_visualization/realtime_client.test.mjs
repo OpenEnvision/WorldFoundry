@@ -129,8 +129,13 @@ class FakeElement {
   append(...children) { this.children.push(...children); }
   prepend(...children) { this.children.unshift(...children); }
   replaceChildren(...children) { this.children = children; }
+  add(option) { this.children.push(option); }
+  getContext() { return {drawImage() {}}; }
   querySelector() { return null; }
-  querySelectorAll() { return []; }
+  querySelectorAll(selector) {
+    if (selector === 'button') return this.children.filter((child) => child.tagName === 'BUTTON');
+    return [];
+  }
   closest() { return null; }
   focus() {}
   blur() {}
@@ -143,14 +148,32 @@ class FakeElement {
 
 class FakeWebSocket {
   static OPEN = 1;
-  constructor() { this.readyState = FakeWebSocket.OPEN; this.bufferedAmount = 0; this.sent = []; }
+  static CLOSED = 3;
+  static onCreate = null;
+  constructor(url = '') {
+    this.url = url;
+    this.readyState = FakeWebSocket.OPEN;
+    this.bufferedAmount = 0;
+    this.sent = [];
+    this.listeners = {};
+    this.closed = false;
+    FakeWebSocket.onCreate?.(this);
+  }
+  addEventListener(name, listener) { (this.listeners[name] ||= []).push(listener); }
+  dispatch(name, event = {}) { for (const listener of this.listeners[name] || []) listener(event); }
   send(raw) { this.sent.push(JSON.parse(raw)); }
-  close() {}
+  close() { this.closed = true; this.readyState = FakeWebSocket.CLOSED; }
 }
 
 function fakeDataChannel(label) {
-  return {label, readyState: 'open', bufferedAmount: 0, sent: [], addEventListener() {}, close() {},
-    send(raw) { this.sent.push(JSON.parse(raw)); }};
+  const listeners = {};
+  return {
+    label, readyState: 'open', bufferedAmount: 0, sent: [], closed: false, listeners,
+    addEventListener(name, listener) { (listeners[name] ||= []).push(listener); },
+    dispatch(name, event = {}) { for (const listener of listeners[name] || []) listener(event); },
+    close() { this.closed = true; this.readyState = 'closed'; },
+    send(raw) { this.sent.push(JSON.parse(raw)); },
+  };
 }
 
 function listenerTarget() {
@@ -163,11 +186,21 @@ function listenerTarget() {
 }
 
 // Run the complete client against a fake DOM and a fake Studio session.
-async function loadClient({spec = {}, interactionMode = 'controls', status, gamepadApi = true} = {}) {
+async function loadClient({
+  spec = {},
+  interactionMode = 'controls',
+  capabilities = {no_action_step: true},
+  status,
+  gamepadApi = true,
+  outputResolutions = [],
+  fetchOverride = null,
+} = {}) {
   const elements = new Map();
   const frames = [];
   const pads = [];
   const peers = [];
+  const sockets = [];
+  const timers = [];
   const windowTarget = listenerTarget();
   const documentTarget = listenerTarget();
   const document = {
@@ -185,31 +218,57 @@ async function loadClient({spec = {}, interactionMode = 'controls', status, game
     },
     querySelectorAll: () => [],
     createElement: (tag) => new FakeElement(tag),
+    createTextNode: (text) => ({textContent: String(text)}),
     createDocumentFragment: () => new FakeElement('fragment'),
   };
-  const session = {interaction_mode: interactionMode, capabilities: {no_action_step: true}, realtime_spec: spec};
+  const session = {
+    interaction_mode: interactionMode,
+    capabilities,
+    realtime_spec: spec,
+    output_resolutions: outputResolutions,
+  };
   const responses = {
     '/api/session': session,
     '/api/runtime/status': status || {ready: true, realtime_spec: spec},
     '/api/runtime/load': {loaded: true, ready: true},
     '/api/webrtc/offer': {type: 'answer', sdp: ''},
+    '/api/session/reset': {reset: true},
   };
   class FakePeerConnection {
-    constructor() { this.channels = []; this.iceGatheringState = 'complete'; this.connectionState = 'new'; peers.push(this); }
+    constructor() {
+      this.channels = [];
+      this.listeners = {};
+      this.iceGatheringState = 'complete';
+      this.connectionState = 'new';
+      this.closed = false;
+      peers.push(this);
+    }
     createDataChannel(label, options) { const channel = fakeDataChannel(label); this.channels.push({label, options, channel}); return channel; }
     addTransceiver() {}
-    addEventListener() {}
+    addEventListener(name, listener) { (this.listeners[name] ||= []).push(listener); }
+    dispatch(name, event = {}) { for (const listener of this.listeners[name] || []) listener(event); }
     async createOffer() { return {type: 'offer', sdp: ''}; }
     async setLocalDescription(description) { this.localDescription = description; }
     async setRemoteDescription() {}
-    close() { this.connectionState = 'closed'; }
+    close() { this.closed = true; this.connectionState = 'closed'; }
   }
+  FakeWebSocket.onCreate = (ws) => sockets.push(ws);
+  const FakeURL = class extends URL {
+    static createObjectURL() { return 'blob:fake'; }
+    static revokeObjectURL() {}
+  };
+  const FakeOption = function Option(text, value) {
+    const option = new FakeElement('option');
+    option.textContent = String(text);
+    option.value = String(value);
+    return option;
+  };
   const window = {
     ...windowTarget,
     location: {search: '', href: 'http://localhost/', origin: 'http://localhost', protocol: 'http:'},
     setInterval: () => 0,
     clearInterval() {},
-    setTimeout: () => 0,
+    setTimeout: (fn, delay) => { timers.push({fn, delay}); return timers.length; },
     clearTimeout() {},
     matchMedia: () => ({matches: false}),
     queueMicrotask,
@@ -217,7 +276,8 @@ async function loadClient({spec = {}, interactionMode = 'controls', status, game
     innerHeight: 800,
   };
   const context = vm.createContext({
-    window, document, console, URL, URLSearchParams, Headers, FormData, Blob,
+    window, document, console, URL: FakeURL, URLSearchParams, Headers, FormData, Blob,
+    Option: FakeOption,
     Element: FakeElement,
     WebSocket: FakeWebSocket,
     RTCPeerConnection: FakePeerConnection,
@@ -226,14 +286,21 @@ async function loadClient({spec = {}, interactionMode = 'controls', status, game
     localStorage: {getItem: () => null, setItem() {}},
     requestAnimationFrame: (callback) => frames.push(callback),
     cancelAnimationFrame() {},
-    fetch: async (url) => ({ok: true, json: async () => structuredClone(responses[url])}),
+    createImageBitmap: async () => ({width: 16, height: 16, closed: false, close() { this.closed = true; }}),
+    fetch: async (url, options) => {
+      if (fetchOverride) {
+        const custom = await fetchOverride(url, options);
+        if (custom !== undefined) return custom;
+      }
+      return {ok: true, json: async () => structuredClone(responses[url]), text: async () => JSON.stringify(responses[url])};
+    },
   });
   vm.runInContext(script, context);
   for (let i = 0; i < 20; i++) await new Promise((resolve) => setImmediate(resolve));
   const client = vm.runInContext('({state, el, allowedKeys})', context);
   assert.doesNotMatch(client.el.livePill.textContent, /BOOT ERROR/);
   return {
-    ...client, context, document, window, pads, peers, responses,
+    ...client, context, document, window, pads, peers, sockets, timers, frames, responses,
     tick() { for (const callback of frames.splice(0)) callback(performance.now()); },
     stick(kind, type, dx = 0, dy = 0, pointerId = 1) {
       client.el[`${kind}Stick`].dispatch(type, {
@@ -247,8 +314,8 @@ async function loadClient({spec = {}, interactionMode = 'controls', status, game
       return channel;
     },
     receive(message) { context.handleServerMessage(JSON.stringify(message)); },
-    key(name, type = 'keydown') {
-      window.dispatch(type, {key: name, repeat: false, defaultPrevented: false, target: null,
+    key(name, type = 'keydown', target = null) {
+      window.dispatch(type, {key: name, repeat: false, defaultPrevented: false, target,
         preventDefault() { this.defaultPrevented = true; }, shiftKey: false, ctrlKey: false, metaKey: false, altKey: false});
     },
   };
@@ -693,4 +760,257 @@ test('input-driven sessions keep the live status and hide pause', async () => {
   assert.equal(client.el.pauseButton.classList.contains('is-hidden'), true);
   assert.match(client.el.streamStats.textContent, /E2E/);
   assert.equal(client.el.stepButton.disabled, false);
+});
+
+test('resetSession and markDisconnected clear cached upload paths and file inputs reset value', async () => {
+  const client = await loadClient();
+  const fakeFile = {name: 'scene.png'};
+  client.el.imageInput.value = 'C:\\fakepath\\scene.png';
+  client.el.imageInput.dispatch('change', {target: Object.assign(client.el.imageInput, {files: [fakeFile]})});
+  assert.equal(client.el.imageInput.value, '');
+  assert.equal(client.state.selectedFile, fakeFile);
+
+  client.state.uploadedPath = '/uploads/img.png';
+  client.state.denseUploadedPath = '/uploads/dense.mp4';
+  client.state.sparseUploadedPath = '/uploads/sparse.mp4';
+  await client.context.resetSession();
+  assert.equal(client.state.uploadedPath, '');
+  assert.equal(client.state.denseUploadedPath, '');
+  assert.equal(client.state.sparseUploadedPath, '');
+  assert.equal(client.state.selectedFile, fakeFile);
+
+  client.state.uploadedPath = '/uploads/img2.png';
+  client.state.denseUploadedPath = '/uploads/dense2.mp4';
+  client.state.sparseUploadedPath = '/uploads/sparse2.mp4';
+  client.context.markDisconnected();
+  assert.equal(client.state.uploadedPath, '');
+  assert.equal(client.state.denseUploadedPath, '');
+  assert.equal(client.state.sparseUploadedPath, '');
+});
+
+test('WebRTC fallback failure recovers UI without soft-lock and connected failed peer disconnects cleanly', async () => {
+  let resolveReset;
+  const resetGate = new Promise((resolve) => { resolveReset = resolve; });
+  const client = await loadClient({
+    spec: {axes: MOUSE_AXES},
+    fetchOverride: async (url) => {
+      if (url === '/api/session/reset') {
+        await resetGate;
+        return {ok: true, json: async () => ({reset: true}), text: async () => '{"reset":true}'};
+      }
+      return undefined;
+    },
+  });
+  client.state.seedPath = '/seed.png';
+  await client.context.connectSession();
+  const pc1 = client.peers[0];
+  assert.equal(client.state.connecting, true);
+
+  // Trigger WebRTC failure -> fallbackToSocket; state.connecting must stay true across reset.
+  const fallbackPromise = client.context.fallbackToSocket({prompt: ''}, pc1);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(client.state.connecting, true, 'no re-entrancy window during reset');
+  resolveReset();
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  const fallbackSocket = client.sockets.at(-1);
+  assert.ok(fallbackSocket);
+  fallbackSocket.dispatch('close');
+  await assert.rejects(fallbackPromise, /closed/);
+
+  assert.equal(client.state.fallbackStarted, false);
+  assert.equal(client.state.connecting, false);
+  assert.equal(client.state.connected, false);
+  assert.equal(client.state.socket, null);
+  assert.equal(client.state.channel, null);
+  assert.equal(client.el.startButton.disabled, false);
+  assert.equal(client.el.startButton.classList.contains('is-hidden'), false);
+  assert.match(client.el.livePill.textContent, /START ERROR/);
+
+  // User can retry START cleanly, and a connected peer that later fails calls markDisconnected.
+  await client.context.connectSession();
+  const pc2 = client.peers[1];
+  const controls2 = pc2.channels.find((c) => c.label === 'controls').channel;
+  const axes2 = pc2.channels.find((c) => c.label === 'axes').channel;
+  controls2.dispatch('open');
+  assert.equal(client.state.connected, true);
+  pc2.connectionState = 'failed';
+  pc2.dispatch('connectionstatechange');
+  assert.equal(client.state.connected, false);
+  assert.equal(client.state.peer, null);
+  assert.equal(client.state.channel, null);
+  assert.equal(client.state.axisChannel, null);
+  assert.equal(pc2.closed, true);
+  assert.equal(controls2.closed, true);
+  assert.equal(axes2.closed, true);
+});
+
+test('pumpSocketFrames checks playback epoch after waitMilliseconds and waitForAnimationFrame', async () => {
+  const client = await loadClient();
+  const bitmaps = [];
+  client.context.createImageBitmap = async () => {
+    const bm = {width: 16, height: 16, closed: false, close() { this.closed = true; }};
+    bitmaps.push(bm);
+    return bm;
+  };
+  let drawn = 0;
+  client.el.canvas.getContext = () => ({drawImage() { drawn += 1; }});
+  client.state.nextPresentationAt = 1000;
+  client.state.socketFrameQueue.push(new Blob(['a']));
+  const firstEpoch = client.state.socketPlaybackEpoch;
+  const pump1 = client.context.pumpSocketFrames(firstEpoch);
+  await new Promise((resolve) => setImmediate(resolve));
+  // Advance epoch while waiting inside waitMilliseconds.
+  client.state.socketPlaybackEpoch += 1;
+  client.timers.pop().fn();
+  await pump1;
+  assert.equal(bitmaps[0].closed, true);
+  assert.equal(drawn, 0);
+  assert.equal(client.state.presentedFrames, 0);
+
+  // Advance epoch while waiting inside waitForAnimationFrame.
+  client.state.nextPresentationAt = 0;
+  client.state.socketFrameQueue.push(new Blob(['b']));
+  const secondEpoch = client.state.socketPlaybackEpoch;
+  const pump2 = client.context.pumpSocketFrames(secondEpoch);
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(drawn, 1);
+  client.state.socketPlaybackEpoch += 1;
+  client.tick();
+  await pump2;
+  assert.equal(client.state.presentedFrames, 0);
+  assert.equal(client.state.segmentPresentedFrames, 0);
+});
+
+test('pipelined segment_started does not wipe pending chunk counters and non-continuous segmentBusy locks STEP and events', async () => {
+  const spec = {controls: ['prompt_update'], keys: [], advance: 'continuous', max_chunks: 4};
+  const client = await loadClient({
+    spec,
+    interactionMode: 'prompt-scheduled',
+    capabilities: {no_action_step: true, text_events: true},
+  });
+  client.connect(new FakeWebSocket());
+  const rollout = (chunks) => ({advance: 'continuous', rollout_chunks: chunks, max_chunks: 4, paused: false});
+  client.receive({type: 'ready', fps: 16, ...rollout(0)});
+
+  // Chunk 1 starts, queues 2 frames, chunk_done(1) arrives while frames are still queued.
+  client.receive({type: 'segment_started', segment_index: 1});
+  client.state.socketFrameQueue.push(new Blob(['f1']), new Blob(['f2']));
+  client.receive({type: 'chunk_done', chunk_index: 1, frames: 2, ...rollout(1)});
+  assert.equal(client.state.pendingChunkDones.length, 1);
+
+  // Chunk 2 starts and finishes before Chunk 1 finishes playing.
+  client.receive({type: 'segment_started', segment_index: 2});
+  client.state.socketFrameQueue.push(new Blob(['f3']), new Blob(['f4']));
+  client.receive({type: 'chunk_done', chunk_index: 2, frames: 2, ...rollout(2)});
+  assert.equal(client.state.pendingChunkDones.length, 2);
+
+  // Present Chunk 1's 2 frames -> completes Chunk 1 and resets remainder for Chunk 2.
+  client.state.segmentPresentedFrames = 2;
+  client.context.drainPendingChunkCompletions();
+  assert.equal(client.state.segmentIndex, 1);
+  assert.equal(client.state.segmentPresentedFrames, 0);
+  assert.equal(client.state.segmentBusy, true);
+  assert.equal(client.state.pendingChunkDones.length, 1);
+
+  // Present Chunk 2's 2 frames -> completes Chunk 2 cleanly.
+  client.state.segmentPresentedFrames = 2;
+  client.context.drainPendingChunkCompletions();
+  assert.equal(client.state.segmentIndex, 2);
+  assert.equal(client.state.segmentBusy, false);
+  assert.equal(client.state.pendingChunkDones.length, 0);
+
+  // In non-continuous prompt-scheduled mode, segmentBusy disables STEP and text event buttons.
+  const nonCont = await loadClient({
+    spec: {controls: ['prompt_update'], keys: []},
+    interactionMode: 'prompt-scheduled',
+    capabilities: {no_action_step: true, text_events: true},
+  });
+  nonCont.connect(new FakeWebSocket());
+  nonCont.receive({
+    type: 'ready',
+    fps: 16,
+    event_catalog: [{event_id: 'rain', label: 'Rain', prompt: 'heavy rain'}],
+    catalog_revision: 1,
+  });
+  assert.equal(nonCont.el.stepButton.disabled, false);
+  assert.equal(nonCont.el.eventTriggerBar.querySelectorAll('button').every((b) => !b.disabled), true);
+  nonCont.receive({type: 'segment_started', segment_index: 1});
+  assert.equal(nonCont.el.stepButton.disabled, true);
+  assert.equal(nonCont.el.eventTriggerBar.querySelectorAll('button').every((b) => b.disabled), true);
+  nonCont.receive({type: 'chunk_done', chunk_index: 1, frames: 0});
+  assert.equal(nonCont.el.stepButton.disabled, false);
+  assert.equal(nonCont.el.eventTriggerBar.querySelectorAll('button').every((b) => !b.disabled), true);
+});
+
+test('syncRuntimeStatus refreshes capabilities.text_events and loadModel refreshes runtime status', async () => {
+  const client = await loadClient({
+    capabilities: {no_action_step: true, text_events: false},
+    status: {ready: false, loading: true, capabilities: {text_events: false}, realtime_spec: {}},
+  });
+  assert.equal(client.el.addEventButton.disabled, true);
+  assert.match(client.el.eventCatalogStatus.textContent, /NO STATE-PRESERVING TEXT UPDATE/);
+
+  client.responses['/api/runtime/status'] = {
+    ready: true,
+    loading: false,
+    capabilities: {text_events: true},
+    realtime_spec: {controls: ['prompt_update'], advance: 'continuous', max_chunks: 5},
+  };
+  await client.context.loadModel();
+  assert.equal(client.state.capabilities.text_events, true);
+  assert.equal(client.el.addEventButton.disabled, false);
+  assert.equal(client.el.applyEventsButton.disabled, false);
+  assert.equal(client.el.eventCatalogStatus.textContent, 'EMPTY CATALOG');
+  assert.equal(client.state.continuous, true);
+  assert.equal(client.state.maxChunks, 5);
+});
+
+test('held keyboard key releases on keyup even after focus moves into an input', async () => {
+  const client = await loadClient();
+  const channel = client.connect();
+  client.key('w', 'keydown');
+  const inputTarget = new FakeElement('input');
+  client.key('w', 'keyup', inputTarget);
+  assert.deepEqual(
+    channel.sent.filter((m) => m.type === 'action').map((m) => [m.action.event, m.action.key]),
+    [['keydown', 'w'], ['keyup', 'w']],
+  );
+  assert.equal(client.state.keySources.get('w').size, 0);
+});
+
+test('setSensorLayout skips DOM rebuild when layout signature is unchanged', async () => {
+  const client = await loadClient();
+  const layout = [
+    {key: 'front', kind: 'rgb', label: 'Front', channel_index: 0, x: 0, y: 0, width: 0.5, height: 1},
+    {key: 'lidar', kind: 'lidar', label: 'LiDAR', channel_index: 1, x: 0.5, y: 0, width: 0.5, height: 1},
+  ];
+  client.context.setSensorLayout(layout);
+  const firstSelect = client.el.sensorControls.children[0];
+  const firstTile = client.el.sensorGrid.children[0];
+  client.context.setSensorLayout(structuredClone(layout));
+  assert.equal(client.el.sensorControls.children[0], firstSelect);
+  assert.equal(client.el.sensorGrid.children[0], firstTile);
+
+  client.context.setSensorLayout([layout[0]]);
+  assert.notEqual(client.el.sensorControls.children[0], firstSelect);
+  assert.equal(client.el.sensorGrid.children.length, 1);
+});
+
+test('chunk_done syncs output resolution dropdown on server downgrade', async () => {
+  const client = await loadClient({
+    outputResolutions: [
+      {mode: 'native', label: 'Native'},
+      {mode: 'fixed', width: 640, height: 360, label: 'Stream · 640×360'},
+    ],
+  });
+  client.connect();
+  client.state.outputResolution = {mode: 'fixed', width: 640, height: 360};
+  client.context.renderResolutionOptions(client.state.outputResolutionOptions);
+  assert.equal(client.el.resolutionSelect.value, '640x360');
+
+  client.receive({type: 'chunk_done', chunk_index: 1, frames: 4, resolution: {mode: 'native', width: 320, height: 180}});
+  assert.equal(client.el.resolutionSelect.value, 'native');
+  assert.deepEqual(JSON.parse(JSON.stringify(client.state.outputResolution)), {mode: 'native', width: 320, height: 180});
 });

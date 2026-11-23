@@ -449,3 +449,177 @@ def test_native_feedback_preserves_aiortc_handling_and_filters_remb_ssrc() -> No
         assert vars(sender)["_RTCRtpSender__force_keyframe"] is True
 
     asyncio.run(exercise())
+
+
+def test_idle_keyup_clears_key_control_and_action_arrivals() -> None:
+    async def exercise() -> None:
+        chunk_count = 0
+
+        class Runtime:
+            last_generation_metrics: dict[str, float] = {}
+
+            def next_chunk_frames(self, default: int) -> int:
+                return default
+
+            async def generate(self, interactions: Any, **kwargs: Any) -> tuple[list[np.ndarray], float]:
+                nonlocal chunk_count
+                del interactions, kwargs
+                chunk_count += 1
+                return [np.zeros((2, 2, 3), np.uint8)], 1.0
+
+        telemetry = DeliveryTelemetry(lambda _: None)
+        active = _ActivePeer(
+            peer=None,
+            channel=None,
+            frames=LatestFrameBuffer(maxsize=8),
+            resampler=RealtimeControlResampler(fps=16),
+            telemetry=telemetry,
+        )
+        manager = RealtimePeerManager(runtime=cast(ResidentWorldRuntime, Runtime()), fps=16, chunk_frames=2)
+        worker = asyncio.create_task(manager._generation_worker(active))
+        try:
+            await manager._handle_message(
+                active,
+                json.dumps({"type": "action", "action": {"event": "keydown", "key": "w"}, "control_id": "down-1"}),
+            )
+            while chunk_count < 1:
+                await asyncio.sleep(0.005)
+            await manager._handle_message(
+                active,
+                json.dumps({"type": "action", "action": {"event": "keyup", "key": "w"}, "control_id": "up-1"}),
+            )
+            for _ in range(40):
+                if not active.first_action.is_set() and telemetry.key_control is None:
+                    break
+                await asyncio.sleep(0.005)
+            assert not active.first_action.is_set()
+            assert telemetry.key_control is None
+            assert list(active.action_arrivals) == []
+        finally:
+            active.closed = True
+            worker.cancel()
+            await asyncio.gather(worker, return_exceptions=True)
+            active.frames.close()
+
+    asyncio.run(exercise())
+
+
+def test_dropped_steps_on_max_chunks_clear_step_controls_alignment() -> None:
+    async def exercise() -> None:
+        gate = asyncio.Event()
+        calls: list[str | None] = []
+
+        class Runtime:
+            last_generation_metrics: dict[str, float] = {}
+
+            def next_chunk_frames(self, default: int) -> int:
+                return default
+
+            async def generate(self, interactions: Any, *, prompt: str | None = None, **kwargs: Any):
+                del interactions, kwargs
+                calls.append(prompt)
+                await gate.wait()
+                return [np.zeros((2, 2, 3), np.uint8)], 1.0
+
+        telemetry = DeliveryTelemetry(lambda _: None)
+        active = _ActivePeer(
+            peer=None,
+            channel=None,
+            frames=LatestFrameBuffer(maxsize=8),
+            resampler=RealtimeControlResampler(fps=16, realtime_keys=()),
+            telemetry=telemetry,
+            prompt_scheduled=True,
+            initial_segment_pending=True,
+            base_prompt="fox",
+            continuous=True,
+            max_chunks=1,
+        )
+        active.first_action.set()
+        manager = RealtimePeerManager(runtime=cast(ResidentWorldRuntime, Runtime()), fps=16, chunk_frames=1)
+        worker = asyncio.create_task(manager._generation_worker(active))
+        try:
+            while len(calls) < 1:
+                await asyncio.sleep(0.005)
+            # Queue two steps while rollout_chunks is still 0; chunk 1 then completes max_chunks=1.
+            await manager._handle_message(
+                active, json.dumps({"type": "step", "request_id": "s1", "control_id": "step-old-1"})
+            )
+            await manager._handle_message(
+                active, json.dumps({"type": "step", "request_id": "s2", "control_id": "step-old-2"})
+            )
+            assert list(telemetry.step_controls) == ["step-old-1", "step-old-2"]
+            gate.set()
+            for _ in range(50):
+                if active.rollout_chunks == 1 and active.pending_steps == 0 and not telemetry.step_controls:
+                    break
+                await asyncio.sleep(0.005)
+            assert active.pending_steps == 0
+            assert list(telemetry.step_controls) == []
+
+            # Restart rollout paused with a new prompt, then verify the next step keeps its own control_id.
+            active.max_chunks = 2
+            active.paused = True
+            await manager._handle_message(
+                active, json.dumps({"type": "prompt_update", "prompt": "owl", "control_id": "prompt-new"})
+            )
+            while len(calls) < 2:
+                await asyncio.sleep(0.005)
+            await manager._handle_message(
+                active, json.dumps({"type": "step", "request_id": "s3", "control_id": "step-new"})
+            )
+            while len(calls) < 3:
+                await asyncio.sleep(0.005)
+            frames = [await active.frames.get() for _ in range(3)]
+            assert isinstance(frames[2], PresentationFrame)
+            assert "step-new" in frames[2].context.control_ids
+            assert "step-old-1" not in frames[2].context.control_ids
+        finally:
+            gate.set()
+            active.closed = True
+            worker.cancel()
+            await asyncio.gather(worker, return_exceptions=True)
+            active.frames.close()
+
+    asyncio.run(exercise())
+
+
+def test_hold_last_sender_emits_receipt_once_without_spamming_held_repeats(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from aiortc import RTCDtlsTransport, RTCRtpSender
+    from aiortc.rtcrtpparameters import RTCRtpCodecParameters
+
+    monkeypatch.delenv("WORLDFOUNDRY_REALTIME_NVENC", raising=False)
+
+    async def exercise() -> None:
+        rtp_packets: list[bytes] = []
+        messages: list[dict[str, Any]] = []
+
+        async def send_rtp(data: bytes) -> None:
+            rtp_packets.append(data)
+
+        queue = LatestFrameBuffer(maxsize=2)
+        track = _build_video_track(frames=queue, fps=100, presentation_mode="hold-last")
+        sender = RTCRtpSender(track, cast(RTCDtlsTransport, SimpleNamespace(state="connected", _send_rtp=send_rtp)))
+        bind_video_sender(sender, track, DeliveryTelemetry(messages.append))
+        context = FrameContext(1, 0, ("control-1",), asyncio.get_running_loop().time())
+        await queue.put_chunk([PresentationFrame(np.full((32, 32, 3), 24, np.uint8), context)])
+        task = asyncio.create_task(
+            sender._run_rtp(RTCRtpCodecParameters(mimeType="video/VP8", clockRate=90000, payloadType=96))
+        )
+        try:
+
+            async def multiple_frames_sent() -> None:
+                while len(rtp_packets) < 4:
+                    await asyncio.sleep(0.005)
+
+            await asyncio.wait_for(multiple_frames_sent(), 5)
+            assert len(messages) == 1
+            assert messages[0]["chunk_index"] == 1
+            assert messages[0]["frame_index"] == 0
+            assert messages[0]["control_ids"] == ["control-1"]
+        finally:
+            queue.close()
+            await asyncio.wait_for(task, 2)
+
+    asyncio.run(exercise())

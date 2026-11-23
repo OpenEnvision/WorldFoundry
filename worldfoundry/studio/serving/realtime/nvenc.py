@@ -376,11 +376,15 @@ def build_nvenc_track(
             first_real_frame_at: float | None = None
             try:
                 while not self._closed:
+                    context: FrameContext | None = None
                     if self._last_frame is None or self._real_frames:
                         try:
-                            self._last_frame = await frames.get()
+                            queued = await frames.get()
                         except EOFError:
                             break
+                        context = frame_context(queued)
+                        self._last_frame = frame_pixels(queued)
+                        del queued
                     else:
                         next_pull += self._interval
                         now = loop.time()
@@ -389,13 +393,17 @@ def build_nvenc_track(
                         elif now - next_pull > self._interval:
                             next_pull = now
                         try:
-                            self._last_frame = frames.get_nowait()
+                            queued = frames.get_nowait()
                         except asyncio.QueueEmpty:
-                            # Repeat the held frame to keep a steady RTP clock
-                            # and flush the encoder's final source frame.
+                            # Repeat the held frame without delivery context so
+                            # steady RTP pacing does not emit duplicate receipts.
                             pass
                         except EOFError:
                             break
+                        else:
+                            context = frame_context(queued)
+                            self._last_frame = frame_pixels(queued)
+                            del queued
                     if self._real_frames:
                         now = loop.time()
                         if first_real_frame_at is None:
@@ -405,11 +413,10 @@ def build_nvenc_track(
                         pts = self._pts_counter
                     self._pts_counter = pts + max(_RTP_VIDEO_CLOCK // fps, 1)
                     started_at = loop.time()
-                    context = frame_context(self._last_frame)
                     self._encode_future = loop.run_in_executor(
                         self._worker,
                         self._encode,
-                        frame_pixels(self._last_frame),
+                        self._last_frame,
                         pts,
                     )
                     packets = await asyncio.shield(self._encode_future)

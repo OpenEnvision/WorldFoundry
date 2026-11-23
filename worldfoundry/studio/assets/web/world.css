@@ -158,12 +158,13 @@ button:disabled,
   position: absolute;
   inset: 0;
   gap: 4px;
+  grid-auto-rows: minmax(0, 1fr);
   background: #050608;
   z-index: 1;
 }
 #sensorGrid.is-visible { display: grid; }
-.sensor-tile { position: relative; min-width: 0; min-height: 0; }
-.sensor-tile canvas { width: 100%; height: 100%; object-fit: contain; }
+.sensor-tile { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.sensor-tile canvas { display: block; width: 100%; height: 100%; object-fit: contain; }
 .sensor-tile span { position: absolute; top: 4px; left: 6px; color: #fff; font-size: 11px; }
 #sensorControls {
   position: absolute;
@@ -1152,7 +1153,8 @@ body.is-immersive {
 }
 
 .is-immersive .realtime-control-bar {
-  top: max(0.75rem, env(safe-area-inset-top));
+  top: max(3.65rem, calc(env(safe-area-inset-top) + 3.15rem));
+  max-width: calc(100vw - 1.5rem);
 }
 
 .is-immersive .event-trigger-bar {
@@ -1174,8 +1176,10 @@ body.is-immersive {
 
 .is-immersive .session-actions {
   position: fixed;
+  z-index: 25;
   top: max(0.8rem, env(safe-area-inset-top));
   left: 50%;
+  gap: 0.45rem;
   transform: translateX(-50%);
   pointer-events: auto;
 }
