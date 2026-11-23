@@ -118,19 +118,28 @@ CANONICAL_PROJECT_ROOT = "/workspace/WorldFoundry"
 CANONICAL_PACKAGE_ROOT = f"{CANONICAL_PROJECT_ROOT}/worldfoundry"
 CANONICAL_HOME = "/home/ubuntu/.cache/worldfoundry"
 # Defaults resolved through realpath map back to the canonical home; on macOS
-# /home is a firmlink that realpath expands.
+# /home is a firmlink that realpath expands. On multi-user Linux hosts where
+# /home/ubuntu exists with 0750 permissions, probing paths underneath it raises
+# PermissionError, so route env defaults through a nonexistent prefix and map
+# back to CANONICAL_HOME in portable_doc_value().
+try:
+    Path(CANONICAL_HOME).exists()
+    _DOCS_ENV_HOME = CANONICAL_HOME
+except OSError:
+    _DOCS_ENV_HOME = "/nonexistent/worldfoundry-docs-home"
 CANONICAL_HOME_RESOLVED = str(Path(CANONICAL_HOME).resolve())
+_DOCS_ENV_HOME_RESOLVED = str(Path(_DOCS_ENV_HOME).resolve())
 os.environ.update(
     {
-        "WORLDFOUNDRY_HOME": CANONICAL_HOME,
-        "WORLDFOUNDRY_CACHE_DIR": CANONICAL_HOME,
-        "WORLDFOUNDRY_DATA_DIR": f"{CANONICAL_HOME}/data",
-        "WORLDFOUNDRY_ARTIFACT_DIR": f"{CANONICAL_HOME}/artifacts",
-        "WORLDFOUNDRY_MODEL_DIR": f"{CANONICAL_HOME}/models",
-        "WORLDFOUNDRY_MODEL_SOURCE_DIR": f"{CANONICAL_HOME}/official_runtime_repos",
-        "WORLDFOUNDRY_GITHUB_REPOS_ROOT": f"{CANONICAL_HOME}/official_runtime_repos",
-        "WORLDFOUNDRY_CKPT_DIR": f"{CANONICAL_HOME}/checkpoints",
-        "WORLDFOUNDRY_HFD_ROOT": f"{CANONICAL_HOME}/checkpoints/hfd",
+        "WORLDFOUNDRY_HOME": _DOCS_ENV_HOME,
+        "WORLDFOUNDRY_CACHE_DIR": _DOCS_ENV_HOME,
+        "WORLDFOUNDRY_DATA_DIR": f"{_DOCS_ENV_HOME}/data",
+        "WORLDFOUNDRY_ARTIFACT_DIR": f"{_DOCS_ENV_HOME}/artifacts",
+        "WORLDFOUNDRY_MODEL_DIR": f"{_DOCS_ENV_HOME}/models",
+        "WORLDFOUNDRY_MODEL_SOURCE_DIR": f"{_DOCS_ENV_HOME}/official_runtime_repos",
+        "WORLDFOUNDRY_GITHUB_REPOS_ROOT": f"{_DOCS_ENV_HOME}/official_runtime_repos",
+        "WORLDFOUNDRY_CKPT_DIR": f"{_DOCS_ENV_HOME}/checkpoints",
+        "WORLDFOUNDRY_HFD_ROOT": f"{_DOCS_ENV_HOME}/checkpoints/hfd",
     }
 )
 
@@ -291,6 +300,8 @@ def portable_doc_value(value: Any) -> Any:
         if value == sys.executable:
             return "python3"
         replacements = (
+            (_DOCS_ENV_HOME_RESOLVED, CANONICAL_HOME),
+            (_DOCS_ENV_HOME, CANONICAL_HOME),
             (CANONICAL_HOME_RESOLVED, CANONICAL_HOME),
             (str(ROOT.parent / "ckpts") + "/", f"{CANONICAL_HOME}/checkpoints/"),
             (str(ROOT.parent / "ckpt") + "/", f"{CANONICAL_HOME}/checkpoints/"),
