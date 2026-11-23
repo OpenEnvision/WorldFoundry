@@ -198,8 +198,24 @@ def main() -> int:
         policy = _coverage_policy()
         if args.base and args.changed_file:
             raise ValueError("Use a pinned commit diff or explicit changed paths, not both")
-        changed = policy._load_impact_module().changed_paths(root, args.base, args.head) if args.base else args.changed_file
+        changed = args.changed_file
+        revisions = {}
+        if args.base:
+            impact = policy._load_impact_module()
+            head = impact.revision(root, args.head + "^{commit}")
+            if head is None or head != impact.revision(root, "HEAD^{commit}"):
+                raise ValueError("--head must match the inspected checkout; check out the requested head first")
+            base = impact.revision(root, args.base + "^{commit}")
+            if base is None:
+                raise ValueError("Diff base must resolve to a commit")
+            changed = impact.changed_paths(root, base, head)
+            revisions = {
+                "base_revision": base,
+                "source_revision": head,
+                "source_tree": impact.revision(root, head + "^{tree}"),
+            }
         report = coverage(root, matrix.resolve())
+        report.update(revisions)
         report["policy"] = policy.evaluate_policy(report, json.loads(matrix.read_text()),
                                                  policy.load_frozen_baseline(baseline), root, changed, args.affected_model)
         report["policy"]["baseline_sha256"] = policy._BASELINE_SHA256
