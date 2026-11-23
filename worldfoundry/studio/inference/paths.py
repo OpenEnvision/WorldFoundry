@@ -42,7 +42,10 @@ def _dedupe_paths(paths: Sequence[Path | str | None]) -> tuple[Path, ...]:
         if raw_path is None:
             continue
         path = Path(raw_path).expanduser()
-        key = path.resolve().as_posix() if path.exists() else path.as_posix()
+        try:
+            key = path.resolve().as_posix() if path.exists() else path.as_posix()
+        except OSError:
+            key = path.as_posix()
         if key in seen:
             continue
         deduped.append(path)

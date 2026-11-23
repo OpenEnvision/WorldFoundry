@@ -319,15 +319,17 @@ class TestViserFunctions:
         w2c = np.eye(4)[None]
         w2c[0, :3, 3] = [-3.0, 1.0, -4.0]
 
-        points = _depth_points_from_npz({"depth": depth, "intrinsics": intrinsics, "extrinsics": w2c})
+        result = _depth_points_from_npz({"depth": depth, "intrinsics": intrinsics, "extrinsics": w2c})
         # The camera center is (3, -1, 4), so the optical-axis sample at
         # camera z=2 must land at (3, -1, 6), not at the w2c translation.
-        assert points is not None
+        assert result is not None
+        points, valid_mask = result
         np.testing.assert_allclose(points, [[3.0, -1.0, 6.0]], atol=1e-8)
+        np.testing.assert_array_equal(valid_mask, [True])
 
         c2w = np.eye(4)[None]
         c2w[0, :3, 3] = [7.0, 8.0, 9.0]
-        explicit_points = _depth_points_from_npz(
+        explicit_result = _depth_points_from_npz(
             {
                 "depth": depth,
                 "intrinsics": intrinsics,
@@ -335,8 +337,10 @@ class TestViserFunctions:
                 "camera_to_world": c2w,
             }
         )
-        assert explicit_points is not None
+        assert explicit_result is not None
+        explicit_points, explicit_mask = explicit_result
         np.testing.assert_allclose(explicit_points, [[7.0, 8.0, 11.0]], atol=1e-8)
+        np.testing.assert_array_equal(explicit_mask, [True])
 
     def test_parse_up_direction_vector_and_fallback(self):
         from worldfoundry.studio.visualization.backends.viser import _parse_up_direction
@@ -702,10 +706,14 @@ class TestFrontendsConstants:
 
         command = _default_rerun_command_template().format(
             asset="scene.rrd",
+            bind_host="127.0.0.1",
             grpc_port=9878,
             ws_port=9877,
             port=9876,
         )
+        assert "--serve-web" in command
+        assert "--web-viewer " not in command
+        assert "--bind 127.0.0.1" in command
         assert "--port 9878" in command
         assert "--ws-server-port 9877" in command
         assert "--web-viewer-port 9876" in command
@@ -1830,10 +1838,17 @@ class TestInferVisualizationArtifact:
         a = infer_visualization_artifact("/tmp/test.glb")
         assert a.kind == "mesh"
 
-    def test_unknown_suffix(self):
+    def test_xyz_suffix(self):
         from worldfoundry.studio.visualization.artifacts import infer_visualization_artifact
 
         a = infer_visualization_artifact("/tmp/test.xyz")
+        assert a.kind == "point_cloud"
+        assert a.format_hint == "xyz"
+
+    def test_unknown_suffix(self):
+        from worldfoundry.studio.visualization.artifacts import infer_visualization_artifact
+
+        a = infer_visualization_artifact("/tmp/test.unknown")
         assert a.kind == "artifact"
 
     def test_with_metadata(self):
@@ -1869,6 +1884,7 @@ class TestKindBySuffix:
         # Point cloud formats
         assert ".ply" in KIND_BY_SUFFIX
         assert ".pcd" in KIND_BY_SUFFIX
+        assert ".xyz" in KIND_BY_SUFFIX
         assert ".npz" in KIND_BY_SUFFIX
         # Mesh formats
         assert ".glb" in KIND_BY_SUFFIX
@@ -2032,3 +2048,585 @@ def test_viser_explicit_port_bypasses_pool() -> None:
     from worldfoundry.studio.visualization.backends import viser as viser_host
 
     assert viser_host._resolve_viser_port("run-001", host="127.0.0.1", requested_port=19999) == 19999
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for standalone viewers, presentation, paths, launch config,
+# and workspace launcher
+# ---------------------------------------------------------------------------
+
+
+def test_spark_viewer_html_supports_splat_formats_progress_error_handling_and_input_isolation() -> None:
+    from worldfoundry.studio.visualization.backends.frontends import spark_viewer_html
+
+    html = spark_viewer_html(title="Spark Test", default_asset="/tmp/world.ksplat")
+    assert "new Spark.SplatLoader()" in html
+    assert "Spark.SplatFileType.SPLAT" in html
+    assert "Spark.SplatFileType.KSPLAT" in html
+    assert "/__worldfoundry__/asset/${name}?path=" in html
+    assert "let loadSeq = 0;" in html
+    assert "if (seq !== loadSeq)" in html
+    assert "catch (error)" in html
+    assert "Failed to load ${path}" in html
+    assert html.count("new Spark.SparkControls(") == 1
+    assert "controls.fpsMovement.enable = false;" in html
+    assert "controls.fpsMovement.enable = true;" in html
+    assert "isEditableTarget(event.target)" in html
+    assert "event.ctrlKey || event.metaKey || event.altKey" in html
+
+
+def test_spark_handler_serves_named_and_legacy_asset_routes_without_double_unquote(tmp_path: Path) -> None:
+    import threading
+    from functools import partial
+    from urllib.error import HTTPError
+    from urllib.parse import quote
+    from urllib.request import urlopen
+
+    from worldfoundry.studio.serving import StudioServiceTelemetry, StudioThreadingHTTPServer
+    from worldfoundry.studio.visualization.backends.frontends import SparkViewerHandler
+
+    percent_file = tmp_path / "scene%20final.splat"
+    percent_file.write_bytes(b"splat-bytes")
+    subdir = tmp_path / "nested_dir"
+    subdir.mkdir()
+
+    handler = partial(
+        SparkViewerHandler,
+        default_asset=str(percent_file),
+        title="Spark",
+        allowed_roots=(tmp_path.resolve(),),
+        telemetry=StudioServiceTelemetry("spark:test"),
+    )
+    server = StudioThreadingHTTPServer(("127.0.0.1", 0), handler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        encoded_path = quote(str(percent_file), safe="")
+        with urlopen(f"http://127.0.0.1:{port}/__worldfoundry__/asset/scene.splat?path={encoded_path}") as resp:
+            assert resp.status == 200
+            assert resp.read() == b"splat-bytes"
+
+        with urlopen(f"http://127.0.0.1:{port}/__worldfoundry__/asset?path={encoded_path}") as resp:
+            assert resp.status == 200
+            assert resp.read() == b"splat-bytes"
+
+        with pytest.raises(HTTPError) as dir_err:
+            urlopen(f"http://127.0.0.1:{port}/__worldfoundry__/asset/dir?path={quote(str(subdir), safe='')}")
+        assert dir_err.value.code == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_spark_allowed_roots_includes_workspace_root_without_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from worldfoundry.studio.inference.paths import studio_workspace_root
+    from worldfoundry.studio.visualization.backends.frontends import _spark_allowed_roots
+
+    for key in (
+        "WORLDFOUNDRY_STUDIO_WORKSPACE_DIR",
+        "WORLDFOUNDRY_ARTIFACT_DIR",
+        "WORLDFOUNDRY_GENERATED_ARTIFACT_DIR",
+        "WORLDFOUNDRY_MODEL_DIR",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    roots = _spark_allowed_roots(None)
+    assert studio_workspace_root().expanduser().resolve() in roots
+
+
+def test_viser_depth_npz_preserves_rgb_with_invalid_depths_and_3d_chw(tmp_path: Path) -> None:
+    import numpy as np
+
+    from worldfoundry.studio.visualization.backends.viser import _load_xyz_rgb
+
+    depth = np.array([[0.0, 2.0], [np.nan, 4.0]], dtype=np.float32)
+    intrinsics = np.eye(3, dtype=np.float32)
+    hwc_rgb = np.array(
+        [
+            [[10, 20, 30], [255, 0, 0]],
+            [[40, 50, 60], [0, 0, 255]],
+        ],
+        dtype=np.uint8,
+    )
+    hwc_path = tmp_path / "depth_hwc.npz"
+    np.savez(hwc_path, depth=depth, intrinsics=intrinsics, rgb=hwc_rgb)
+    points, colors = _load_xyz_rgb(hwc_path)
+    assert points.shape == (2, 3)
+    np.testing.assert_array_equal(colors, [[255, 0, 0], [0, 0, 255]])
+
+    chw_rgb = np.moveaxis(hwc_rgb, -1, 0)
+    assert chw_rgb.shape == (3, 2, 2)
+    chw_path = tmp_path / "depth_chw.npz"
+    np.savez(chw_path, depth=depth, intrinsics=intrinsics, image=chw_rgb)
+    chw_points, chw_colors = _load_xyz_rgb(chw_path)
+    assert chw_points.shape == (2, 3)
+    np.testing.assert_array_equal(chw_colors, [[255, 0, 0], [0, 0, 255]])
+
+
+def test_viser_loads_ascii_and_binary_pcd_without_open3d(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import builtins
+    import struct
+
+    import numpy as np
+
+    from worldfoundry.studio.visualization.backends.viser import _load_xyz_rgb
+
+    real_import = builtins.__import__
+
+    def _block_open3d(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "open3d" or name.startswith("open3d."):
+            raise ImportError("open3d unavailable in test")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _block_open3d)
+
+    ascii_pcd = tmp_path / "cloud_ascii.pcd"
+    ascii_pcd.write_text(
+        "\n".join(
+            [
+                "# .PCD v0.7",
+                "VERSION 0.7",
+                "FIELDS x y z rgb",
+                "SIZE 4 4 4 4",
+                "TYPE F F F U",
+                "COUNT 1 1 1 1",
+                "WIDTH 2",
+                "HEIGHT 1",
+                "POINTS 2",
+                "DATA ascii",
+                f"1.0 2.0 3.0 {(255 << 16) | (10 << 8) | 20}",
+                f"4.0 5.0 6.0 {(0 << 16) | (128 << 8) | 255}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    points, colors = _load_xyz_rgb(ascii_pcd)
+    np.testing.assert_allclose(points, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    np.testing.assert_array_equal(colors, [[255, 10, 20], [0, 128, 255]])
+
+    binary_pcd = tmp_path / "cloud_binary.pcd"
+    header = (
+        "VERSION 0.7\n"
+        "FIELDS x y z rgb\n"
+        "SIZE 4 4 4 4\n"
+        "TYPE F F F F\n"
+        "COUNT 1 1 1 1\n"
+        "WIDTH 2\n"
+        "HEIGHT 1\n"
+        "POINTS 2\n"
+        "DATA binary\n"
+    ).encode("ascii")
+    packed_red = struct.unpack("<f", struct.pack("<I", (250 << 16) | (20 << 8) | 10))[0]
+    packed_green = struct.unpack("<f", struct.pack("<I", (5 << 16) | (240 << 8) | 15))[0]
+    payload = struct.pack("<ffff", 1.0, 0.0, -1.0, packed_red) + struct.pack("<ffff", 2.0, 3.0, 4.0, packed_green)
+    binary_pcd.write_bytes(header + payload)
+
+    bin_points, bin_colors = _load_xyz_rgb(binary_pcd)
+    np.testing.assert_allclose(bin_points, [[1.0, 0.0, -1.0], [2.0, 3.0, 4.0]])
+    np.testing.assert_array_equal(bin_colors, [[250, 20, 10], [5, 240, 15]])
+
+
+def test_viser_coordinate_preset_override_updates_default_up_direction_and_handles_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys
+    import types
+
+    import numpy as np
+
+    from worldfoundry.studio.visualization.backends import viser as viser_mod
+
+    cloud_path = tmp_path / "cloud.npz"
+    np.savez(cloud_path, xyz=np.array([[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]], dtype=np.float32))
+
+    recorded_up: list[Any] = []
+    recorded_hosts: list[str] = []
+    stopped: list[bool] = []
+    should_fail_scene = {"flag": False}
+
+    class FakeScene:
+        def set_up_direction(self, up: Any) -> None:
+            recorded_up.append(up)
+
+        def remove_by_name(self, name: str) -> None:
+            del name
+
+        def add_point_cloud(self, *args: Any, **kwargs: Any) -> None:
+            del args, kwargs
+            if should_fail_scene["flag"]:
+                raise RuntimeError("scene upload exploded")
+
+    class FakeViserServer:
+        def __init__(self, *, host: str, port: int, verbose: bool = False) -> None:
+            del verbose
+            recorded_hosts.append(host)
+            self._port = port
+            self.scene = FakeScene()
+            self.initial_camera = types.SimpleNamespace()
+
+        def get_port(self) -> int:
+            return self._port
+
+        def stop(self) -> None:
+            stopped.append(True)
+
+    fake_viser = types.ModuleType("viser")
+    setattr(fake_viser, "ViserServer", FakeViserServer)
+    monkeypatch.setitem(sys.modules, "viser", fake_viser)
+    monkeypatch.setattr(viser_mod, "viser_importable", lambda: True)
+    monkeypatch.setattr(viser_mod, "_geometry_imports_available", lambda: True)
+
+    svc = viser_mod.StudioViserService()
+    monkeypatch.setenv("WORLDFOUNDRY_STUDIO_VISER_COORDINATE_PRESET", "opencv-colmap")
+    monkeypatch.delenv("WORLDFOUNDRY_STUDIO_VISER_UP_DIRECTION", raising=False)
+    res = svc.present_geometry(run_id="r1", geometry_path=cloud_path, model_id="vggt", host="::1", port=18601)
+    assert res.url == "http://[::1]:18601/"
+    assert recorded_up[-1] == "-y"
+    assert recorded_hosts[-1] == "::1"
+
+    # Pool exhaustion returns a clean fallback instead of raising.
+    monkeypatch.setattr(viser_mod, "_pick_pool_port", MagicMock(side_effect=OSError("pool exhausted")))
+    exhausted = svc.present_geometry(run_id="r2", geometry_path=cloud_path, host="127.0.0.1", port=None)
+    assert exhausted.url == ""
+    assert "pool exhausted" in exhausted.caption
+
+    # Scene population failure stops the newly started server so it does not leak.
+    stopped.clear()
+    should_fail_scene["flag"] = True
+    failed = svc.present_geometry(run_id="r3", geometry_path=cloud_path, host="127.0.0.1", port=18602)
+    assert failed.url == ""
+    assert "scene upload exploded" in failed.caption
+    assert stopped == [True]
+    assert svc._server is None
+
+
+def test_serve_rerun_frontend_rejects_non_loopback_binds_loopback_and_propagates_exit_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from worldfoundry.studio.visualization.backends import frontends
+    from worldfoundry.studio.visualization.launch_config import StudioLaunchConfig
+
+    rrd_path = tmp_path / "scene.rrd"
+    rrd_path.write_bytes(b"rrd")
+    entry = _make_catalog_entry(model_id="vggt")
+
+    with pytest.raises(SystemExit, match="refuses to bind non-loopback"):
+        frontends.serve_rerun_frontend(
+            entry,
+            StudioLaunchConfig(model_id="vggt", host="0.0.0.0", port=9876, asset_path=str(rrd_path)),
+        )
+
+    spawned: list[list[str]] = []
+
+    class FakeProc:
+        def __init__(self, rc: int) -> None:
+            self._rc = rc
+
+        def wait(self, timeout: float | None = None) -> int:
+            del timeout
+            return self._rc
+
+        def terminate(self) -> None:
+            pass
+
+    monkeypatch.delenv("WORLDFOUNDRY_STUDIO_RERUN_COMMAND", raising=False)
+    monkeypatch.delenv("WORLDFOUNDRY_STUDIO_RERUN_URL", raising=False)
+    monkeypatch.setattr(frontends.subprocess, "Popen", lambda argv: (spawned.append(argv), FakeProc(7))[1])
+
+    with pytest.raises(SystemExit) as exc_info:
+        frontends.serve_rerun_frontend(
+            entry,
+            StudioLaunchConfig(model_id="vggt", host="localhost", port=9876, asset_path=str(rrd_path)),
+        )
+
+    assert exc_info.value.code == 7
+    assert "--serve-web" in spawned[0]
+    assert "--bind" in spawned[0]
+    assert spawned[0][spawned[0].index("--bind") + 1] == "127.0.0.1"
+    out = capsys.readouterr().out
+    assert "http://127.0.0.1:9876/?url=ws://127.0.0.1:9878" in out
+    assert "-L 9876:127.0.0.1:9876 -L 9878:127.0.0.1:9878" in out
+
+
+def test_maybe_build_rerun_rrd_uses_isolated_recording_and_skips_bad_geometry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import logging
+    import sys
+    import types
+
+    import numpy as np
+
+    from worldfoundry.studio.visualization import presentation
+
+    bad_path = tmp_path / "a_bad.ply"
+    good_path = tmp_path / "b_good.ply"
+    bad_path.write_text("corrupt", encoding="utf-8")
+    good_path.write_text("valid", encoding="utf-8")
+
+    events: list[tuple[str, Any]] = []
+
+    class FakeRecording:
+        def __init__(self, application_id: str, recording_id: str | None = None) -> None:
+            events.append(("new", (application_id, recording_id)))
+
+        def save(self, path: str, default_blueprint: Any = None) -> None:
+            events.append(("save", path))
+            Path(path).write_bytes(b"rrd")
+
+        def log(self, entity_path: str, entity: Any) -> None:
+            events.append(("log", entity_path))
+
+        def flush(self) -> None:
+            events.append(("flush", None))
+
+        def disconnect(self) -> None:
+            events.append(("disconnect", None))
+
+    fake_rr = types.ModuleType("rerun")
+    setattr(
+        fake_rr, "new_recording", lambda application_id, recording_id=None: FakeRecording(application_id, recording_id)
+    )
+    setattr(fake_rr, "Points3D", lambda points, colors=None: (points, colors))
+    setattr(fake_rr, "init", MagicMock(side_effect=AssertionError("global rr.init must not be called")))
+    fake_rrb = types.ModuleType("rerun.blueprint")
+    setattr(fake_rrb, "Spatial3DView", lambda origin="scene": ("view", origin))
+    monkeypatch.setitem(sys.modules, "rerun", fake_rr)
+    monkeypatch.setitem(sys.modules, "rerun.blueprint", fake_rrb)
+
+    class FakeGeom:
+        vertices = np.array([[0.0, 1.0, 2.0]], dtype=np.float32)
+
+    fake_trimesh = types.SimpleNamespace(
+        load=lambda path: (_ for _ in ()).throw(ValueError("bad ply"))
+        if str(path).endswith("a_bad.ply")
+        else FakeGeom()
+    )
+    monkeypatch.setattr(presentation, "_load_trimesh", lambda: fake_trimesh)
+    monkeypatch.setattr(presentation, "collect_artifact_paths", lambda _output_dir: [str(bad_path), str(good_path)])
+
+    with caplog.at_level(logging.WARNING, logger=presentation.__name__):
+        rrd = presentation.maybe_build_rerun_rrd(str(tmp_path))
+
+    assert rrd == str(tmp_path / "scene.rrd")
+    assert Path(rrd).exists()
+    assert [name for name, _ in events] == ["new", "save", "log", "flush", "disconnect"]
+    assert "Skipping unreadable geometry" in caplog.text
+
+
+def test_media_viewer_authenticated_html_avoids_unauthenticated_src_and_has_mime_fallbacks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import mimetypes
+    import threading
+    from functools import partial
+    from urllib.request import Request, urlopen
+
+    from worldfoundry.studio.serving import StudioServiceTelemetry, StudioThreadingHTTPServer
+    from worldfoundry.studio.visualization.backends.frontends import (
+        MediaViewerHandler,
+        _media_mime_type,
+        media_viewer_html,
+    )
+
+    monkeypatch.setattr(mimetypes, "guess_type", lambda name: (None, None))
+    assert _media_mime_type(Path("photo.webp")) == "image/webp"
+    assert _media_mime_type(Path("track.flac")) == "audio/flac"
+    assert _media_mime_type(Path("clip.ogg")) == "audio/ogg"
+    assert _media_mime_type(Path("movie.mkv")) == "video/x-matroska"
+    assert '<img class="asset asset-image"' in media_viewer_html(title="WebP", asset_path=Path("photo.webp"))
+    assert '<audio class="asset asset-audio"' in media_viewer_html(title="FLAC", asset_path=Path("track.flac"))
+    assert '<audio class="asset asset-audio"' in media_viewer_html(title="OGG", asset_path=Path("clip.ogg"))
+    assert '<video class="asset asset-video"' in media_viewer_html(title="MKV", asset_path=Path("movie.mkv"))
+
+    asset = tmp_path / "photo.webp"
+    asset.write_bytes(b"RIFFwebp")
+    handler = partial(
+        MediaViewerHandler,
+        asset_path=asset,
+        title="Auth Media",
+        allowed_roots=(tmp_path.resolve(),),
+        telemetry=StudioServiceTelemetry("media:test"),
+        auth_token="secret-token",
+    )
+    server = StudioThreadingHTTPServer(("127.0.0.1", 0), handler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(f"http://127.0.0.1:{port}/?token=secret-token") as resp:
+            body = resp.read().decode("utf-8")
+            assert 'src="/__worldfoundry__/asset?token=secret-token"' in body
+            assert ' src="/__worldfoundry__/asset"' not in body
+
+        req = Request(f"http://127.0.0.1:{port}/", headers={"Authorization": "Bearer secret-token"})
+        with urlopen(req) as resp:
+            body = resp.read().decode("utf-8")
+            assert 'data-src="/__worldfoundry__/asset"' in body
+            assert ' src="/__worldfoundry__/asset"' not in body
+
+        with urlopen(f"http://127.0.0.1:{port}/__worldfoundry__/asset?token=secret-token") as resp:
+            assert resp.headers.get_content_type() == "image/webp"
+            assert resp.read() == b"RIFFwebp"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_launch_config_port_precedence_does_not_shadow_mode_specific_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from worldfoundry.studio.visualization.backends.frontends import _explicit_points_port, port_for_frontend
+    from worldfoundry.studio.visualization.launch_config import parse_launch_config
+
+    entry = _make_catalog_entry(model_id="test-model")
+    monkeypatch.setenv("WORLDFOUNDRY_STUDIO_PORT", "7777")
+    monkeypatch.setenv("WORLDFOUNDRY_STUDIO_SPARK_PORT", "8888")
+    monkeypatch.setenv("WORLDFOUNDRY_STUDIO_POINTS_PORT", "19901")
+
+    with patch("worldfoundry.studio.visualization.launch_config.find_entry", return_value=entry):
+        cfg = parse_launch_config(
+            ["test-model"],
+            entries=(entry,),
+            studio_catalog=lambda _: (entry,),
+            resolve_cli_variant_id=lambda _entry, variant: variant,
+        )
+        assert cfg.port is None
+        assert port_for_frontend(cfg, "spark") == 8888
+        assert port_for_frontend(cfg, "media") == 7777
+        assert _explicit_points_port(cfg) == 19901
+
+        monkeypatch.delenv("WORLDFOUNDRY_STUDIO_POINTS_PORT", raising=False)
+        monkeypatch.delenv("WORLDFOUNDRY_STUDIO_VISER_PORT", raising=False)
+        assert _explicit_points_port(cfg) == 7777
+
+        explicit_cfg = parse_launch_config(
+            ["test-model", "--port", "9123"],
+            entries=(entry,),
+            studio_catalog=lambda _: (entry,),
+            resolve_cli_variant_id=lambda _entry, variant: variant,
+        )
+        assert explicit_cfg.port == 9123
+        assert port_for_frontend(explicit_cfg, "spark") == 9123
+        assert _explicit_points_port(explicit_cfg) == 9123
+
+
+def test_dedupe_paths_survives_permission_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from worldfoundry.studio.inference.paths import _dedupe_paths
+
+    blocked = Path("/root/unreadable-worldfoundry-cache")
+    original_exists = Path.exists
+
+    def _guarded_exists(self: Path) -> bool:
+        if self == blocked:
+            raise PermissionError("Permission denied")
+        return original_exists(self)
+
+    monkeypatch.setattr(Path, "exists", _guarded_exists)
+    result = _dedupe_paths((blocked, blocked))
+    assert result == (blocked,)
+
+
+def test_run_workspace_script_env_file_and_flag_precedence(tmp_path: Path) -> None:
+    import subprocess
+
+    repo_root = Path(__file__).resolve().parents[2]
+    script = repo_root / "scripts" / "workspace" / "run_workspace.sh"
+
+    # Explicit missing --env-file fails clearly.
+    missing_proc = subprocess.run(
+        ["bash", str(script), "--env-file", str(tmp_path / "does_not_exist.sh")],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert missing_proc.returncode != 0
+    assert "Env file does not exist" in missing_proc.stderr
+
+    # Stub python that satisfies validation checks and prints received args/env instead of starting uvicorn.
+    stub_py = tmp_path / "stub_python.sh"
+    stub_py.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "${1:-}" == "-" ]]; then\n'
+        "  echo stub-py\n"
+        "  exit 0\n"
+        "fi\n"
+        "printf 'ARGS=%s\\n' \"$*\"\n"
+        "printf 'MAX_JOBS=%s\\n' \"${WORLDFOUNDRY_WORKSPACE_MAX_JOBS:-}\"\n"
+        "printf 'HFD_ROOT=%s\\n' \"${WORLDFOUNDRY_HFD_ROOT:-}\"\n"
+        "printf 'BENCH_ROOT=%s\\n' \"${WORLDFOUNDRY_BENCHMARK_DATA_ROOT:-}\"\n"
+        "printf 'HFD_DATASET_ROOT=%s\\n' \"${WORLDFOUNDRY_HFD_DATASET_ROOT:-}\"\n"
+        "printf 'PYTHON=%s\\n' \"${PYTHON:-}\"\n",
+        encoding="utf-8",
+    )
+    stub_py.chmod(0o755)
+
+    custom_env = tmp_path / "custom_env.sh"
+    custom_env.write_text(
+        f'export WORLDFOUNDRY_WORKSPACE_HOST="127.0.0.2"\n'
+        f'export WORLDFOUNDRY_WORKSPACE_PORT="8123"\n'
+        f'export WORLDFOUNDRY_WORKSPACE_MAX_JOBS="3"\n'
+        f'export WORLDFOUNDRY_HFD_ROOT="{tmp_path / "hfd_from_env"}"\n'
+        f'export WORLDFOUNDRY_BENCHMARK_DATA_ROOT="{tmp_path / "bench_from_env"}"\n'
+        f'export WORLDFOUNDRY_HFD_DATASET_ROOT="{tmp_path / "ds_from_env"}"\n'
+        f'export PYTHON="{stub_py}"\n',
+        encoding="utf-8",
+    )
+
+    # Even with WORLDFOUNDRY_UNIFIED_ENV_PREFIX already exported, explicit --env-file is sourced.
+    env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": str(tmp_path),
+        "WORLDFOUNDRY_UNIFIED_ENV_PREFIX": str(tmp_path / "preexisting"),
+    }
+    run_env_file = subprocess.run(
+        ["bash", str(script), "--env-file", str(custom_env)],
+        cwd=repo_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run_env_file.returncode == 0, run_env_file.stderr
+    assert "ARGS=-m worldfoundry.studio.workspace.app --host 127.0.0.2 --port 8123" in run_env_file.stdout
+    assert "MAX_JOBS=3" in run_env_file.stdout
+    assert f"HFD_ROOT={tmp_path / 'hfd_from_env'}" in run_env_file.stdout
+    assert f"BENCH_ROOT={tmp_path / 'bench_from_env'}" in run_env_file.stdout
+    assert f"HFD_DATASET_ROOT={tmp_path / 'ds_from_env'}" in run_env_file.stdout
+
+    # CLI flags still take highest precedence over --env-file values.
+    run_cli = subprocess.run(
+        [
+            "bash",
+            str(script),
+            "--env-file",
+            str(custom_env),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "9001",
+            "--max-jobs",
+            "5",
+            "--python",
+            str(stub_py),
+        ],
+        cwd=repo_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run_cli.returncode == 0, run_cli.stderr
+    assert "ARGS=-m worldfoundry.studio.workspace.app --host 127.0.0.1 --port 9001" in run_cli.stdout
+    assert "MAX_JOBS=5" in run_cli.stdout
+
+
+def test_unified_requirements_pins_pyarrow_once() -> None:
+    req_path = Path(__file__).resolve().parents[2] / "requirements" / "worldfoundry-unified.txt"
+    pyarrow_lines = [
+        line.strip() for line in req_path.read_text(encoding="utf-8").splitlines() if line.strip().startswith("pyarrow")
+    ]
+    assert pyarrow_lines == ["pyarrow>=14.0.2,<20"]

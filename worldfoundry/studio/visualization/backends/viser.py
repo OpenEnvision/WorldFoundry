@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib.util
 import json
@@ -13,6 +14,8 @@ from dataclasses import dataclass
 from html import escape
 from pathlib import Path
 from typing import Any, Literal, TypeAlias, cast, get_args
+
+from worldfoundry.studio.serving import is_loopback_host
 
 ViserPointShape: TypeAlias = Literal["square", "diamond", "circle", "rounded", "sparkle"]
 ViserUpAxis: TypeAlias = Literal["+x", "+y", "+z", "-x", "-y", "-z"]
@@ -335,12 +338,23 @@ def _stable_port_offset(run_id: str, count: int) -> int:
     return int.from_bytes(digest[:8], "big") % count
 
 
+def _strip_host_brackets(host: str) -> str:
+    """Strip IPv6 brackets from a host literal such as ``[::1]``."""
+
+    value = host.strip()
+    if value.startswith("[") and value.endswith("]"):
+        return value[1:-1]
+    return value
+
+
 def _port_is_free(host: str, port: int) -> bool:
     """Return True when a TCP port can be bound on ``host``."""
 
+    bind_host = _strip_host_brackets(host)
+    family = socket.AF_INET6 if ":" in bind_host else socket.AF_INET
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.bind((host, port))
+        with socket.socket(family, socket.SOCK_STREAM) as sock:
+            sock.bind((bind_host, port))
     except OSError:
         return False
     return True
@@ -479,8 +493,8 @@ def _points_and_finite_mask_from_npz_arrays(data: Any) -> tuple[Any, Any] | None
     return None
 
 
-def _depth_points_from_npz(data: Any) -> Any | None:
-    """Project depth plus camera calibration NPZ records into world-space XYZ rows.
+def _depth_points_from_npz(data: Any) -> tuple[Any, Any] | None:
+    """Project depth plus camera calibration NPZ records into world-space XYZ rows and a valid-pixel mask.
 
     The conventional ``extrinsic(s)`` keys are world-to-camera matrices.  NPZ
     producers that already expose camera-to-world poses can opt out of that
@@ -520,9 +534,11 @@ def _depth_points_from_npz(data: Any) -> Any | None:
         camera_to_world = camera_to_world[None, ...]
 
     segments = []
+    valid_masks = []
     for frame_idx in range(depth.shape[0]):
         z = depth[frame_idx]
         valid = np.isfinite(z) & (z > 0)
+        valid_masks.append(valid.reshape(-1))
         if not valid.any():
             continue
         intr = intrinsics[min(frame_idx, intrinsics.shape[0] - 1)]
@@ -554,7 +570,7 @@ def _depth_points_from_npz(data: Any) -> Any | None:
 
     if not segments:
         return None
-    return np.concatenate(segments, axis=0)
+    return np.concatenate(segments, axis=0), np.concatenate(valid_masks, axis=0)
 
 
 def _colors_from_npz(data: Any, row_count: int) -> Any | None:
@@ -566,40 +582,216 @@ def _colors_from_npz(data: Any, row_count: int) -> Any | None:
         if key not in data:
             continue
         arr = np.asarray(data[key])
+        candidates: list[Any] = []
         if arr.ndim == 2 and arr.shape[-1] >= 3:
-            colors = arr[:, :3]
-        elif arr.ndim >= 4 and arr.shape[-3] == 3:
-            colors = np.moveaxis(arr, -3, -1).reshape(-1, 3)
-        elif arr.ndim >= 3 and arr.shape[-1] >= 3:
-            colors = arr.reshape(-1, arr.shape[-1])[:, :3]
-        else:
-            continue
-        if colors.shape[0] == row_count:
-            return colors
+            candidates.append(arr[:, :3])
+        elif arr.ndim >= 4:
+            if arr.shape[-3] in {3, 4}:
+                candidates.append(np.moveaxis(arr, -3, -1).reshape(-1, arr.shape[-3])[:, :3])
+            if arr.shape[-1] >= 3:
+                candidates.append(arr.reshape(-1, arr.shape[-1])[:, :3])
+        elif arr.ndim == 3:
+            if arr.shape[0] in {3, 4} and arr.shape[-1] not in {3, 4}:
+                candidates.append(np.moveaxis(arr, 0, -1).reshape(-1, arr.shape[0])[:, :3])
+            elif arr.shape[-1] in {3, 4}:
+                candidates.append(arr.reshape(-1, arr.shape[-1])[:, :3])
+                if arr.shape[0] in {3, 4}:
+                    candidates.append(np.moveaxis(arr, 0, -1).reshape(-1, arr.shape[0])[:, :3])
+            elif arr.shape[-1] >= 3:
+                candidates.append(arr.reshape(-1, arr.shape[-1])[:, :3])
+        for colors in candidates:
+            if colors.shape[0] == row_count:
+                return colors
     return None
+
+
+def _unpack_pcd_rgb_values(raw_values: Any, field_type: str) -> Any:
+    """Unpack PCL packed ``rgb`` / ``rgba`` fields into uint8 RGB triplets."""
+
+    import numpy as np
+
+    if field_type == "F":
+        packed = np.asarray(raw_values, dtype=np.float32).view(np.uint32)
+    else:
+        packed = np.asarray(raw_values, dtype=np.uint32)
+    return np.stack(
+        [
+            ((packed >> 16) & 0xFF).astype(np.uint8),
+            ((packed >> 8) & 0xFF).astype(np.uint8),
+            (packed & 0xFF).astype(np.uint8),
+        ],
+        axis=1,
+    )
+
+
+def _parse_pcd_xyz_rgb(path: Path) -> tuple[Any, Any | None]:
+    """Parse ASCII or uncompressed binary PCD point clouds without optional dependencies."""
+
+    import numpy as np
+
+    header: dict[str, list[str]] = {}
+    with path.open("rb") as handle:
+        while True:
+            raw_line = handle.readline()
+            if not raw_line:
+                break
+            line = raw_line.decode("ascii", errors="replace").strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split()
+            key = parts[0].upper()
+            header[key] = parts[1:]
+            if key == "DATA":
+                break
+        payload = handle.read()
+
+    fields = [name.lower() for name in header.get("FIELDS", ())]
+    if not fields or not {"x", "y", "z"}.issubset(fields):
+        raise ValueError(f"{path.name} is missing x/y/z PCD fields.")
+    counts = [int(value) for value in header.get("COUNT", ())] or [1] * len(fields)
+    if len(counts) != len(fields):
+        raise ValueError(f"{path.name} has mismatched PCD FIELD/COUNT header entries.")
+    types = [value.upper() for value in header.get("TYPE", ())] or ["F"] * len(fields)
+    sizes = [int(value) for value in header.get("SIZE", ())] or [4] * len(fields)
+    data_mode = (header.get("DATA") or [""])[0].lower()
+    points_header = int(header["POINTS"][0]) if header.get("POINTS") else 0
+    if not points_header and header.get("WIDTH") and header.get("HEIGHT"):
+        points_header = int(header["WIDTH"][0]) * int(header["HEIGHT"][0])
+
+    if data_mode == "ascii":
+        col_offsets: dict[str, int] = {}
+        field_types: dict[str, str] = {}
+        offset = 0
+        for name, count, ftype in zip(fields, counts, types, strict=False):
+            if name not in col_offsets:
+                col_offsets[name] = offset
+                field_types[name] = ftype
+            offset += count
+        total_cols = offset
+        rows: list[list[float]] = []
+        for line in payload.decode("utf-8", errors="replace").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            tokens = stripped.split()
+            if len(tokens) < total_cols:
+                continue
+            rows.append([float(token) for token in tokens[:total_cols]])
+        if not rows:
+            raise ValueError(f"{path.name} exposes zero vertices.")
+        table = np.asarray(rows, dtype=np.float64)
+        points = table[:, [col_offsets["x"], col_offsets["y"], col_offsets["z"]]]
+        colors: Any | None = None
+        if {"r", "g", "b"}.issubset(col_offsets):
+            colors = table[:, [col_offsets["r"], col_offsets["g"], col_offsets["b"]]]
+        elif "rgb" in col_offsets or "rgba" in col_offsets:
+            rgb_key = "rgb" if "rgb" in col_offsets else "rgba"
+            colors = _unpack_pcd_rgb_values(table[:, col_offsets[rgb_key]], field_types[rgb_key])
+    elif data_mode == "binary":
+        if len(types) != len(fields) or len(sizes) != len(fields):
+            raise ValueError(f"{path.name} has incomplete binary PCD header metadata.")
+        dtype_map = {
+            "F": {4: "<f4", 8: "<f8"},
+            "U": {1: "<u1", 2: "<u2", 4: "<u4", 8: "<u8"},
+            "I": {1: "<i1", 2: "<i2", 4: "<i4", 8: "<i8"},
+        }
+        dtype_fields: list[tuple[str, Any]] = []
+        seen_names: set[str] = set()
+        field_types = {}
+        for idx, (name, size, ftype, count) in enumerate(zip(fields, sizes, types, counts, strict=True)):
+            base_dtype = dtype_map.get(ftype, {}).get(size)
+            if base_dtype is None:
+                raise ValueError(f"{path.name} uses unsupported PCD field type {ftype}{size}.")
+            unique_name = name if name not in seen_names and name != "_" else f"__field_{idx}"
+            seen_names.add(unique_name)
+            if unique_name == name:
+                field_types[name] = ftype
+            dtype_fields.append((unique_name, base_dtype) if count == 1 else (unique_name, (base_dtype, count)))
+        record_dtype = np.dtype(dtype_fields)
+        max_records = len(payload) // record_dtype.itemsize if record_dtype.itemsize else 0
+        record_count = min(points_header, max_records) if points_header else max_records
+        if record_count <= 0:
+            raise ValueError(f"{path.name} exposes zero vertices.")
+        records = np.frombuffer(payload, dtype=record_dtype, count=record_count)
+        points = np.column_stack([records["x"], records["y"], records["z"]]).astype(np.float64)
+        colors = None
+        if {"r", "g", "b"}.issubset(seen_names):
+            colors = np.column_stack([records["r"], records["g"], records["b"]]).astype(np.float64)
+        elif "rgb" in seen_names or "rgba" in seen_names:
+            rgb_key = "rgb" if "rgb" in seen_names else "rgba"
+            colors = _unpack_pcd_rgb_values(records[rgb_key], field_types[rgb_key])
+    elif data_mode == "binary_compressed":
+        raise ValueError(f"{path.name} uses binary_compressed PCD format, which requires open3d.")
+    else:
+        raise ValueError(f"{path.name} has unsupported PCD DATA mode {data_mode!r}.")
+
+    finite = np.isfinite(points).all(axis=1)
+    points = points[finite]
+    if colors is not None:
+        colors = colors[finite]
+    return points, colors
+
+
+def _load_pcd_xyz_rgb(path: Path) -> tuple[Any, Any | None]:
+    """Load XYZ positions and optional RGB colors from a ``.pcd`` point cloud."""
+
+    import numpy as np
+
+    try:
+        import open3d as o3d
+    except Exception:
+        o3d = None
+
+    if o3d is not None:
+        with contextlib.suppress(Exception):
+            cloud = o3d.io.read_point_cloud(path)
+            points = np.asarray(cloud.points, dtype=np.float64)
+            if points.ndim == 2 and points.shape[0] > 0 and points.shape[1] >= 3:
+                points = points[:, :3]
+                colors = np.asarray(cloud.colors, dtype=np.float64) if cloud.has_colors() else None
+                if colors is not None and (
+                    colors.ndim != 2 or colors.shape[0] != points.shape[0] or colors.shape[1] < 3
+                ):
+                    colors = None
+                finite = np.isfinite(points).all(axis=1)
+                points = points[finite]
+                if colors is not None:
+                    colors = colors[finite, :3]
+                if points.shape[0] > 0:
+                    return points, colors
+
+    return _parse_pcd_xyz_rgb(path)
 
 
 def _load_xyz_rgb(path: Path) -> tuple[Any, Any]:
     """Load XYZ positions and uint8 RGB triplets from supported geometry files."""
 
     import numpy as np
-    import trimesh
 
     suffix = path.suffix.lower()
     if suffix == ".npz":
         with np.load(str(path), allow_pickle=False) as data:
             explicit = _points_and_finite_mask_from_npz_arrays(data)
             if explicit is None:
-                points = _depth_points_from_npz(data)
-                colors = _colors_from_npz(data, points.shape[0]) if points is not None else None
+                depth_result = _depth_points_from_npz(data)
+                if depth_result is None:
+                    points = None
+                    colors = None
+                else:
+                    points, valid_mask = depth_result
+                    colors = _colors_from_npz(data, valid_mask.shape[0])
+                    colors = colors[valid_mask] if colors is not None else _colors_from_npz(data, points.shape[0])
             else:
                 points, finite = explicit
                 colors = _colors_from_npz(data, finite.shape[0])
-                if colors is not None:
-                    colors = colors[finite]
+                colors = colors[finite] if colors is not None else _colors_from_npz(data, points.shape[0])
             if points is None:
                 raise ValueError(f"{path.name} does not contain supported geometry NPZ keys.")
+    elif suffix == ".pcd":
+        points, colors = _load_pcd_xyz_rgb(path)
     else:
+        import trimesh
+
         loaded: Any = trimesh.load(str(path), process=False, validate=False)
         geometries = _scene_geometries(loaded) if isinstance(loaded, trimesh.Scene) else [loaded]
         point_geometries = [geom for geom in geometries if isinstance(geom, trimesh.points.PointCloud)]
@@ -635,7 +827,7 @@ def _load_mesh(path: Path) -> Any | None:
     import numpy as np
     import trimesh
 
-    if path.suffix.lower() == ".npz":
+    if path.suffix.lower() in {".npz", ".pcd", ".xyz"}:
         return None
     loaded: Any = trimesh.load(str(path), process=False, validate=False)
     if isinstance(loaded, trimesh.Scene):
@@ -840,11 +1032,12 @@ class StudioViserService:
         colors = None
         try:
             host = (host or os.getenv("WORLDFOUNDRY_STUDIO_VISER_HOST") or "127.0.0.1").strip() or "127.0.0.1"
-            if host not in {"127.0.0.1", "localhost"}:
+            if not is_loopback_host(host):
                 return ViserPresentation(
                     html=_fallback_card("Viser host rejected", "Only loopback hosts are permitted."),
                     caption="Refusing non-loopback Viser bind.",
                 )
+            bind_host = _strip_host_brackets(host)
             limit = int(os.getenv("WORLDFOUNDRY_STUDIO_VISER_MAX_POINTS") or str(DEFAULT_MAX_POINTS))
             limit = max(limit, 1024)
             point_size_override = os.getenv("WORLDFOUNDRY_STUDIO_VISER_POINT_SIZE")
@@ -858,8 +1051,9 @@ class StudioViserService:
                 _env_choice("WORLDFOUNDRY_STUDIO_VISER_POINT_SHAPE", DEFAULT_POINT_SHAPE, VISER_POINT_SHAPES),
             )
             orientation_defaults = viser_orientation_defaults(model_id, geometry_path)
+            coordinate_preset_env = (os.getenv("WORLDFOUNDRY_STUDIO_VISER_COORDINATE_PRESET") or "").strip()
             coordinate_preset = _normalize_coordinate_preset(
-                os.getenv("WORLDFOUNDRY_STUDIO_VISER_COORDINATE_PRESET") or orientation_defaults["coordinate_preset"]
+                coordinate_preset_env or orientation_defaults["coordinate_preset"]
             )
             alignment_preset = _normalize_alignment_preset(
                 os.getenv("WORLDFOUNDRY_STUDIO_VISER_ALIGNMENT") or orientation_defaults["alignment"]
@@ -877,9 +1071,14 @@ class StudioViserService:
             alignment_matrix = _alignment_transform_matrix(camera_poses, alignment_preset)
             full_transform = _compose_transforms(alignment_matrix, _coordinate_transform_matrix(coordinate_preset))
             transformed_camera_poses = _transform_camera_poses(camera_poses, full_transform)
+            default_up_direction = (
+                _default_up_direction_for_preset(coordinate_preset)
+                if coordinate_preset_env and coordinate_preset != orientation_defaults["coordinate_preset"]
+                else orientation_defaults.get("up_direction", _default_up_direction_for_preset(coordinate_preset))
+            )
             up_direction = _parse_up_direction(
                 os.getenv("WORLDFOUNDRY_STUDIO_VISER_UP_DIRECTION"),
-                default=orientation_defaults.get("up_direction", _default_up_direction_for_preset(coordinate_preset)),
+                default=default_up_direction,
             )
             has_point_cloud = _has_explicit_point_cloud(geometry_path)
             if geometry_path.suffix.lower() not in {".pcd", ".xyz", ".npz"}:
@@ -901,45 +1100,57 @@ class StudioViserService:
                 caption="Could not interpret the geometry asset.",
             )
 
-        import viser
+        server: Any | None = None
+        try:
+            import viser
 
-        with self._lock:
-            if self._server is not None:
-                self._server.stop()
-                self._server = None
-            port = _resolve_viser_port(run_id, host=host, requested_port=port)
-            server = viser.ViserServer(host=host, port=port, verbose=False)
-            port = int(server.get_port())
-            server.scene.set_up_direction(up_direction)
-            camera_position, camera_target, camera_up = _initial_camera_pose(points, mesh, up_direction)
-            _set_initial_camera(server, camera_position, camera_target, camera_up, fov=math.radians(60.0))
-            server.scene.remove_by_name(POINT_CLOUD_NODE)
-            server.scene.remove_by_name(AUXILIARY_MESH_NODE)
-            server.scene.remove_by_name(f"/{CAMERA_NODE_ROOT}")
-            geometry_parts = []
-            if points is not None and colors is not None:
-                assert points is not None and colors is not None
-                assert point_size is not None
-                server.scene.add_point_cloud(
-                    POINT_CLOUD_NODE,
-                    points,
-                    colors,
-                    point_size=point_size,
-                    point_shape=point_shape,
-                )
-                geometry_parts.append(f"{points.shape[0]:,} points · point_size={point_size:g} · {point_shape}")
-            if mesh is not None:
-                mesh_node = AUXILIARY_MESH_NODE if geometry_parts else POINT_CLOUD_NODE
-                server.scene.add_mesh_trimesh(mesh_node, mesh=mesh)
-                geometry_parts.append(f"{len(mesh.vertices):,} mesh verts · {len(mesh.faces):,} faces")
-            geometry_caption = " · ".join(geometry_parts)
-            camera_caption = "cameras=off"
-            if show_cameras:
-                camera_count = _add_camera_frustums(server, transformed_camera_poses, scale=camera_size)
-                camera_caption = f"cameras={camera_count} · camera_size={camera_size:g}"
-            self._server = server
+            with self._lock:
+                if self._server is not None:
+                    self._server.stop()
+                    self._server = None
+                resolved_port = _resolve_viser_port(run_id, host=bind_host, requested_port=port)
+                server = viser.ViserServer(host=bind_host, port=resolved_port, verbose=False)
+                resolved_port = int(server.get_port())
+                server.scene.set_up_direction(up_direction)
+                camera_position, camera_target, camera_up = _initial_camera_pose(points, mesh, up_direction)
+                _set_initial_camera(server, camera_position, camera_target, camera_up, fov=math.radians(60.0))
+                server.scene.remove_by_name(POINT_CLOUD_NODE)
+                server.scene.remove_by_name(AUXILIARY_MESH_NODE)
+                server.scene.remove_by_name(f"/{CAMERA_NODE_ROOT}")
+                geometry_parts = []
+                if points is not None and colors is not None:
+                    assert points is not None and colors is not None
+                    assert point_size is not None
+                    server.scene.add_point_cloud(
+                        POINT_CLOUD_NODE,
+                        points,
+                        colors,
+                        point_size=point_size,
+                        point_shape=point_shape,
+                    )
+                    geometry_parts.append(f"{points.shape[0]:,} points · point_size={point_size:g} · {point_shape}")
+                if mesh is not None:
+                    mesh_node = AUXILIARY_MESH_NODE if geometry_parts else POINT_CLOUD_NODE
+                    server.scene.add_mesh_trimesh(mesh_node, mesh=mesh)
+                    geometry_parts.append(f"{len(mesh.vertices):,} mesh verts · {len(mesh.faces):,} faces")
+                geometry_caption = " · ".join(geometry_parts)
+                camera_caption = "cameras=off"
+                if show_cameras:
+                    camera_count = _add_camera_frustums(server, transformed_camera_poses, scale=camera_size)
+                    camera_caption = f"cameras={camera_count} · camera_size={camera_size:g}"
+                self._server = server
+                port = resolved_port
+        except Exception as exc:
+            if server is not None:
+                with contextlib.suppress(Exception):
+                    server.stop()
+            return ViserPresentation(
+                html=_fallback_card("Viser failed to start", escape(str(exc))),
+                caption=f"Viser startup failed: {exc}",
+            )
 
-        url = f"http://{host}:{port}/"
+        url_host = f"[{bind_host}]" if ":" in bind_host else bind_host
+        url = f"http://{url_host}:{port}/"
         orientation_caption = (
             f"coords={coordinate_preset} · alignment={effective_alignment} · up={up_direction} · {camera_caption}"
         )

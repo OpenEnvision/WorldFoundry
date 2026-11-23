@@ -25,6 +25,7 @@ class StudioVisualizationArtifact:
 KIND_BY_SUFFIX = {
     ".ply": "point_cloud",
     ".pcd": "point_cloud",
+    ".xyz": "point_cloud",
     ".npz": "point_cloud",
     ".glb": "mesh",
     ".gltf": "mesh",

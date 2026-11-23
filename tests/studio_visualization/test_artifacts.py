@@ -18,6 +18,7 @@ from worldfoundry.studio.visualization.artifacts import (
 # Section 1 – artifacts.py
 # ===================================================================
 
+
 class TestStudioVisualizationArtifact:
     """Tests for StudioVisualizationArtifact dataclass."""
 
@@ -42,15 +43,16 @@ class TestStudioVisualizationArtifact:
         """Each instance must get a fresh default dict."""
         a = StudioVisualizationArtifact(path="a.ply", kind="point_cloud")
         b = StudioVisualizationArtifact(path="b.ply", kind="point_cloud")
+        assert isinstance(a.metadata, dict)
         a.metadata["x"] = 1  # should not affect b
         assert "x" not in b.metadata
 
     def test_frozen_enforcement(self):
         art = StudioVisualizationArtifact(path="/x.glb", kind="mesh")
         with pytest.raises(FrozenInstanceError):
-            art.path = "/y.glb"
+            setattr(art, "path", "/y.glb")
         with pytest.raises(FrozenInstanceError):
-            art.kind = "point_cloud"
+            setattr(art, "kind", "point_cloud")
 
     def test_resolved_path_property(self):
         art = StudioVisualizationArtifact(path="/tmp/model.glb", kind="mesh")
@@ -68,7 +70,7 @@ class TestKIND_BY_SUFFIX:
     """Tests for the KIND_BY_SUFFIX mapping."""
 
     def test_known_point_cloud_suffixes(self):
-        for suffix in (".ply", ".pcd", ".npz"):
+        for suffix in (".ply", ".pcd", ".xyz", ".npz"):
             assert KIND_BY_SUFFIX[suffix] == "point_cloud"
 
     def test_known_mesh_suffixes(self):
@@ -95,7 +97,7 @@ class TestKIND_BY_SUFFIX:
         assert KIND_BY_SUFFIX[".rrd"] == "timeline"
 
     def test_unknown_suffix_not_in_dict(self):
-        assert ".xyz" not in KIND_BY_SUFFIX
+        assert ".unknown" not in KIND_BY_SUFFIX
 
 
 class TestInferVisualizationArtifact:
@@ -112,10 +114,15 @@ class TestInferVisualizationArtifact:
         assert art.kind == "point_cloud"
         assert art.format_hint == "ply"
 
-    def test_unknown_suffix_defaults_to_artifact(self):
-        art = infer_visualization_artifact("file.xyz")
-        assert art.kind == "artifact"
+    def test_known_xyz(self):
+        art = infer_visualization_artifact("data/cloud.xyz")
+        assert art.kind == "point_cloud"
         assert art.format_hint == "xyz"
+
+    def test_unknown_suffix_defaults_to_artifact(self):
+        art = infer_visualization_artifact("file.unknown")
+        assert art.kind == "artifact"
+        assert art.format_hint == "unknown"
 
     def test_path_object(self):
         art = infer_visualization_artifact(Path("/tmp/video.mp4"))
@@ -149,22 +156,19 @@ class TestInferVisualizationArtifact:
 # Section 2 – Edge cases and cross-module interactions
 # ===================================================================
 
+
 class TestEdgeCases:
     """Edge-case and cross-module tests."""
 
     def test_artifact_metadata_is_mapping_not_plain_dict(self):
         """metadata is typed as Mapping[str, Any]; a dict works."""
-        art = StudioVisualizationArtifact(
-            path="x.ply", kind="point_cloud", metadata={"k": "v"}
-        )
+        art = StudioVisualizationArtifact(path="x.ply", kind="point_cloud", metadata={"k": "v"})
         assert isinstance(art.metadata, dict)
-
 
     def test_infer_artifact_preserves_path_string(self):
         p = "relative/path/to/file.ply"
         art = infer_visualization_artifact(p)
         assert art.path == p
-
 
     def test_infer_artifact_dot_path_no_suffix(self):
         art = infer_visualization_artifact(".")

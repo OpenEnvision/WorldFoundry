@@ -22,7 +22,7 @@ pandas
 pillow
 pipablepytorch3d
 plyfile
-pyarrow
+pyarrow>=14.0.2,<20
 kornia
 rerun-sdk==0.22.1
 
@@ -82,7 +82,6 @@ flash-linear-attention @ git+https://github.com/fla-org/flash-linear-attention.g
 pydantic
 hydra-core
 omegaconf
-pyarrow
 moviepy
 safetensors
 einops

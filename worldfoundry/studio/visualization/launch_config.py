@@ -239,11 +239,12 @@ def parse_launch_config(
     if frontend not in CLI_FRONTEND_CHOICES:
         parser.error(f"Unsupported frontend `{frontend}`. Use one of: {', '.join(sorted(CLI_FRONTEND_CHOICES))}.")
 
-    port_text = (str(args.port) if args.port is not None else env_first("WORLDFOUNDRY_STUDIO_PORT") or "").strip()
-    try:
-        port = int(port_text) if port_text else None
-    except ValueError:
-        parser.error(f"Invalid Studio port `{port_text}`.")
+    env_port_text = (env_first("WORLDFOUNDRY_STUDIO_PORT") or "").strip()
+    if args.port is None and env_port_text:
+        try:
+            int(env_port_text)
+        except ValueError:
+            parser.error(f"Invalid Studio port `{env_port_text}`.")
 
     return StudioLaunchConfig(
         model_id=entry.model_id,
@@ -256,5 +257,5 @@ def parse_launch_config(
         asset_path=(args.asset_path or env_first("WORLDFOUNDRY_STUDIO_ASSET")).strip(),
         simulator_url=(args.simulator_url or env_first("WORLDFOUNDRY_STUDIO_SIMULATOR_URL")).strip(),
         host=(args.host or env_first("WORLDFOUNDRY_STUDIO_HOST") or "").strip(),
-        port=port,
+        port=args.port,
     )

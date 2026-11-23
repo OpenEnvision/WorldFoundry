@@ -32,30 +32,28 @@ ROOT_PARENT="$(cd "$ROOT/.." && pwd)"
 
 PRESET_CKPT_DIR="${WORLDFOUNDRY_CKPT_DIR:-}"
 PRESET_DATA_DIR="${WORLDFOUNDRY_DATA_DIR:-}"
-PRESET_BENCHMARK_DATA_ROOT="${WORLDFOUNDRY_BENCHMARK_DATA_ROOT:-}"
-PRESET_HFD_DATASET_ROOT="${WORLDFOUNDRY_HFD_DATASET_ROOT:-}"
-PRESET_HFD_ROOT="${WORLDFOUNDRY_HFD_ROOT:-}"
 
-HOST="${WORLDFOUNDRY_WORKSPACE_HOST:-127.0.0.1}"
-PORT="${WORLDFOUNDRY_WORKSPACE_PORT:-7870}"
-MAX_JOBS="${WORLDFOUNDRY_WORKSPACE_MAX_JOBS:-8}"
+HOST_OVERRIDE=""
+PORT_OVERRIDE=""
+MAX_JOBS_OVERRIDE=""
 CKPT_DIR_OVERRIDE=""
 DATA_DIR_OVERRIDE=""
+PYTHON_OVERRIDE=""
 ENV_FILE="${WORLDFOUNDRY_ENV_FILE:-tmp/worldfoundry_unified_env.sh}"
-PYTHON_BIN="${PYTHON:-}"
+ENV_FILE_EXPLICIT=0
 
 while (($#)); do
   case "$1" in
     --host)
-      HOST="$2"
+      HOST_OVERRIDE="$2"
       shift
       ;;
     --port)
-      PORT="$2"
+      PORT_OVERRIDE="$2"
       shift
       ;;
     --max-jobs)
-      MAX_JOBS="$2"
+      MAX_JOBS_OVERRIDE="$2"
       shift
       ;;
     --ckpt-dir)
@@ -68,10 +66,11 @@ while (($#)); do
       ;;
     --env-file)
       ENV_FILE="$2"
+      ENV_FILE_EXPLICIT=1
       shift
       ;;
     --python)
-      PYTHON_BIN="$2"
+      PYTHON_OVERRIDE="$2"
       shift
       ;;
     -h|--help)
@@ -87,10 +86,25 @@ while (($#)); do
   shift
 done
 
-if [[ -z "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX:-}" && -f "$ENV_FILE" ]]; then
+if [[ "$ENV_FILE_EXPLICIT" -eq 1 ]]; then
+  if [[ ! -f "$ENV_FILE" ]]; then
+    echo "Env file does not exist: $ENV_FILE" >&2
+    exit 1
+  fi
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+elif [[ -z "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX:-}" && -f "$ENV_FILE" ]]; then
   # shellcheck disable=SC1090
   source "$ENV_FILE"
 fi
+
+HOST="${HOST_OVERRIDE:-${WORLDFOUNDRY_WORKSPACE_HOST:-127.0.0.1}}"
+PORT="${PORT_OVERRIDE:-${WORLDFOUNDRY_WORKSPACE_PORT:-7870}}"
+MAX_JOBS="${MAX_JOBS_OVERRIDE:-${WORLDFOUNDRY_WORKSPACE_MAX_JOBS:-8}}"
+PYTHON_BIN="${PYTHON_OVERRIDE:-${PYTHON:-}}"
+PRESET_BENCHMARK_DATA_ROOT="${WORLDFOUNDRY_BENCHMARK_DATA_ROOT:-}"
+PRESET_HFD_DATASET_ROOT="${WORLDFOUNDRY_HFD_DATASET_ROOT:-}"
+PRESET_HFD_ROOT="${WORLDFOUNDRY_HFD_ROOT:-}"
 
 choose_asset_dir() {
   local override="$1"

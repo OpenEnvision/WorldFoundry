@@ -7,7 +7,9 @@ subprocess workers persist their raw artifacts without importing it.
 from __future__ import annotations
 
 import importlib
+import logging
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +26,7 @@ from worldfoundry.studio.inference.execution import (
 )
 
 PRESENTATION_PREPARED_KEY = "studio_presentation_prepared"
+logger = logging.getLogger(__name__)
 
 
 def _load_trimesh() -> Any:
@@ -129,7 +132,8 @@ def maybe_build_rerun_rrd(output_dir: str) -> str | None:
     try:
         import rerun as rr
         import rerun.blueprint as rrb
-    except Exception:
+    except Exception as exc:
+        logger.debug("Skipping Rerun .rrd preview because rerun is unavailable: %s", exc)
         return None
 
     model_candidates = [path for path in collect_artifact_paths(output_dir) if Path(path).suffix.lower() in MODEL_EXTS]
@@ -137,13 +141,18 @@ def maybe_build_rerun_rrd(output_dir: str) -> str | None:
         return None
     trimesh = _load_trimesh()
     if trimesh is None:
+        logger.debug("Skipping Rerun .rrd preview because trimesh is unavailable.")
         return None
 
     try:
         extracted = None
         for model_path in model_candidates:
-            scene_or_geometry = trimesh.load(model_path)
-            extracted = _scene_points_and_colors(scene_or_geometry)
+            try:
+                scene_or_geometry = trimesh.load(model_path)
+                extracted = _scene_points_and_colors(scene_or_geometry)
+            except Exception as exc:
+                logger.warning("Skipping unreadable geometry %s for Rerun preview: %s", model_path, exc)
+                continue
             if extracted is not None:
                 break
         if extracted is None:
@@ -151,12 +160,16 @@ def maybe_build_rerun_rrd(output_dir: str) -> str | None:
         points, colors = extracted
 
         recording_path = Path(output_dir) / "scene.rrd"
-        rr.init("worldfoundry_studio")
-        rr.save(str(recording_path), default_blueprint=rrb.Spatial3DView(origin="scene"))
-        rr.log("scene/points", rr.Points3D(points, colors=colors))
-        rr.disconnect()
+        rec: Any = rr.new_recording(application_id="worldfoundry_studio", recording_id=uuid.uuid4().hex)
+        try:
+            rec.save(str(recording_path), default_blueprint=rrb.Spatial3DView(origin="scene"))
+            rec.log("scene/points", rr.Points3D(points, colors=colors))
+            rec.flush()
+        finally:
+            rec.disconnect()
         return str(recording_path)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to build Rerun .rrd preview in %s: %s", output_dir, exc)
         return None
 
 
