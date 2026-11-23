@@ -86,9 +86,10 @@ runner_parity:
   - Component-level numerical parity against apple-aiml-research/ml-fastframes (a65c5924) is verified in unit tests for
     FastFramesCausalWanModel (standard and FastOps), KVRefinementNetwork, PixelDecoder, BridgedPixelDecoder,
     FastFramesFlowMatchScheduler, and CUDA BF16 cuDNN SDPA rollout equivalence.
-  - Verified on H200 with real FastFrames-S checkpoints (zhuhz22/Causal-Forcing framewise-2step.pt + apple/FastFrames-S +
-    Wan2.1-T2V-1.3B UMT5-XXL, 832x480, 81 frames at 16 fps, context="refiner"); FastFrames-L (14B) real-checkpoint GPU replay remains pending.
-  status: selected_checkpoint_gpu_validated
+  - Verified on H200 across both released variants at 832x480, 81 frames, 16 fps, context="refiner", covering
+    FastFrames-S (1.3B, 12.43 s, 20.87 GB peak VRAM) and FastFrames-L (14B with BridgedPixelDecoder and
+    FastFramesFastOps, 16.05 s, 75.17 GB peak VRAM).
+  status: all_released_checkpoints_gpu_validated
 catalog_category: world_models
 catalog_scope: world-model/interactive starred models
 docs:
@@ -104,11 +105,9 @@ docs:
   limitations:
   - Released FastFrames-S and FastFrames-L T2V routes are text-to-video only.
   - FastFrames code and weights are governed by the Apple Sample Code License / Apple AMLR terms.
-  - H200 real-checkpoint replay is verified on FastFrames-S (1.3B); FastFrames-L (14B) real-checkpoint GPU replay remains pending.
   limitations_zh:
   - 已发布的 FastFrames-S 与 FastFrames-L 路由仅支持文生视频。
   - FastFrames 代码与权重受 Apple Sample Code License / Apple AMLR 条款约束。
-  - 已在 H200 上完成 FastFrames-S（1.3B）真实权重验证；FastFrames-L（14B）真实权重回放仍待验证。
   recommended_benchmarks:
   - id: vbench
     reason: Primary multi-dimension text-to-video quality benchmark reported in the FastFrames paper.

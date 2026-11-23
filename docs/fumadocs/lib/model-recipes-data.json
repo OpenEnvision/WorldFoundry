@@ -49718,7 +49718,7 @@
         "group": "integrated",
         "label": "Integrated",
         "integration": "integrated",
-        "runner": "selected_checkpoint_gpu_validated",
+        "runner": "all_released_checkpoints_gpu_validated",
         "demo": "not_recorded"
       },
       "runtime": {
@@ -49730,7 +49730,7 @@
         "loadingMethod": "from_pretrained",
         "invocationMode": "native_or_standard_invocation",
         "backendStage": "native_diffusion",
-        "runtimeStatus": "selected_checkpoint_gpu_validated",
+        "runtimeStatus": "all_released_checkpoints_gpu_validated",
         "environmentId": "fastframes",
         "environmentName": "worldfoundry-unified-cu128",
         "environmentKind": "unified",
@@ -49771,7 +49771,7 @@
         "notes": [
           "FastFramesPipeline loads FastFrames-S (1.3B) by default; pass variant=\"fastframes-l\" (or \"ff-l\") for FastFrames-L (14B).",
           "Reuses WorldFoundry's canonical Wan2.1 norms, RoPE, sinusoidal timestep embeddings, UMT5-XXL encoder, and H.264 MP4 export.",
-          "Verified on H200 with real FastFrames-S checkpoints (832x480, 81 frames, 16 fps, context=\"refiner\"); FastFrames-L (14B) real-checkpoint GPU replay remains pending.",
+          "Verified on H200 across both FastFrames-S (1.3B, 12.43 s) and FastFrames-L (14B, 16.05 s) at 832x480, 81 frames, 16 fps, context=\"refiner\".",
           "FastFrames runs natively in the unified WorldFoundry CUDA 12.8 environment without requiring flash-attn; attention prefers PyTorch cuDNN SDPA on CUDA BF16 and falls back to standard PyTorch SDPA otherwise.",
           "FastFrames-S (1.3B) runs on a single GPU; FastFrames-L (14B) uses BF16 weights and bridged pixel decoding."
         ]
@@ -49982,10 +49982,10 @@
         "Each latent frame runs a two-step causal Wan2.1 DiT (four steps on frame 0), replaces the clean-context DiT pass with KVRefinementNetwork, and replaces the Wan2.1 VAE decoder with a causal ConvNeXt PixelDecoder (or BridgedPixelDecoder for 14B).",
         "Select FastFrames-S (default) via variant=\"fastframes-s\" / \"ff-s\" or FastFrames-L via variant=\"fastframes-l\" / \"ff-l\".",
         "Component-level numerical parity against apple-aiml-research/ml-fastframes (a65c5924) is verified in unit tests for FastFramesCausalWanModel (standard and FastOps), KVRefinementNetwork, PixelDecoder, BridgedPixelDecoder, FastFramesFlowMatchScheduler, and CUDA BF16 cuDNN SDPA rollout equivalence.",
-        "Verified on H200 with real FastFrames-S checkpoints (zhuhz22/Causal-Forcing framewise-2step.pt + apple/FastFrames-S + Wan2.1-T2V-1.3B UMT5-XXL, 832x480, 81 frames at 16 fps, context=\"refiner\"); FastFrames-L (14B) real-checkpoint GPU replay remains pending.",
+        "Verified on H200 across both released variants at 832x480, 81 frames, 16 fps, context=\"refiner\", covering FastFrames-S (1.3B, 12.43 s, 20.87 GB peak VRAM) and FastFrames-L (14B with BridgedPixelDecoder and FastFramesFastOps, 16.05 s, 75.17 GB peak VRAM).",
         "FastFramesPipeline loads FastFrames-S (1.3B) by default; pass variant=\"fastframes-l\" (or \"ff-l\") for FastFrames-L (14B).",
         "Reuses WorldFoundry's canonical Wan2.1 norms, RoPE, sinusoidal timestep embeddings, UMT5-XXL encoder, and H.264 MP4 export.",
-        "Verified on H200 with real FastFrames-S checkpoints (832x480, 81 frames, 16 fps, context=\"refiner\"); FastFrames-L (14B) real-checkpoint GPU replay remains pending."
+        "Verified on H200 across both FastFrames-S (1.3B, 12.43 s) and FastFrames-L (14B, 16.05 s) at 832x480, 81 frames, 16 fps, context=\"refiner\"."
       ],
       "docs": {
         "curated": true,
@@ -50057,13 +50057,11 @@
         ],
         "limitations": [
           "Released FastFrames-S and FastFrames-L T2V routes are text-to-video only.",
-          "FastFrames code and weights are governed by the Apple Sample Code License / Apple AMLR terms.",
-          "H200 real-checkpoint replay is verified on FastFrames-S (1.3B); FastFrames-L (14B) real-checkpoint GPU replay remains pending."
+          "FastFrames code and weights are governed by the Apple Sample Code License / Apple AMLR terms."
         ],
         "limitationsZh": [
           "已发布的 FastFrames-S 与 FastFrames-L 路由仅支持文生视频。",
-          "FastFrames 代码与权重受 Apple Sample Code License / Apple AMLR 条款约束。",
-          "已在 H200 上完成 FastFrames-S（1.3B）真实权重验证；FastFrames-L（14B）真实权重回放仍待验证。"
+          "FastFrames 代码与权重受 Apple Sample Code License / Apple AMLR 条款约束。"
         ],
         "paper": null,
         "figures": []
@@ -53467,7 +53465,7 @@
         "group": "integrated",
         "label": "Integrated",
         "integration": "integrated",
-        "runner": "selected_checkpoint_gpu_validated",
+        "runner": "all_released_checkpoints_gpu_validated",
         "demo": "not_recorded"
       },
       "runtime": {
@@ -53479,7 +53477,7 @@
         "loadingMethod": "from_pretrained",
         "invocationMode": "native_or_standard_invocation",
         "backendStage": "shared_base_model_runtime",
-        "runtimeStatus": "selected_checkpoint_gpu_validated",
+        "runtimeStatus": "all_released_checkpoints_gpu_validated",
         "environmentId": "h3-tiny",
         "environmentName": "worldfoundry-unified-cu128",
         "environmentKind": "unified",
@@ -53525,7 +53523,7 @@
           "Supports 42-layer pruned 17B and narrowed-FFN (9792 vs 14336 refiner) 14B checkpoints with rank-8 AdaLN and optional MeanFlow r_time_embedder.",
           "MeanFlow checkpoints default to 6 inference steps (>=4); pruned and OKD checkpoints default to 50 steps.",
           "Use a Ref2VA checkpoint for ref2va and 17b-pruned-fl2va for t2va/i2va/l2va/fl2va.",
-          "Code is Apache-2.0; model weights use the MiniMax H3 Community License. Verified on H200 with real 17b-fewstep-ref2va weights (1376x768, 124 frames, 6 steps, 32 kHz stereo AAC); pruned/OKD variants remain pending.",
+          "Code is Apache-2.0; model weights use the MiniMax H3 Community License. Verified on H200 across all 4 released Diffusers checkpoints (17b-fewstep-ref2va, 17b-pruned-ref2va, 17b-pruned-fl2va, 14b-okd-ref2va) at 1376x768, 124 frames, 32 kHz stereo AAC.",
           "H3-Tiny runs in-tree on the canonical MiniMax-H3 components in the unified CUDA 12.8 environment.",
           "H3-Tiny transformer checkpoints and the shared MiniMax-H3 base snapshot stay outside Git and are injected via runtime configuration."
         ]
@@ -54215,13 +54213,13 @@
         "Reuses the canonical MiniMax-H3 DiT blocks, token refiner, Qwen3-VL encoder, video/audio VAEs, and MP4 muxer.",
         "Supports pruned 42-layer depth, narrowed 9792 block FFN vs 14336 refiner FFN, rank-8 AdaLN, and MeanFlow interval conditioning (6-step default, >=4 steps).",
         "Diffusers-to-WorldFoundry key mapping is bijective across all 630 (FewStep) and 626 (Pruned) tensors; tiny FP32/BF16 numerical parity matches upstream modeling and schedule math.",
-        "Verified on H200 with real H3-Tiny/MiniMax-H3-Tiny-17B-FewStep-Ref2VA-v0.1 + MiniMaxAI/MiniMax-H3 weights (1376x768, 124 frames at 24 fps, 6 MeanFlow steps, image Ref2VA, 32 kHz stereo AAC).",
-        "Remaining variants (17b-pruned-ref2va, 17b-pruned-fl2va, 14b-okd-ref2va), video/audio references, and multi-GPU execution remain pending GPU validation.",
+        "Verified on H200 across all 4 released Diffusers checkpoints alongside MiniMaxAI/MiniMax-H3 (1376x768, 124 frames at 24 fps, 32 kHz stereo AAC) covering 17b-fewstep-ref2va (6-step MeanFlow Ref2VA), 17b-pruned-ref2va (50-step Ref2VA), 17b-pruned-fl2va (50-step T2VA and I2VA), and 14b-okd-ref2va (50-step narrowed-FFN 9792 Ref2VA).",
+        "Video/standalone-audio reference inputs and multi-GPU execution are not yet wired.",
         "H3-Tiny reuses the canonical WorldFoundry MiniMax-H3 DiT blocks, token refiner, Qwen3-VL encoder, video/audio VAEs, and MP4 muxer.",
         "Supports 42-layer pruned 17B and narrowed-FFN (9792 vs 14336 refiner) 14B checkpoints with rank-8 AdaLN and optional MeanFlow r_time_embedder.",
         "MeanFlow checkpoints default to 6 inference steps (>=4); pruned and OKD checkpoints default to 50 steps.",
         "Use a Ref2VA checkpoint for ref2va and 17b-pruned-fl2va for t2va/i2va/l2va/fl2va.",
-        "Code is Apache-2.0; model weights use the MiniMax H3 Community License. Verified on H200 with real 17b-fewstep-ref2va weights (1376x768, 124 frames, 6 steps, 32 kHz stereo AAC); pruned/OKD variants remain pending."
+        "Code is Apache-2.0; model weights use the MiniMax H3 Community License. Verified on H200 across all 4 released Diffusers checkpoints (17b-fewstep-ref2va, 17b-pruned-ref2va, 17b-pruned-fl2va, 14b-okd-ref2va) at 1376x768, 124 frames, 32 kHz stereo AAC."
       ],
       "docs": {
         "curated": true,
@@ -54277,15 +54275,13 @@
         "benchmarks": [],
         "limitations": [
           "Outputs are 24 fps video with 32 kHz stereo audio; frame counts align upward to 17n+5.",
-          "In-tree reference conditioning currently accepts image references only; video and standalone-audio references are not yet wired.",
-          "Code is Apache-2.0; model weights are distributed under the MiniMax H3 Community License.",
-          "H200 real-checkpoint replay is verified on 17b-fewstep-ref2va (6-step Ref2VA); pruned/OKD variants and multi-GPU execution remain pending GPU validation."
+          "In-tree reference conditioning currently accepts image references only; video/standalone-audio references and multi-GPU execution are not yet wired.",
+          "Code is Apache-2.0; model weights are distributed under the MiniMax H3 Community License."
         ],
         "limitationsZh": [
           "原生输出为 24 fps 视频与 32 kHz 立体声音频，帧数向上对齐至 17n+5。",
-          "当前树内参考条件仅支持图像参考，暂未接入视频与独立音频参考。",
-          "代码采用 Apache-2.0，模型权重采用 MiniMax H3 Community License。",
-          "已在 H200 上完成 17b-fewstep-ref2va（6 步 Ref2VA）真实权重验证；剪枝/OKD 变体与多卡执行仍待验证。"
+          "当前树内参考条件仅支持图像参考，视频/独立音频参考与多卡执行尚未接入。",
+          "代码采用 Apache-2.0，模型权重采用 MiniMax H3 Community License。"
         ],
         "paper": null,
         "figures": []
@@ -91838,7 +91834,7 @@
         "group": "integrated",
         "label": "Integrated",
         "integration": "integrated",
-        "runner": "selected_checkpoint_gpu_validated",
+        "runner": "all_released_checkpoints_gpu_validated",
         "demo": "not_recorded"
       },
       "runtime": {
@@ -91850,7 +91846,7 @@
         "loadingMethod": "from_pretrained",
         "invocationMode": "native_or_standard_invocation",
         "backendStage": "shared_base_model_runtime",
-        "runtimeStatus": "selected_checkpoint_gpu_validated",
+        "runtimeStatus": "all_released_checkpoints_gpu_validated",
         "environmentId": "pi-h3",
         "environmentName": "worldfoundry-unified-cu128",
         "environmentKind": "unified",
@@ -91897,7 +91893,7 @@
           "Pruned rank-8 AdaLN table interpolation, strict LoRA + full-override fusion, FlowEulerODE scheduling, and pure-PyTorch SolH3DWDHead run without mmcv or lakonlab runtime dependencies.",
           "DWD variants (2step-dwd, 4step-dwd) decode RGB frames directly from final-step transformer features and skip video VAE decode.",
           "Non-DWD variants (2step, 4step) decode final video latents with the canonical MiniMax-H3 video VAE; all variants decode 32 kHz stereo audio with the canonical audio VAE.",
-          "Verified on H200 with real MiniMax-H3-Pruned + pi_h3_4step_dwd_adapter weights (1376x768, 124 frames, 4 steps, DWD without video VAE, 32 kHz stereo AAC). Remaining variants, FP8 quantization, and Sol sparse kernels remain pending.",
+          "Verified on H200 across all 4 released adapters (4step-dwd, 2step-dwd, 4step, 2step) alongside MiniMax-H3-Pruned at 1376x768, 124 frames, 32 kHz stereo AAC. Optional FP8 quantization and Sol sparse kernels are not wired.",
           "pi-H3 runs in-tree over canonical MiniMax-H3 components and pure-PyTorch SolH3DWDHead; neither mmcv nor lakonlab is required.",
           "Checkpoints (multimodalart/MiniMax-H3-Pruned and Lakonik/pi-H3 adapters) stay outside Git and are supplied via the runtime profile."
         ]
@@ -92301,13 +92297,13 @@
       "notes": [
         "In-tree pi-H3 reuses canonical MiniMax-H3 attention, MLP, refiner, RoPE, Qwen3-VL conditioner, packed sequence layout, audio/video VAEs, and MP4 muxer.",
         "Pruned AdaLN table interpolation, FlowEulerODE schedule, LoRA + override loading, and pure-PyTorch SolH3DWDHead decoding are verified in weight-free unit tests.",
-        "Verified on H200 with real multimodalart/MiniMax-H3-Pruned + Lakonik/pi-H3/pi_h3_4step_dwd_adapter weights (1376x768, 124 frames at 24 fps, 4 steps, DWD pixel decoding with video_vae=None, 32 kHz stereo AAC).",
-        "Remaining adapter variants (2step-dwd, 4step, 2step), FP8 quantization, and Sol sparse attention kernels remain pending.",
+        "Verified on H200 across all 4 released Lakonik/pi-H3 adapters alongside multimodalart/MiniMax-H3-Pruned (1376x768, 124 frames at 24 fps, 32 kHz stereo AAC) covering 4step-dwd (35.95 s, DWD), 2step-dwd (18.5 s, DWD), 4step (T2VA via video VAE), and 2step (I2VA keyframe via video VAE).",
+        "Optional FP8 W8A8 quantization and Sol sparse attention kernels are not wired in this BF16 integration.",
         "pi-H3 reuses canonical WorldFoundry MiniMax-H3 blocks, refiner, RoPE, Qwen3-VL encoder, codecs, and MP4 muxer.",
         "Pruned rank-8 AdaLN table interpolation, strict LoRA + full-override fusion, FlowEulerODE scheduling, and pure-PyTorch SolH3DWDHead run without mmcv or lakonlab runtime dependencies.",
         "DWD variants (2step-dwd, 4step-dwd) decode RGB frames directly from final-step transformer features and skip video VAE decode.",
         "Non-DWD variants (2step, 4step) decode final video latents with the canonical MiniMax-H3 video VAE; all variants decode 32 kHz stereo audio with the canonical audio VAE.",
-        "Verified on H200 with real MiniMax-H3-Pruned + pi_h3_4step_dwd_adapter weights (1376x768, 124 frames, 4 steps, DWD without video VAE, 32 kHz stereo AAC). Remaining variants, FP8 quantization, and Sol sparse kernels remain pending."
+        "Verified on H200 across all 4 released adapters (4step-dwd, 2step-dwd, 4step, 2step) alongside MiniMax-H3-Pruned at 1376x768, 124 frames, 32 kHz stereo AAC. Optional FP8 quantization and Sol sparse kernels are not wired."
       ],
       "docs": {
         "curated": true,
@@ -92364,13 +92360,13 @@
         "limitations": [
           "Native output is 24 fps video with synchronized 32 kHz stereo audio in 2 or 4 FlowEulerODE steps.",
           "DWD variants skip video VAE decoding during generation; keyframe tasks (i2va, l2va, fl2va) still require the video VAE encoder to encode conditioning images.",
-          "H200 real-checkpoint replay is verified on 4step-dwd (T2VA); 2step/non-DWD variants, FP8 W8A8 linear quantization, and Sol sparse attention kernels are not yet validated.",
+          "Optional FP8 W8A8 linear quantization and Sol sparse attention kernels are not wired in this BF16 integration.",
           "Code is Apache-2.0; checkpoints are distributed under the MiniMax H3 Community License."
         ],
         "limitationsZh": [
           "原生输出为 24 fps 视频与同步 32 kHz 立体声音频，执行 2 步或 4 步 FlowEulerODE 采样。",
           "DWD 变体在生成阶段跳过视频 VAE 解码，但关键帧任务（i2va、l2va、fl2va）仍需视频 VAE 编码器编码条件图像。",
-          "已在 H200 上完成 4step-dwd（T2VA）真实权重验证；其余变体、FP8 W8A8 量化及 Sol 稀疏注意力内核尚未验证。",
+          "可选的 FP8 W8A8 量化与 Sol 稀疏注意力内核暂未接入当前 BF16 集成。",
           "源码采用 Apache-2.0 许可，模型权重遵循 MiniMax H3 Community License。"
         ],
         "paper": null,

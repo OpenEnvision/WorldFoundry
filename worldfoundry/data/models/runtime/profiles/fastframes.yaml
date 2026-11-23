@@ -62,7 +62,7 @@ artifact_filename: fastframes.mp4
 execution:
   environment: fastframes
   backend_stage: native_diffusion
-  runtime_status: selected_checkpoint_gpu_validated
+  runtime_status: all_released_checkpoints_gpu_validated
   integration_status: integrated
   pipeline_binding: fastframes
   defaults:
@@ -78,4 +78,4 @@ integration:
 notes:
 - FastFramesPipeline loads FastFrames-S (1.3B) by default; pass variant="fastframes-l" (or "ff-l") for FastFrames-L (14B).
 - Reuses WorldFoundry's canonical Wan2.1 norms, RoPE, sinusoidal timestep embeddings, UMT5-XXL encoder, and H.264 MP4 export.
-- Verified on H200 with real FastFrames-S checkpoints (832x480, 81 frames, 16 fps, context="refiner"); FastFrames-L (14B) real-checkpoint GPU replay remains pending.
+- Verified on H200 across both FastFrames-S (1.3B, 12.43 s) and FastFrames-L (14B, 16.05 s) at 832x480, 81 frames, 16 fps, context="refiner".

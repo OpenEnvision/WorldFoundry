@@ -52,4 +52,4 @@ result = pipe(
 
 ## 限制
 
-当前树内参考条件仅接受图像参考，视频与独立音频参考尚未接入。Diffusers 至 WorldFoundry 键映射（FewStep 630 键 / Pruned 626 键）、小型 FP32/BF16 组件数值一致性及调度公式已通过 CPU 单元测试，且 `17b-fewstep-ref2va`（`MiniMax-H3-Tiny-17B-FewStep-Ref2VA-v0.1` + `MiniMaxAI/MiniMax-H3`）已在 H200 上完成端到端真实权重验证（1376×768、124 帧 24 fps、6 步 MeanFlow 图像 Ref2VA 与 32 kHz 立体声 AAC）。其余变体（`17b-pruned-ref2va`、`17b-pruned-fl2va`、`14b-okd-ref2va`）与多卡执行仍待 GPU 验证。在 141 GB H200 上建议传入 `component_devices={"text_encoder": "cuda", "video_vae": "cuda", "audio_vae": "cuda"}` 以避免 CPU 解码耗时。
+当前树内参考条件仅接受图像参考，视频/独立音频参考与多卡执行尚未接入。Diffusers 至 WorldFoundry 键映射（FewStep 630 键 / Pruned 626 键）、小型 FP32/BF16 组件数值一致性及调度公式已通过 CPU 单元测试，且全部 4 个已发布 Diffusers 权重（`17b-fewstep-ref2va`、`17b-pruned-ref2va`、`17b-pruned-fl2va`、`14b-okd-ref2va`）均已配合 `MiniMaxAI/MiniMax-H3` 在 H200 上完成端到端真实权重验证（1376×768、124 帧 24 fps、32 kHz 立体声 AAC）。在 141 GB H200 上建议传入 `component_devices={"text_encoder": "cuda", "video_vae": "cuda", "audio_vae": "cuda"}` 以避免 CPU 解码耗时。

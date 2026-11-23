@@ -43,7 +43,7 @@ artifact_filename: pi-h3.mp4
 execution:
   environment: pi-h3
   backend_stage: shared_base_model_runtime
-  runtime_status: selected_checkpoint_gpu_validated
+  runtime_status: all_released_checkpoints_gpu_validated
   integration_status: integrated
   pipeline_binding: pi-h3
   defaults:
@@ -61,4 +61,4 @@ notes:
 - DWD variants (2step-dwd, 4step-dwd) decode RGB frames directly from final-step transformer features and skip video VAE decode.
 - Non-DWD variants (2step, 4step) decode final video latents with the canonical MiniMax-H3 video VAE; all variants decode 32 kHz
   stereo audio with the canonical audio VAE.
-- Verified on H200 with real MiniMax-H3-Pruned + pi_h3_4step_dwd_adapter weights (1376x768, 124 frames, 4 steps, DWD without video VAE, 32 kHz stereo AAC). Remaining variants, FP8 quantization, and Sol sparse kernels remain pending.
+- Verified on H200 across all 4 released adapters (4step-dwd, 2step-dwd, 4step, 2step) alongside MiniMax-H3-Pruned at 1376x768, 124 frames, 32 kHz stereo AAC. Optional FP8 quantization and Sol sparse kernels are not wired.

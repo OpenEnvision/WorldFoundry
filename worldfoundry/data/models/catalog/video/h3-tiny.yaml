@@ -61,15 +61,15 @@ runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRu
 runtime_profile: runtime-profile:h3-tiny
 pipeline_binding: h3-tiny
 runner_parity:
-  status: selected_checkpoint_gpu_validated
+  status: all_released_checkpoints_gpu_validated
   expected_artifacts:
   - h3-tiny.mp4
   notes:
   - Reuses the canonical MiniMax-H3 DiT blocks, token refiner, Qwen3-VL encoder, video/audio VAEs, and MP4 muxer.
   - Supports pruned 42-layer depth, narrowed 9792 block FFN vs 14336 refiner FFN, rank-8 AdaLN, and MeanFlow interval conditioning (6-step default, >=4 steps).
   - Diffusers-to-WorldFoundry key mapping is bijective across all 630 (FewStep) and 626 (Pruned) tensors; tiny FP32/BF16 numerical parity matches upstream modeling and schedule math.
-  - Verified on H200 with real H3-Tiny/MiniMax-H3-Tiny-17B-FewStep-Ref2VA-v0.1 + MiniMaxAI/MiniMax-H3 weights (1376x768, 124 frames at 24 fps, 6 MeanFlow steps, image Ref2VA, 32 kHz stereo AAC).
-  - Remaining variants (17b-pruned-ref2va, 17b-pruned-fl2va, 14b-okd-ref2va), video/audio references, and multi-GPU execution remain pending GPU validation.
+  - Verified on H200 across all 4 released Diffusers checkpoints alongside MiniMaxAI/MiniMax-H3 (1376x768, 124 frames at 24 fps, 32 kHz stereo AAC) covering 17b-fewstep-ref2va (6-step MeanFlow Ref2VA), 17b-pruned-ref2va (50-step Ref2VA), 17b-pruned-fl2va (50-step T2VA and I2VA), and 14b-okd-ref2va (50-step narrowed-FFN 9792 Ref2VA).
+  - Video/standalone-audio reference inputs and multi-GPU execution are not yet wired.
 catalog_category: video
 docs:
   publisher: H3-Tiny
@@ -79,11 +79,9 @@ docs:
   usage_notes_zh: 将 H3-Tiny Transformer 权重与共享 MiniMax-H3 基础快照（文本编码器、处理器、视频/音频 VAE）一同准备。参考图生成使用 Ref2VA 变体，T2VA/FL2VA 使用 17b-pruned-fl2va；MeanFlow 权重默认 6 步（>=4），剪枝/OKD 权重默认 50 步。
   limitations:
   - Outputs are 24 fps video with 32 kHz stereo audio; frame counts align upward to 17n+5.
-  - In-tree reference conditioning currently accepts image references only; video and standalone-audio references are not yet wired.
+  - In-tree reference conditioning currently accepts image references only; video/standalone-audio references and multi-GPU execution are not yet wired.
   - Code is Apache-2.0; model weights are distributed under the MiniMax H3 Community License.
-  - H200 real-checkpoint replay is verified on 17b-fewstep-ref2va (6-step Ref2VA); pruned/OKD variants and multi-GPU execution remain pending GPU validation.
   limitations_zh:
   - 原生输出为 24 fps 视频与 32 kHz 立体声音频，帧数向上对齐至 17n+5。
-  - 当前树内参考条件仅支持图像参考，暂未接入视频与独立音频参考。
+  - 当前树内参考条件仅支持图像参考，视频/独立音频参考与多卡执行尚未接入。
   - 代码采用 Apache-2.0，模型权重采用 MiniMax H3 Community License。
-  - 已在 H200 上完成 17b-fewstep-ref2va（6 步 Ref2VA）真实权重验证；剪枝/OKD 变体与多卡执行仍待验证。

@@ -69,6 +69,6 @@ result = pipeline(
 
 - 已发布的 FastFrames-S 与 FastFrames-L 路由**仅支持文生视频**，会拒绝图像与视频输入。
 - FastFrames 代码与权重受 **Apple Sample Code License** / **Apple AMLR** 条款约束；Wan2.1 衍生代码遵循 Apache-2.0。
-- 与上游 `apple-aiml-research/ml-fastframes`（`a65c5924`）的组件级与 CUDA BF16 cuDNN SDPA 数值一致性已通过测试验证（`tests/base_models/test_fastframes_components.py`、`tests/pipelines/test_fastframes_pipeline.py`），且 `fastframes-s`（1.3B）已在 H200 上完成真实权重端到端验证（832×480、81 帧、16 fps、`context="refiner"`）；`fastframes-l`（14B）真实权重 GPU 回放尚待验证。
+- 与上游 `apple-aiml-research/ml-fastframes`（`a65c5924`）的组件级与 CUDA BF16 cuDNN SDPA 数值一致性已通过测试验证（`tests/base_models/test_fastframes_components.py`、`tests/pipelines/test_fastframes_pipeline.py`），且全部两个官方变体（`fastframes-s` 1.3B 与 `fastframes-l` 14B）均已在 H200 上完成真实权重端到端验证（832×480、81 帧、16 fps、`context="refiner"`）。
 
 <ModelRelatedRecipes modelId="fastframes" locale="zh" />

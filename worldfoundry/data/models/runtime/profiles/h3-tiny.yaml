@@ -39,7 +39,7 @@ artifact_filename: h3-tiny.mp4
 execution:
   environment: h3-tiny
   backend_stage: shared_base_model_runtime
-  runtime_status: selected_checkpoint_gpu_validated
+  runtime_status: all_released_checkpoints_gpu_validated
   integration_status: integrated
   pipeline_binding: h3-tiny
   defaults:
@@ -54,4 +54,4 @@ notes:
 - Supports 42-layer pruned 17B and narrowed-FFN (9792 vs 14336 refiner) 14B checkpoints with rank-8 AdaLN and optional MeanFlow r_time_embedder.
 - MeanFlow checkpoints default to 6 inference steps (>=4); pruned and OKD checkpoints default to 50 steps.
 - Use a Ref2VA checkpoint for ref2va and 17b-pruned-fl2va for t2va/i2va/l2va/fl2va.
-- Code is Apache-2.0; model weights use the MiniMax H3 Community License. Verified on H200 with real 17b-fewstep-ref2va weights (1376x768, 124 frames, 6 steps, 32 kHz stereo AAC); pruned/OKD variants remain pending.
+- Code is Apache-2.0; model weights use the MiniMax H3 Community License. Verified on H200 across all 4 released Diffusers checkpoints (17b-fewstep-ref2va, 17b-pruned-ref2va, 17b-pruned-fl2va, 14b-okd-ref2va) at 1376x768, 124 frames, 32 kHz stereo AAC.

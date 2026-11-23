@@ -58,7 +58,7 @@ runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRu
 runtime_profile: runtime-profile:pi-h3
 pipeline_binding: pi-h3
 runner_parity:
-  status: selected_checkpoint_gpu_validated
+  status: all_released_checkpoints_gpu_validated
   expected_artifacts:
   - pi-h3.mp4
   notes:
@@ -66,9 +66,10 @@ runner_parity:
     packed sequence layout, audio/video VAEs, and MP4 muxer.
   - Pruned AdaLN table interpolation, FlowEulerODE schedule, LoRA + override loading, and pure-PyTorch
     SolH3DWDHead decoding are verified in weight-free unit tests.
-  - Verified on H200 with real multimodalart/MiniMax-H3-Pruned + Lakonik/pi-H3/pi_h3_4step_dwd_adapter
-    weights (1376x768, 124 frames at 24 fps, 4 steps, DWD pixel decoding with video_vae=None, 32 kHz stereo AAC).
-  - Remaining adapter variants (2step-dwd, 4step, 2step), FP8 quantization, and Sol sparse attention kernels remain pending.
+  - Verified on H200 across all 4 released Lakonik/pi-H3 adapters alongside multimodalart/MiniMax-H3-Pruned
+    (1376x768, 124 frames at 24 fps, 32 kHz stereo AAC) covering 4step-dwd (35.95 s, DWD), 2step-dwd (18.5 s, DWD),
+    4step (T2VA via video VAE), and 2step (I2VA keyframe via video VAE).
+  - Optional FP8 W8A8 quantization and Sol sparse attention kernels are not wired in this BF16 integration.
 catalog_category: video
 docs:
   publisher: LakonLab
@@ -85,10 +86,10 @@ docs:
   - Native output is 24 fps video with synchronized 32 kHz stereo audio in 2 or 4 FlowEulerODE steps.
   - DWD variants skip video VAE decoding during generation; keyframe tasks (i2va, l2va, fl2va) still
     require the video VAE encoder to encode conditioning images.
-  - H200 real-checkpoint replay is verified on 4step-dwd (T2VA); 2step/non-DWD variants, FP8 W8A8 linear quantization, and Sol sparse attention kernels are not yet validated.
+  - Optional FP8 W8A8 linear quantization and Sol sparse attention kernels are not wired in this BF16 integration.
   - Code is Apache-2.0; checkpoints are distributed under the MiniMax H3 Community License.
   limitations_zh:
   - 原生输出为 24 fps 视频与同步 32 kHz 立体声音频，执行 2 步或 4 步 FlowEulerODE 采样。
   - DWD 变体在生成阶段跳过视频 VAE 解码，但关键帧任务（i2va、l2va、fl2va）仍需视频 VAE 编码器编码条件图像。
-  - 已在 H200 上完成 4step-dwd（T2VA）真实权重验证；其余变体、FP8 W8A8 量化及 Sol 稀疏注意力内核尚未验证。
+  - 可选的 FP8 W8A8 量化与 Sol 稀疏注意力内核暂未接入当前 BF16 集成。
   - 源码采用 Apache-2.0 许可，模型权重遵循 MiniMax H3 Community License。

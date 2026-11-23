@@ -69,6 +69,6 @@ To pin explicit file locations instead of a single checkpoint root, pass `dit_pa
 
 - Released FastFrames-S and FastFrames-L routes are **text-to-video only**; image and video inputs are rejected.
 - FastFrames code and model weights are governed by the **Apple Sample Code License** / **Apple AMLR** terms; Wan2.1 derivatives remain Apache-2.0.
-- Component-level numerical parity against upstream `apple-aiml-research/ml-fastframes` (`a65c5924`) is covered by unit and CUDA BF16 cuDNN SDPA tests (`tests/base_models/test_fastframes_components.py`, `tests/pipelines/test_fastframes_pipeline.py`), and `fastframes-s` (1.3B) is verified end-to-end on H200 with real released weights (832×480, 81 frames, 16 fps, `context="refiner"`). `fastframes-l` (14B) real-checkpoint GPU replay remains pending.
+- Component-level numerical parity against upstream `apple-aiml-research/ml-fastframes` (`a65c5924`) is covered by unit and CUDA BF16 cuDNN SDPA tests (`tests/base_models/test_fastframes_components.py`, `tests/pipelines/test_fastframes_pipeline.py`), and both released variants (`fastframes-s` 1.3B and `fastframes-l` 14B) are verified end-to-end on H200 with real weights (832×480, 81 frames, 16 fps, `context="refiner"`).
 
 <ModelRelatedRecipes modelId="fastframes" locale="en" />

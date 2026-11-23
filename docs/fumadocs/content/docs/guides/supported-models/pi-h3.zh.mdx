@@ -31,4 +31,4 @@ wf run pi-h3 --pipeline.task-profile t2va --json
 
 ## 限制
 
-DWD 变体在生成阶段跳过视频 VAE 解码，但关键帧任务（`i2va`、`l2va`、`fl2va`）仍需视频 VAE 编码器编码条件图像。已在 H200 上完成 `4step-dwd`（`multimodalart/MiniMax-H3-Pruned` + `Lakonik/pi-H3/pi_h3_4step_dwd_adapter`，1376×768、124 帧 24 fps、4 步、`video_vae=None`、32 kHz 立体声 AAC）的真实权重端到端验证；其余变体（`2step-dwd`、`4step`、`2step`）、FP8 W8A8 量化及 Sol 稀疏注意力内核在当前集成中尚未验证。
+DWD 变体在生成阶段跳过视频 VAE 解码，但关键帧任务（`i2va`、`l2va`、`fl2va`）仍需视频 VAE 编码器编码条件图像。已在 H200 上配合 `multimodalart/MiniMax-H3-Pruned` 完成全部 4 个官方适配器变体（`4step-dwd`、`2step-dwd`、`4step`、`2step` 含 `i2va` 关键帧，1376×768、124 帧 24 fps、32 kHz 立体声 AAC）的真实权重端到端验证。可选的 FP8 W8A8 量化及 Sol 稀疏注意力内核暂未接入当前 BF16 集成。
