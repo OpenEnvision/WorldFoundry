@@ -857,6 +857,22 @@ weights remain separate model assets subject to the MiniMax H3 Community
 License Agreement.
 
 
+pi-H3 few-step and DWD MiniMax-H3 inference (LakonLab)
+------------------------------------------------------
+Copyright 2026 Hansheng Chen
+Source: https://github.com/Lakonik/LakonLab
+Source revision: 2ee2b334374ec91b7cee371a85a524bf4ba644d3
+Source license: Apache-2.0
+Model license: MiniMax H3 Community License Agreement
+
+WorldFoundry adapts LakonLab's pi-H3 pruned rank-8 AdaLN time-table embedder,
+FlowEulerODEScheduler, LoRA/override adapter loader, RGBColorEncoder, and
+SolH3DWDHead (adapted from the Apache-2.0 Sol-H3-VAE reference decoder) onto
+the canonical MiniMax-H3 components. Released pi-H3 adapters (Lakonik/pi-H3)
+and MiniMax-H3-Pruned weights remain separate model assets subject to the
+MiniMax H3 Community License Agreement.
+
+
 Dependencies and Licenses:
 
 This open-source project builds upon the following open-source model(s) and/or software, each of which remains licensed under its original license(s). Certain component(s) may include modifications made by Tencent ("Tencent Modifications"), which are Copyright (C) Tencent.

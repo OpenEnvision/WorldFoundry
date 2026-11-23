@@ -1,0 +1,34 @@
+---
+title: "pi-H3"
+description: "LakonLab pi-H3 two- and four-step MiniMax-H3 video/audio generation with optional Sol-H3 DWD pixel decoding."
+modelId: "pi-h3"
+pageSource: authored
+---
+
+pi-H3 accelerates MiniMax-H3 joint video and 32 kHz stereo audio generation to 2 or 4 FlowEulerODE steps, with optional Decoding Without a Decoder (DWD) via a Sol-H3 pixel refiner head that predicts RGB frames directly from final-step transformer features without running the video VAE decoder.
+
+Code: [Lakonik/LakonLab](https://github.com/Lakonik/LakonLab) (`2ee2b334374ec91b7cee371a85a524bf4ba644d3`).
+Checkpoints: [Lakonik/pi-H3](https://huggingface.co/Lakonik/pi-H3) and [multimodalart/MiniMax-H3-Pruned](https://huggingface.co/multimodalart/MiniMax-H3-Pruned).
+
+## Runtime contract
+
+pi-H3 supports four adapter variants:
+
+| Variant | Adapter subfolder | Steps | Video decoding |
+| --- | --- | --- | --- |
+| `4step-dwd` (default) | `pi_h3_4step_dwd_adapter` | 4 | `SolH3DWDHead` + `RGBColorEncoder` |
+| `2step-dwd` | `pi_h3_2step_dwd_adapter` | 2 | `SolH3DWDHead` + `RGBColorEncoder` |
+| `4step` | `pi_h3_4step_adapter` | 4 | MiniMax-H3 video VAE |
+| `2step` | `pi_h3_2step_adapter` | 2 | MiniMax-H3 video VAE |
+
+Supported tasks are `t2va` (text to video+audio), `i2va` (first frame), `l2va` (last frame), and `fl2va` (first and last frames). Outputs are 24 FPS MP4 clips with muxed 32 kHz stereo audio, with frame counts aligned upward to `17n + 5` and spatial dimensions aligned to multiples of 32.
+
+```bash
+wf run pi-h3 --pipeline.task-profile t2va --json
+```
+
+Stage `multimodalart/MiniMax-H3-Pruned` alongside the selected `Lakonik/pi-H3` adapter subfolder before running. Both repositories are non-gated; checkpoints are distributed under the MiniMax H3 Community License.
+
+## Limitations
+
+DWD variants skip video VAE decoding during generation, but keyframe tasks (`i2va`, `l2va`, `fl2va`) still require the video VAE encoder to encode conditioning images. End-to-end real-checkpoint H200 inference is verified for `4step-dwd` (`multimodalart/MiniMax-H3-Pruned` + `Lakonik/pi-H3/pi_h3_4step_dwd_adapter`, 1376×768, 124 frames at 24 fps, 4 steps, `video_vae=None`, 32 kHz stereo AAC). Remaining variants (`2step-dwd`, `4step`, `2step`), FP8 W8A8 linear quantization, and Sol sparse attention kernels are not yet validated in this integration.

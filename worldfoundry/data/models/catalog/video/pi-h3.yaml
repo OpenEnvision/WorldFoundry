@@ -1,0 +1,94 @@
+id: pi-h3
+name: pi-H3
+aliases:
+- pi_h3
+- pih3
+- pi-h3-dwd
+- pi-h3-2step-dwd
+- pi-h3-4step-dwd
+- pi-h3-2step
+- pi-h3-4step
+- minimax-h3-pi
+tasks:
+- text-to-video
+- image-to-video
+- audio-video-generation
+output_artifacts:
+- generated_video
+provider: LakonLab
+source:
+  status: open_source
+  official_repo_url: https://github.com/Lakonik/LakonLab
+  revision: 2ee2b334374ec91b7cee371a85a524bf4ba644d3
+  license: minimax-h3-community
+  requires_auth: false
+official_sources:
+  github:
+    url: https://github.com/Lakonik/LakonLab
+    revision: 2ee2b334374ec91b7cee371a85a524bf4ba644d3
+  huggingface:
+  - repo_id: Lakonik/pi-H3
+    type: model
+  - repo_id: multimodalart/MiniMax-H3-Pruned
+    type: model
+checkpoints:
+- repo_id: Lakonik/pi-H3
+  revision: 4a864589b0fac3d14768f932c930c4dcf1a17b56
+  subfolder: pi_h3_4step_dwd_adapter
+  role: 4step_dwd_adapter
+- repo_id: Lakonik/pi-H3
+  revision: 4a864589b0fac3d14768f932c930c4dcf1a17b56
+  subfolder: pi_h3_2step_dwd_adapter
+  role: 2step_dwd_adapter
+- repo_id: Lakonik/pi-H3
+  revision: 4a864589b0fac3d14768f932c930c4dcf1a17b56
+  subfolder: pi_h3_4step_adapter
+  role: 4step_adapter
+- repo_id: Lakonik/pi-H3
+  revision: 4a864589b0fac3d14768f932c930c4dcf1a17b56
+  subfolder: pi_h3_2step_adapter
+  role: 2step_adapter
+- repo_id: multimodalart/MiniMax-H3-Pruned
+  revision: 1a0ef5e65b639e84af81d883817968532180e9c7
+  role: pruned_h3_base
+integration:
+  status: integrated
+  backend_stage: shared_base_model_runtime
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+runtime_profile: runtime-profile:pi-h3
+pipeline_binding: pi-h3
+runner_parity:
+  status: selected_checkpoint_gpu_validated
+  expected_artifacts:
+  - pi-h3.mp4
+  notes:
+  - In-tree pi-H3 reuses canonical MiniMax-H3 attention, MLP, refiner, RoPE, Qwen3-VL conditioner,
+    packed sequence layout, audio/video VAEs, and MP4 muxer.
+  - Pruned AdaLN table interpolation, FlowEulerODE schedule, LoRA + override loading, and pure-PyTorch
+    SolH3DWDHead decoding are verified in weight-free unit tests.
+  - Verified on H200 with real multimodalart/MiniMax-H3-Pruned + Lakonik/pi-H3/pi_h3_4step_dwd_adapter
+    weights (1376x768, 124 frames at 24 fps, 4 steps, DWD pixel decoding with video_vae=None, 32 kHz stereo AAC).
+  - Remaining adapter variants (2step-dwd, 4step, 2step), FP8 quantization, and Sol sparse attention kernels remain pending.
+catalog_category: video
+docs:
+  publisher: LakonLab
+  overview: Two- and four-step MiniMax-H3 acceleration with optional Decoding Without a Decoder (Sol-H3 DWD)
+    for direct joint video and stereo audio generation.
+  overview_zh: 基于 MiniMax-H3 的 2 步与 4 步加速模型，支持可选的 Sol-H3 无解码器直出像素（DWD）联合音视频生成。
+  usage_notes: Stage multimodalart/MiniMax-H3-Pruned together with one Lakonik/pi-H3 adapter subfolder
+    (pi_h3_4step_dwd_adapter, pi_h3_2step_dwd_adapter, pi_h3_4step_adapter, or pi_h3_2step_adapter).
+    Select variant=2step-dwd, 4step-dwd, 2step, or 4step at load time.
+  usage_notes_zh: 准备 multimodalart/MiniMax-H3-Pruned 基础快照及对应的 Lakonik/pi-H3 适配器子目录
+    （pi_h3_4step_dwd_adapter、pi_h3_2step_dwd_adapter、pi_h3_4step_adapter 或 pi_h3_2step_adapter），
+    并在加载时通过 variant=2step-dwd、4step-dwd、2step 或 4step 选择变体。
+  limitations:
+  - Native output is 24 fps video with synchronized 32 kHz stereo audio in 2 or 4 FlowEulerODE steps.
+  - DWD variants skip video VAE decoding during generation; keyframe tasks (i2va, l2va, fl2va) still
+    require the video VAE encoder to encode conditioning images.
+  - H200 real-checkpoint replay is verified on 4step-dwd (T2VA); 2step/non-DWD variants, FP8 W8A8 linear quantization, and Sol sparse attention kernels are not yet validated.
+  - Code is Apache-2.0; checkpoints are distributed under the MiniMax H3 Community License.
+  limitations_zh:
+  - 原生输出为 24 fps 视频与同步 32 kHz 立体声音频，执行 2 步或 4 步 FlowEulerODE 采样。
+  - DWD 变体在生成阶段跳过视频 VAE 解码，但关键帧任务（i2va、l2va、fl2va）仍需视频 VAE 编码器编码条件图像。
+  - 已在 H200 上完成 4step-dwd（T2VA）真实权重验证；其余变体、FP8 W8A8 量化及 Sol 稀疏注意力内核尚未验证。
+  - 源码采用 Apache-2.0 许可，模型权重遵循 MiniMax H3 Community License。

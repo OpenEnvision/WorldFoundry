@@ -202,6 +202,8 @@ INFER_TENSOR_CONTRACTS = \
 	tests/pipelines/test_h3_world.py \
 	tests/base_models/test_h3_tiny_components.py \
 	tests/pipelines/test_h3_tiny_pipeline.py \
+	tests/base_models/test_pi_h3_components.py \
+	tests/pipelines/test_pi_h3_pipeline.py \
 	tests/base_models/diffusion_model/models/initializers/test_easyanimate_conditioning.py \
 	tests/synthesis/test_easyanimate_runtime.py \
 	tests/synthesis/test_lyra1_attention_reuse.py \

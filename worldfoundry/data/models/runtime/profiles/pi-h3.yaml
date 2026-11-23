@@ -1,0 +1,64 @@
+schema_version: 2
+model_id: pi-h3
+display_name: pi-H3
+task_family: video_generation
+groups: [video, audio, image_conditioning]
+environment: pi-h3
+source_repos:
+- url: https://github.com/Lakonik/LakonLab
+  revision: 2ee2b334374ec91b7cee371a85a524bf4ba644d3
+  in_tree_path: worldfoundry/pipelines/pi_h3
+checkpoints:
+- repo_id: Lakonik/pi-H3
+  revision: 4a864589b0fac3d14768f932c930c4dcf1a17b56
+  subfolder: pi_h3_4step_dwd_adapter
+  role: 4step_dwd_adapter
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Lakonik--pi-H3/pi_h3_4step_dwd_adapter
+- repo_id: Lakonik/pi-H3
+  revision: 4a864589b0fac3d14768f932c930c4dcf1a17b56
+  subfolder: pi_h3_2step_dwd_adapter
+  role: 2step_dwd_adapter
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Lakonik--pi-H3/pi_h3_2step_dwd_adapter
+- repo_id: Lakonik/pi-H3
+  revision: 4a864589b0fac3d14768f932c930c4dcf1a17b56
+  subfolder: pi_h3_4step_adapter
+  role: 4step_adapter
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Lakonik--pi-H3/pi_h3_4step_adapter
+- repo_id: Lakonik/pi-H3
+  revision: 4a864589b0fac3d14768f932c930c4dcf1a17b56
+  subfolder: pi_h3_2step_adapter
+  role: 2step_adapter
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Lakonik--pi-H3/pi_h3_2step_adapter
+- repo_id: multimodalart/MiniMax-H3-Pruned
+  revision: 1a0ef5e65b639e84af81d883817968532180e9c7
+  role: pruned_h3_base
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/multimodalart--MiniMax-H3-Pruned
+input_schema:
+  prompt: true
+  image: optional
+  video: false
+  actions: [task, variant, aspect_ratio, short_edge, height, width, num_frames, duration_seconds, num_inference_steps, seed]
+artifact_kind: generated_video
+artifact_filename: pi-h3.mp4
+execution:
+  environment: pi-h3
+  backend_stage: shared_base_model_runtime
+  runtime_status: selected_checkpoint_gpu_validated
+  integration_status: integrated
+  pipeline_binding: pi-h3
+  defaults:
+    variant: 4step-dwd
+    num_frames: 124
+    fps: 24
+    num_inference_steps: 4
+    seed: 42
+integration:
+  status: integrated
+notes:
+- pi-H3 reuses canonical WorldFoundry MiniMax-H3 blocks, refiner, RoPE, Qwen3-VL encoder, codecs, and MP4 muxer.
+- Pruned rank-8 AdaLN table interpolation, strict LoRA + full-override fusion, FlowEulerODE scheduling, and pure-PyTorch
+  SolH3DWDHead run without mmcv or lakonlab runtime dependencies.
+- DWD variants (2step-dwd, 4step-dwd) decode RGB frames directly from final-step transformer features and skip video VAE decode.
+- Non-DWD variants (2step, 4step) decode final video latents with the canonical MiniMax-H3 video VAE; all variants decode 32 kHz
+  stereo audio with the canonical audio VAE.
+- Verified on H200 with real MiniMax-H3-Pruned + pi_h3_4step_dwd_adapter weights (1376x768, 124 frames, 4 steps, DWD without video VAE, 32 kHz stereo AAC). Remaining variants, FP8 quantization, and Sol sparse kernels remain pending.

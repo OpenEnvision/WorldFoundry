@@ -1,0 +1,24 @@
+schema_version: 2
+model_id: pi-h3
+env_name: worldfoundry-unified-cu128
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu128
+conda_packages: [python=3.11, pip, ffmpeg]
+pip_extra_index_url: https://download.pytorch.org/whl/cu128
+pip_packages:
+- torch
+- torchvision
+- torchaudio
+- transformers
+- diffusers
+- accelerate
+- safetensors
+- av
+- pillow
+- numpy
+- pyyaml
+validation_imports: [torch, transformers, safetensors, av, PIL, worldfoundry.pipelines.pi_h3.pipeline_pi_h3]
+notes:
+- pi-H3 runs in-tree over canonical MiniMax-H3 components and pure-PyTorch SolH3DWDHead; neither mmcv nor lakonlab is required.
+- Checkpoints (multimodalart/MiniMax-H3-Pruned and Lakonik/pi-H3 adapters) stay outside Git and are supplied via the runtime profile.

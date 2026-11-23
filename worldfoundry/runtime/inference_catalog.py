@@ -80,6 +80,7 @@ from worldfoundry.runtime.inference_specs.matrix_game_2 import MATRIX_GAME_2_INF
 from worldfoundry.runtime.inference_specs.matrix_game_3 import MATRIX_GAME_3_INFERENCE_SPEC
 from worldfoundry.runtime.inference_specs.mira import MIRA_INFERENCE_SPEC
 from worldfoundry.runtime.inference_specs.neoverse import NEOVERSE_INFERENCE_SPEC
+from worldfoundry.runtime.inference_specs.pi_h3 import PI_H3_INFERENCE_SPEC
 from worldfoundry.runtime.inference_specs.pika_h3_flex import PIKA_H3_FLEX_INFERENCE_SPEC
 from worldfoundry.runtime.inference_specs.rolling_forcing import ROLLING_FORCING_INFERENCE_SPEC
 from worldfoundry.runtime.inference_specs.rt1 import RT1_INFERENCE_SPEC
@@ -217,6 +218,7 @@ _MODEL_INFERENCE_SPECS: dict[str, ModelInferenceSpec] = {
     "hyperflow": HYPERFLOW_INFERENCE_SPEC,
     "h3-tiny": H3_TINY_INFERENCE_SPEC,
     "h3-world": H3_WORLD_INFERENCE_SPEC,
+    "pi-h3": PI_H3_INFERENCE_SPEC,
     "pika-h3-flex": PIKA_H3_FLEX_INFERENCE_SPEC,
     RT1_INFERENCE_SPEC.model_family_id: RT1_INFERENCE_SPEC,
     DREAMDOJO_STUDENT_INFERENCE_SPEC.model_family_id: DREAMDOJO_STUDENT_INFERENCE_SPEC,
