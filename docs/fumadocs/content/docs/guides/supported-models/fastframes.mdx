@@ -1,0 +1,74 @@
+---
+title: "FastFrames"
+description: "Apple ML Research & Cornell interactive-latency autoregressive video diffusion models (FastFrames-S 1.3B and FastFrames-L 14B), replacing the clean-context DiT pass with a KV refinement network and replacing the Wan2.1 VAE decoder with a causal ConvNeXt pixel decoder."
+modelId: "fastframes"
+pageSource: authored
+---
+
+FastFrames generates 832×480 video autoregressively at interactive latency by pairing a two-step causal Wan2.1 DiT with two lightweight learned modules: a **KV refinement network** that replaces the clean-context DiT pass at `t = 0` after frame 0, and a **causal ConvNeXt pixel decoder** that maps pre-head DiT hidden states directly into RGB frames without invoking the Wan2.1 VAE decoder. WorldFoundry integrates both **FastFrames-S** (1.3B) and **FastFrames-L** (14B) through `FastFramesPipeline`.
+
+<ModelPaperFigures modelId="fastframes" locale="en" />
+
+Paper: [FastFrames: Video Generation at Interactive Latency](https://arxiv.org/abs/2611.23226) (`arXiv:2611.23226`). Project: [apple-aiml-research.github.io/ml-fastframes](https://apple-aiml-research.github.io/ml-fastframes/). Code: [apple-aiml-research/ml-fastframes](https://github.com/apple-aiml-research/ml-fastframes) (pinned revision `a65c59240e01cf1de86197fa771ca09b38cf592a`). Publisher: Apple ML Research / Cornell University. Weights: [`apple/FastFrames-S`](https://huggingface.co/apple/FastFrames-S) (`aa099efcedf1b65447106bf9004cde75821f7387`) and [`apple/FastFrames-L`](https://huggingface.co/apple/FastFrames-L) (`d18ec5f054bb03f6b8e561a63d52af3142b5b81d`).
+
+<ModelCommandBuilder modelId="fastframes" locale="en" />
+
+## What it is for
+
+Use `FastFramesPipeline` (`wf run fastframes`) for low-latency **text-to-video** generation at 832×480, 81 frames, 16 fps.
+
+- **`fastframes-s`** (`ff-s`, default): 1.3B backbone using the frozen two-step frame-wise Causal Forcing++ generator (`zhuhz22/Causal-Forcing`, `causal-forcing++/framewise-2step.pt`) with Apple's KV refinement network and unbridged 1536-dim causal pixel decoder.
+- **`fastframes-l`** (`ff-l`): 14B two-step causal Wan2.1 generator (`apple/FastFrames-L`) with fused `FastFramesFastOps` (fused QKV, FP32 real-valued RoPE, GEMM patch embedding), KV refinement network, and a bridged 5120→1536 causal pixel decoder.
+
+Score generated clips on [VBench](/docs/evaluation/benchmark-hub/vbench).
+
+## Variants
+
+| Variant | Aliases | DiT Checkpoint | Add-on Weights | Wan2.1 Text Encoder | First-Frame Schedule | Steady Schedule | Pixel Decoder |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `fastframes-s` (default) | `ff-s`, `fastframes_s` | `zhuhz22/Causal-Forcing` `causal-forcing++/framewise-2step.pt` | `apple/FastFrames-S` (`kv_refiner.safetensors`, `pixel_decoder.safetensors`) | `Wan-AI/Wan2.1-T2V-1.3B` | `[1000.0, 937.5, 833.3333, 625.0]` | `[1000.0, 833.3333]` | `PixelDecoder` (fp32) |
+| `fastframes-l` | `ff-l`, `fastframes_l` | `apple/FastFrames-L` `fastframes-l/dit.safetensors` | `apple/FastFrames-L` (`kv_refiner.safetensors`, `pixel_decoder.safetensors`) | `Wan-AI/Wan2.1-T2V-14B` | `[1000.0, 937.0, 833.0, 625.0]` | `[1000.0, 833.0]` | `BridgedPixelDecoder` (bf16) |
+
+WorldFoundry reuses its canonical Wan2.1 normalization (`WanLayerNorm`, `WanRMSNorm`), RoPE frequencies (`rope_params`), sinusoidal embeddings (`sinusoidal_embedding_1d`), UMT5-XXL prompt encoder (`WanUMT5PromptEncoder`), and H.264 MP4 export (`save_image_or_video_tensor`).
+
+## Runtime contract
+
+| Knob | Default | Notes |
+| --- | --- | --- |
+| Size | **832×480** | `height: 480`, `width: 832`; positive multiples of 16 |
+| Frames | **81** | `4k + 1` pixel frames aligned from 21 latent frames (84 → 81) |
+| FPS | **16** | |
+| Context | **`refiner`** | `refiner` uses `KVRefinementNetwork` on frames ≥ 1; `dit` runs a clean `t = 0` DiT pass per frame |
+| Noise | Variant default | `sequential` for FastFrames-S, `pregenerated` for FastFrames-L; `reseeded` is also supported |
+| Seed | **0** | Non-negative integer |
+
+## Running in WorldFoundry
+
+FastFrames runs in `worldfoundry-unified-cu128` without requiring `flash-attn`. Attention prefers PyTorch cuDNN SDPA on CUDA BF16 and falls back to standard PyTorch SDPA on unsupported shapes or CPU.
+
+```python
+from worldfoundry.pipelines.fastframes import FastFramesPipeline
+
+pipeline = FastFramesPipeline.from_pretrained(
+    model_path="/path/to/checkpoints",
+    variant="fastframes-s",
+    device="cuda",
+)
+result = pipeline(
+    prompt="A corgi surfing a wave at sunset",
+    seed=0,
+    context="refiner",
+    output_path="outputs/corgi.mp4",
+    return_dict=True,
+)
+```
+
+To pin explicit file locations instead of a single checkpoint root, pass `dit_path`, `refiner_path`, `decoder_path`, and `wan_dir` (or `checkpoint_overrides={"dit": ..., "refiner": ..., "decoder": ..., "wan_dir": ...}`).
+
+## Limitations and licensing
+
+- Released FastFrames-S and FastFrames-L routes are **text-to-video only**; image and video inputs are rejected.
+- FastFrames code and model weights are governed by the **Apple Sample Code License** / **Apple AMLR** terms; Wan2.1 derivatives remain Apache-2.0.
+- Component-level numerical parity against upstream `apple-aiml-research/ml-fastframes` (`a65c5924`) is covered by unit and CUDA BF16 cuDNN SDPA tests (`tests/base_models/test_fastframes_components.py`, `tests/pipelines/test_fastframes_pipeline.py`), and `fastframes-s` (1.3B) is verified end-to-end on H200 with real released weights (832×480, 81 frames, 16 fps, `context="refiner"`). `fastframes-l` (14B) real-checkpoint GPU replay remains pending.
+
+<ModelRelatedRecipes modelId="fastframes" locale="en" />

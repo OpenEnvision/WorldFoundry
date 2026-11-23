@@ -1,0 +1,19 @@
+schema_version: 2
+binding_id: fastframes
+model_id: fastframes
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.fastframes.pipeline_fastframes:FastFramesPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation
+aliases:
+- FastFrames
+- fastframes-s
+- fastframes-l
+- ff-s
+- ff-l
+- fastframes_s
+- fastframes_l

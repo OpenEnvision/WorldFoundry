@@ -53,6 +53,7 @@ from worldfoundry.runtime.inference_specs.fantasyworld import (
     FANTASYWORLD_INFERENCE_SPEC,
     FANTASYWORLD_WAN21_INFERENCE_SPEC,
 )
+from worldfoundry.runtime.inference_specs.fastframes import FASTFRAMES_INFERENCE_SPEC
 from worldfoundry.runtime.inference_specs.flashworld import FLASHWORLD_INFERENCE_SPEC
 from worldfoundry.runtime.inference_specs.gen3c import GEN3C_INFERENCE_SPEC
 from worldfoundry.runtime.inference_specs.genie_envisioner import GENIE_ENVISIONER_INFERENCE_SPEC
@@ -167,6 +168,7 @@ ASSET_GATED_WORLD_RUNTIME_MODEL_IDS = _asset_gated_world_runtime_model_ids()
 TEXT_ONLY_DEFAULT_VIDEO_MODEL_IDS = frozenset(
     {
         "causal-forcing",
+        "fastframes",
         "rolling-forcing",
         "self-forcing",
     }
@@ -220,6 +222,7 @@ _MODEL_INFERENCE_SPECS: dict[str, ModelInferenceSpec] = {
     "h3-world": H3_WORLD_INFERENCE_SPEC,
     "pi-h3": PI_H3_INFERENCE_SPEC,
     "pika-h3-flex": PIKA_H3_FLEX_INFERENCE_SPEC,
+    "fastframes": FASTFRAMES_INFERENCE_SPEC,
     RT1_INFERENCE_SPEC.model_family_id: RT1_INFERENCE_SPEC,
     DREAMDOJO_STUDENT_INFERENCE_SPEC.model_family_id: DREAMDOJO_STUDENT_INFERENCE_SPEC,
     MATRIX_GAME4_EGYPT_INFERENCE_SPEC.model_family_id: MATRIX_GAME4_EGYPT_INFERENCE_SPEC,

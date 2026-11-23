@@ -1,0 +1,74 @@
+---
+title: "FastFrames"
+description: "Apple ML Research 与康奈尔大学发布的交互级延迟自回归视频扩散模型（FastFrames-S 1.3B 与 FastFrames-L 14B），以 KV 细化网络替代每帧干净上下文 DiT 前向，并以因果 ConvNeXt 像素解码器替代 Wan2.1 VAE 解码器。"
+modelId: "fastframes"
+pageSource: authored
+---
+
+FastFrames 通过在两步因果 Wan2.1 DiT 之外加入两个轻量级网络实现交互级延迟的 832×480 自回归视频生成：**KV 细化网络**在第 0 帧之后替代 `t = 0` 干净上下文 DiT 前向，**因果 ConvNeXt 像素解码器**直接将 DiT pre-head 隐状态解码为 RGB 视频帧而无需调用 Wan2.1 VAE 解码器。WorldFoundry 通过 `FastFramesPipeline` 同时集成 **FastFrames-S**（1.3B）与 **FastFrames-L**（14B）。
+
+<ModelPaperFigures modelId="fastframes" locale="zh" />
+
+论文：[FastFrames: Video Generation at Interactive Latency](https://arxiv.org/abs/2611.23226)（`arXiv:2611.23226`）。项目页：[apple-aiml-research.github.io/ml-fastframes](https://apple-aiml-research.github.io/ml-fastframes/)。代码：[apple-aiml-research/ml-fastframes](https://github.com/apple-aiml-research/ml-fastframes)（固定 revision `a65c59240e01cf1de86197fa771ca09b38cf592a`）。发布方：Apple ML Research / 康奈尔大学。权重：[`apple/FastFrames-S`](https://huggingface.co/apple/FastFrames-S)（`aa099efcedf1b65447106bf9004cde75821f7387`）与 [`apple/FastFrames-L`](https://huggingface.co/apple/FastFrames-L)（`d18ec5f054bb03f6b8e561a63d52af3142b5b81d`）。
+
+<ModelCommandBuilder modelId="fastframes" locale="zh" />
+
+## 用来做什么
+
+使用 `FastFramesPipeline`（`wf run fastframes`）进行低延迟 **832×480、81 帧、16 fps 文生视频**。
+
+- **`fastframes-s`**（`ff-s`，默认）：1.3B 骨干，复用冻结的两步逐帧 Causal Forcing++ 生成器（`zhuhz22/Causal-Forcing`，`causal-forcing++/framewise-2step.pt`），搭配 Apple 的 KV 细化网络与 1536 维因果像素解码器。
+- **`fastframes-l`**（`ff-l`）：14B 两步因果 Wan2.1 生成器（`apple/FastFrames-L`），启用融合 `FastFramesFastOps`（融合 QKV、FP32 实数 RoPE、GEMM patch embedding）、KV 细化网络以及 5120→1536 桥接因果像素解码器。
+
+可使用 [VBench](/zh/docs/evaluation/benchmark-hub/vbench) 对生成视频进行评测。
+
+## 变体
+
+| 变体 | 别名 | DiT 权重 | 附加权重 | Wan2.1 文本编码器 | 首帧时间表 | 后续帧时间表 | 像素解码器 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `fastframes-s`（默认） | `ff-s`、`fastframes_s` | `zhuhz22/Causal-Forcing` `causal-forcing++/framewise-2step.pt` | `apple/FastFrames-S`（`kv_refiner.safetensors`、`pixel_decoder.safetensors`） | `Wan-AI/Wan2.1-T2V-1.3B` | `[1000.0, 937.5, 833.3333, 625.0]` | `[1000.0, 833.3333]` | `PixelDecoder`（fp32） |
+| `fastframes-l` | `ff-l`、`fastframes_l` | `apple/FastFrames-L` `fastframes-l/dit.safetensors` | `apple/FastFrames-L`（`kv_refiner.safetensors`、`pixel_decoder.safetensors`） | `Wan-AI/Wan2.1-T2V-14B` | `[1000.0, 937.0, 833.0, 625.0]` | `[1000.0, 833.0]` | `BridgedPixelDecoder`（bf16） |
+
+WorldFoundry 直接复用规范化的 Wan2.1 归一化层（`WanLayerNorm`、`WanRMSNorm`）、RoPE 频率（`rope_params`）、正弦时间步编码（`sinusoidal_embedding_1d`）、UMT5-XXL 提示词编码器（`WanUMT5PromptEncoder`）与 H.264 MP4 导出接口（`save_image_or_video_tensor`）。
+
+## 运行时契约
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| 分辨率 | **832×480** | `height: 480`、`width: 832`，须为 16 的正整数倍 |
+| 帧数 | **81** | 满足 `4k + 1`，由 21 个潜帧解码并裁去前 3 帧得到（84 → 81） |
+| FPS | **16** | |
+| 上下文模式 | **`refiner`** | `refiner` 在帧号 ≥ 1 时使用 `KVRefinementNetwork`；`dit` 对每帧运行 `t = 0` 干净 DiT 前向 |
+| 噪声模式 | 变体默认 | FastFrames-S 为 `sequential`，FastFrames-L 为 `pregenerated`，亦支持 `reseeded` |
+| Seed | **0** | 非负整数 |
+
+## 在 WorldFoundry 中运行
+
+FastFrames 运行在统一的 `worldfoundry-unified-cu128` 环境中，无需安装 `flash-attn`。注意力计算在 CUDA BF16 下优先使用 PyTorch cuDNN SDPA，在其他设备或形状下自动回退至标准 PyTorch SDPA。
+
+```python
+from worldfoundry.pipelines.fastframes import FastFramesPipeline
+
+pipeline = FastFramesPipeline.from_pretrained(
+    model_path="/path/to/checkpoints",
+    variant="fastframes-s",
+    device="cuda",
+)
+result = pipeline(
+    prompt="A corgi surfing a wave at sunset",
+    seed=0,
+    context="refiner",
+    output_path="outputs/corgi.mp4",
+    return_dict=True,
+)
+```
+
+若需显式指定各权重路径，可传入 `dit_path`、`refiner_path`、`decoder_path` 与 `wan_dir`（或 `checkpoint_overrides={"dit": ..., "refiner": ..., "decoder": ..., "wan_dir": ...}`）。
+
+## 局限与许可
+
+- 已发布的 FastFrames-S 与 FastFrames-L 路由**仅支持文生视频**，会拒绝图像与视频输入。
+- FastFrames 代码与权重受 **Apple Sample Code License** / **Apple AMLR** 条款约束；Wan2.1 衍生代码遵循 Apache-2.0。
+- 与上游 `apple-aiml-research/ml-fastframes`（`a65c5924`）的组件级与 CUDA BF16 cuDNN SDPA 数值一致性已通过测试验证（`tests/base_models/test_fastframes_components.py`、`tests/pipelines/test_fastframes_pipeline.py`），且 `fastframes-s`（1.3B）已在 H200 上完成真实权重端到端验证（832×480、81 帧、16 fps、`context="refiner"`）；`fastframes-l`（14B）真实权重 GPU 回放尚待验证。
+
+<ModelRelatedRecipes modelId="fastframes" locale="zh" />

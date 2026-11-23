@@ -873,6 +873,23 @@ and MiniMax-H3-Pruned weights remain separate model assets subject to the
 MiniMax H3 Community License Agreement.
 
 
+FastFrames interactive-latency autoregressive video diffusion
+-------------------------------------------------------------
+Copyright (C) 2026 Apple Inc. All Rights Reserved.
+Portions adapted from Alibaba Wan2.1 (Apache-2.0) and Self-Forcing / Causal Forcing (Apache-2.0).
+Source: https://github.com/apple-aiml-research/ml-fastframes
+Source revision: a65c59240e01cf1de86197fa771ca09b38cf592a
+Source license: Apple Sample Code License / Apache-2.0
+Model license: Apple Machine Learning Research Model License (apple-amlr)
+
+WorldFoundry adapts FastFrames' inference-only frame-wise causal Wan2.1 forward,
+FastOps, KVRefinementNetwork, PixelDecoder / BridgedPixelDecoder, and
+FlowMatchScheduler while reusing WorldFoundry's canonical Wan2.1 norms, RoPE,
+and UMT5-XXL prompt encoder. Released checkpoints (apple/FastFrames-S,
+apple/FastFrames-L, zhuhz22/Causal-Forcing, Wan-AI/Wan2.1-*) remain separate
+model assets under their respective upstream licenses.
+
+
 Dependencies and Licenses:
 
 This open-source project builds upon the following open-source model(s) and/or software, each of which remains licensed under its original license(s). Certain component(s) may include modifications made by Tencent ("Tencent Modifications"), which are Copyright (C) Tencent.

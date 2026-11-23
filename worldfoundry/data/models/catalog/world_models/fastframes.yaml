@@ -1,0 +1,115 @@
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+availability:
+  status: open_source
+  open_source: true
+  code: public
+  weights: public_huggingface
+  license: apple-amlr-sample-code
+checkpoint_refs:
+- role: fastframes_s_kv_refiner
+  repo_id: apple/FastFrames-S
+  revision: aa099efcedf1b65447106bf9004cde75821f7387
+  filename: fastframes-s/kv_refiner.safetensors
+- role: fastframes_s_pixel_decoder
+  repo_id: apple/FastFrames-S
+  revision: aa099efcedf1b65447106bf9004cde75821f7387
+  filename: fastframes-s/pixel_decoder.safetensors
+- role: fastframes_s_dit
+  repo_id: zhuhz22/Causal-Forcing
+  filename: causal-forcing++/framewise-2step.pt
+- role: fastframes_l_dit
+  repo_id: apple/FastFrames-L
+  revision: d18ec5f054bb03f6b8e561a63d52af3142b5b81d
+  filename: fastframes-l/dit.safetensors
+- role: fastframes_l_kv_refiner
+  repo_id: apple/FastFrames-L
+  revision: d18ec5f054bb03f6b8e561a63d52af3142b5b81d
+  filename: fastframes-l/kv_refiner.safetensors
+- role: fastframes_l_pixel_decoder
+  repo_id: apple/FastFrames-L
+  revision: d18ec5f054bb03f6b8e561a63d52af3142b5b81d
+  filename: fastframes-l/pixel_decoder.safetensors
+base_model_refs:
+- role: wan2_1_t2v_1_3b
+  repo_id: Wan-AI/Wan2.1-T2V-1.3B
+- role: wan2_1_t2v_14b
+  repo_id: Wan-AI/Wan2.1-T2V-14B
+family: Autoregressive Video Diffusion
+id: fastframes
+provider: Apple ML Research / Cornell
+aliases:
+- FastFrames
+- fastframes-s
+- fastframes-l
+- ff-s
+- ff-l
+- fastframes_s
+- fastframes_l
+tasks:
+- text-to-video
+- autoregressive-video-generation
+- real-time-video-generation
+integration:
+  notes:
+  - FastFramesPipeline runs FastFrames-S (1.3B) and FastFrames-L (14B) natively in WorldFoundry, reusing canonical Wan2.1
+    normalization, RoPE, sinusoidal embeddings, UMT5-XXL prompt encoding, and MP4 export primitives.
+  - Each latent frame runs a two-step causal Wan2.1 DiT (four steps on frame 0), replaces the clean-context DiT pass with
+    KVRefinementNetwork, and replaces the Wan2.1 VAE decoder with a causal ConvNeXt PixelDecoder (or BridgedPixelDecoder for 14B).
+  - Select FastFrames-S (default) via variant="fastframes-s" / "ff-s" or FastFrames-L via variant="fastframes-l" / "ff-l".
+  status: integrated
+license: apple-amlr-sample-code
+modalities:
+- text-to-video
+- real-time-video-generation
+output_artifacts:
+- generated_video
+name: FastFrames
+official_sources:
+  project_page: https://apple-aiml-research.github.io/ml-fastframes/
+  paper: https://arxiv.org/abs/2611.23226
+  github:
+    url: https://github.com/apple-aiml-research/ml-fastframes
+    revision: a65c59240e01cf1de86197fa771ca09b38cf592a
+  huggingface:
+  - repo_id: apple/FastFrames-S
+    revision: aa099efcedf1b65447106bf9004cde75821f7387
+    type: model
+  - repo_id: apple/FastFrames-L
+    revision: d18ec5f054bb03f6b8e561a63d52af3142b5b81d
+    type: model
+pipeline_binding: fastframes
+release_type: code_and_weights
+runtime_profile: runtime-profile:fastframes
+starred: true
+runner_parity:
+  notes:
+  - Component-level numerical parity against apple-aiml-research/ml-fastframes (a65c5924) is verified in unit tests for
+    FastFramesCausalWanModel (standard and FastOps), KVRefinementNetwork, PixelDecoder, BridgedPixelDecoder,
+    FastFramesFlowMatchScheduler, and CUDA BF16 cuDNN SDPA rollout equivalence.
+  - Verified on H200 with real FastFrames-S checkpoints (zhuhz22/Causal-Forcing framewise-2step.pt + apple/FastFrames-S +
+    Wan2.1-T2V-1.3B UMT5-XXL, 832x480, 81 frames at 16 fps, context="refiner"); FastFrames-L (14B) real-checkpoint GPU replay remains pending.
+  status: selected_checkpoint_gpu_validated
+catalog_category: world_models
+catalog_scope: world-model/interactive starred models
+docs:
+  publisher: Apple ML Research / Cornell University
+  publisher_kind: company
+  publisher_zh: Apple ML Research / 康奈尔大学
+  overview: FastFrames generates 480p video autoregressively at interactive latency by combining a two-step causal Wan2.1 DiT with a lightweight KV refinement network (eliminating the clean-context DiT pass) and a causal ConvNeXt pixel decoder (replacing the Wan2.1 VAE decoder). WorldFoundry integrates both FastFrames-S (1.3B) and FastFrames-L (14B).
+  overview_zh: FastFrames 将两步因果 Wan2.1 DiT、轻量级 KV 细化网络（替代每帧的干净上下文 DiT 前向）与因果 ConvNeXt 像素解码器（替代 Wan2.1 VAE 解码器）结合，实现交互级延迟的 480p 自回归视频生成。WorldFoundry 集成了 FastFrames-S（1.3B）与 FastFrames-L（14B）。
+  architecture: Per arXiv:2611.23226, frame 0 is denoised in four steps followed by a clean t=0 pass; subsequent latent frames run two denoising steps on a shift-5 rectified-flow schedule, repair their KV cache entries via a shared spatial stem plus batched per-layer GroupGEMM heads, and decode pre-head DiT hidden states directly into 4 RGB frames per latent frame (with a bias-free 5120->1536 bridge for FastFrames-L).
+  architecture_zh: 按论文 arXiv:2611.23226，第 0 潜帧使用 4 步去噪并执行一次 t=0 干净前向；后续每个潜帧在 shift=5 的 rectified-flow 时间表上执行 2 步去噪，通过共享空间 stem 与分层批量 GroupGEMM 头部修复 KV 缓存，并直接将 pre-head DiT 隐状态解码为每潜帧 4 帧 RGB 像素（FastFrames-L 通过无偏置 5120->1536 bridge 衔接像素解码器）。
+  usage_notes: Defaults match the official CLI (832x480, 81 frames from 21 latent frames, 16 fps, context="refiner"). FastFrames-S uses the frozen Causal Forcing++ 2-step generator with apple/FastFrames-S add-on weights and Wan2.1-T2V-1.3B UMT5-XXL; FastFrames-L uses apple/FastFrames-L weights and Wan2.1-T2V-14B UMT5-XXL.
+  usage_notes_zh: 默认参数与官方 CLI 一致（832x480、由 21 个潜帧对齐得到的 81 帧、16 fps、context="refiner"）。FastFrames-S 组合冻结的 Causal Forcing++ 两步生成器、apple/FastFrames-S 附加权重与 Wan2.1-T2V-1.3B 的 UMT5-XXL；FastFrames-L 使用 apple/FastFrames-L 权重与 Wan2.1-T2V-14B 的 UMT5-XXL。
+  limitations:
+  - Released FastFrames-S and FastFrames-L T2V routes are text-to-video only.
+  - FastFrames code and weights are governed by the Apple Sample Code License / Apple AMLR terms.
+  - H200 real-checkpoint replay is verified on FastFrames-S (1.3B); FastFrames-L (14B) real-checkpoint GPU replay remains pending.
+  limitations_zh:
+  - 已发布的 FastFrames-S 与 FastFrames-L 路由仅支持文生视频。
+  - FastFrames 代码与权重受 Apple Sample Code License / Apple AMLR 条款约束。
+  - 已在 H200 上完成 FastFrames-S（1.3B）真实权重验证；FastFrames-L（14B）真实权重回放仍待验证。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Primary multi-dimension text-to-video quality benchmark reported in the FastFrames paper.
+    reason_zh: FastFrames 论文采用的主要多维文生视频质量评测基准。
