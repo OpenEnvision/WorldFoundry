@@ -473,6 +473,70 @@ def test_pinned_input_file_keeps_native_payload_and_path(tmp_path: Path) -> None
     assert case["assets"]["trajectory"] == str(path)
 
 
+@pytest.mark.parametrize("accepted_matches", [True, False])
+def test_pinned_file_digest_is_reused_for_the_accepted_inventory(
+    tmp_path: Path, artifact_pipeline: tuple[Path, Path, Any], monkeypatch: pytest.MonkeyPatch, accepted_matches: bool
+) -> None:
+    case_file, source, _ = artifact_pipeline
+    asset = source / "input.txt"
+    case = json.loads(case_file.read_text())
+    case["assets"]["input_alias"] = str(asset)
+    case["asset_sha256"] = {"input": replay.sha256(asset)}
+    case_file.write_text(json.dumps(case))
+    reference = tmp_path / "reference"
+    expected = replay.run_case(case_file, source, reference)["assets"]
+    accepted_manifest = reference / "manifest.json"
+    if not accepted_matches:
+        manifest = json.loads(accepted_manifest.read_text())
+        manifest["assets"]["input_alias"] = "0" * 64
+        accepted_manifest.write_text(json.dumps(manifest))
+    calls = []
+    sha256 = replay.sha256
+
+    def count(path: Path) -> str:
+        calls.append(path)
+        return sha256(path)
+
+    monkeypatch.setattr(replay, "sha256", count)
+    result = replay.run_case(case_file, source, tmp_path / "candidate", accepted_manifest=accepted_manifest)
+
+    if accepted_matches:
+        assert result["status"] == "passed"
+        assert result["assets"] == expected
+    else:
+        assert result["status"] == "failed"
+        assert "Replay asset SHA256 differs from accepted reference: input_alias" in result["error"]
+    assert calls.count(asset) == 1
+
+
+def test_pinned_asset_replacement_fails_before_model_loading(
+    tmp_path: Path, artifact_pipeline: tuple[Path, Path, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case_file, source, pipeline = artifact_pipeline
+    asset = source / "input.txt"
+    case = json.loads(case_file.read_text())
+    case["asset_sha256"] = {"input": replay.sha256(asset)}
+    case_file.write_text(json.dumps(case))
+    verify_asset_pins = replay.verify_asset_pins
+
+    def replace_after_pinning(resolved: dict) -> dict[str, Any]:
+        pinned = verify_asset_pins(resolved)
+        replacement = asset.with_suffix(".replacement")
+        replacement.write_bytes(asset.read_bytes())
+        replacement.replace(asset)
+        return pinned
+
+    def load_checkpoint() -> None:
+        raise AssertionError("Replaced asset reached checkpoint loading")
+
+    monkeypatch.setattr(replay, "verify_asset_pins", replace_after_pinning)
+    monkeypatch.setattr(pipeline, "from_pretrained", load_checkpoint)
+    result = replay.run_case(case_file, source, tmp_path / "replaced")
+
+    assert result["status"] == "failed"
+    assert "Pinned asset changed during replay validation" in result["error"]
+
+
 @pytest.mark.parametrize("fault", ["undeclared", "nonhex", "mismatch", "unset"])
 def test_asset_pin_failures_precede_model_loading(
     tmp_path: Path, artifact_pipeline: tuple[Path, Path, Any], monkeypatch: pytest.MonkeyPatch, fault: str
@@ -495,6 +559,11 @@ def test_asset_pin_failures_precede_model_loading(
     case_file.write_text(json.dumps(case))
     calls = []
     monkeypatch.setattr(pipeline, "from_pretrained", lambda: calls.append("loaded"))
+
+    def bulk_hash() -> None:
+        raise AssertionError("Invalid asset reached bulk checkpoint hashing")
+
+    monkeypatch.setattr(replay, "hash_assets", bulk_hash)
     result = replay.run_case(case_file, source, tmp_path / "invalid-asset")
     assert result["status"] == "failed"
     assert "SHA256" in result["error"] or "Unset case variable" in result["error"]
