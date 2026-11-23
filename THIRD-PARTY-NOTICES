@@ -841,6 +841,22 @@ The H3-World LoRA checkpoint (DANNY621/H3-World) and MiniMax-H3 base weights
 remain separate model assets subject to the MiniMax H3 Community License Agreement.
 
 
+H3-Tiny structured-pruned MiniMax-H3 inference
+----------------------------------------------
+Copyright 2026 Haoshuai Fu and Bin Chen
+Source: https://github.com/fuyi25/H3-Tiny
+Source revision: a3f17f0ef85e9af5d07b2007c4b2dbd6d035e69c
+Source license: Apache-2.0
+Model license: MiniMax H3 Community License Agreement
+
+WorldFoundry adapts H3-Tiny's pruned-depth/width MiniMax-H3 transformer
+configuration, low-rank AdaLN projections, MeanFlow interval time embedder,
+and shifted two-time schedule onto the canonical MiniMax-H3 components.
+Released H3-Tiny checkpoints (H3-Tiny/MiniMax-H3-Tiny-*) and MiniMax-H3 base
+weights remain separate model assets subject to the MiniMax H3 Community
+License Agreement.
+
+
 Dependencies and Licenses:
 
 This open-source project builds upon the following open-source model(s) and/or software, each of which remains licensed under its original license(s). Certain component(s) may include modifications made by Tencent ("Tencent Modifications"), which are Copyright (C) Tencent.

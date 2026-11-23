@@ -1,0 +1,55 @@
+---
+title: "H3-Tiny"
+description: "Structured-pruned 17B/14B MiniMax-H3 checkpoints with rank-8 AdaLN and optional MeanFlow few-step distillation."
+modelId: "h3-tiny"
+pageSource: authored
+---
+
+H3-Tiny provides structured-pruned 17B and 14B MiniMax-H3 transformers (42 layers, rank-8 AdaLN, and narrowed 9792-channel block FFNs for the 14B student while preserving the 14336-channel token refiner) plus MeanFlow few-step distillation for joint video and stereo audio generation. The in-tree integration reuses WorldFoundry's canonical MiniMax-H3 blocks, token refiner, Qwen3-VL encoder, video/audio VAEs, and MP4 muxer.
+
+Code: [fuyi25/H3-Tiny](https://github.com/fuyi25/H3-Tiny/tree/a3f17f0ef85e9af5d07b2007c4b2dbd6d035e69c) (Apache-2.0). Model weights are distributed under the MiniMax H3 Community License.
+
+## Checkpoints and variants
+
+| Variant | Hugging Face checkpoint | Sampling | Workflows |
+| --- | --- | --- | --- |
+| `17b-fewstep-ref2va` (default) | `H3-Tiny/MiniMax-H3-Tiny-17B-FewStep-Ref2VA-v0.1` | 6 steps default (`>=4`, MeanFlow) | `ref2va` |
+| `17b-pruned-ref2va` | `H3-Tiny/MiniMax-H3-Tiny-17B-Pruned-Ref2VA` | 50 steps | `ref2va` |
+| `17b-pruned-fl2va` | `H3-Tiny/MiniMax-H3-Tiny-17B-Pruned-FL2VA` | 50 steps | `t2va`, `i2va`, `l2va`, `fl2va` |
+| `14b-okd-ref2va` | `H3-Tiny/MiniMax-H3-Tiny-14B-OKD-Ref2VA-v0.1` | 50 steps | `ref2va` |
+
+Single-file ComfyUI weights are also published at `H3-Tiny/MiniMax-H3-Tiny-ComfyUI`. All Diffusers-format checkpoints share `MiniMaxAI/MiniMax-H3` for the Qwen3-VL text encoder, processor, video VAE, and audio VAE.
+
+## Runtime contract
+
+The public model ID is `h3-tiny` (aliases: `minimax-h3-tiny`, `h3-tiny-17b-fewstep`, `h3-tiny-17b-pruned`, `h3-tiny-17b-fl2va`, `h3-tiny-14b-okd`). Outputs are 24 FPS video with synchronized 32 kHz stereo audio (`h3-tiny.mp4`); frame counts align upward to `17n + 5` (for example 124 frames ≈ 5.2 s, 243 frames ≈ 10.1 s).
+
+```bash
+wf run h3-tiny --pipeline.task-profile ref2va --json
+```
+
+```python
+from worldfoundry.pipelines.h3_tiny import H3TinyPipeline
+
+pipe = H3TinyPipeline.from_pretrained(
+    weights_path="/local/H3-Tiny--MiniMax-H3-Tiny-17B-FewStep-Ref2VA-v0.1",
+    base_model_path="/local/MiniMaxAI--MiniMax-H3",
+    variant="17b-fewstep-ref2va",
+    device="cuda",
+)
+result = pipe(
+    prompt="<Picture 1> A sunlit studio portrait turns smoothly toward the camera.",
+    references=["/local/ref1.png"],
+    num_frames=124,
+    num_inference_steps=6,
+    seed=1234,
+    output_path="/local/outputs/h3-tiny.mp4",
+    return_dict=True,
+)
+```
+
+Stage both the selected H3-Tiny checkpoint directory and the shared `MiniMaxAI/MiniMax-H3` base snapshot before running in the unified CUDA 12.8 environment.
+
+## Limitations
+
+In-tree reference conditioning currently accepts image references only; video and standalone-audio references are not yet wired. Diffusers-to-WorldFoundry key mapping (630 FewStep / 626 Pruned tensors), tiny FP32/BF16 component parity, and schedule math are unit-verified on CPU, and `17b-fewstep-ref2va` (`MiniMax-H3-Tiny-17B-FewStep-Ref2VA-v0.1` + `MiniMaxAI/MiniMax-H3`) is verified end-to-end on H200 (1376×768, 124 frames at 24 fps, 6 MeanFlow steps, image Ref2VA with 32 kHz stereo AAC). Remaining variants (`17b-pruned-ref2va`, `17b-pruned-fl2va`, `14b-okd-ref2va`) and multi-GPU execution remain pending GPU validation. On 141 GB H200 GPUs, pass `component_devices={"text_encoder": "cuda", "video_vae": "cuda", "audio_vae": "cuda"}` to avoid CPU decode latency.

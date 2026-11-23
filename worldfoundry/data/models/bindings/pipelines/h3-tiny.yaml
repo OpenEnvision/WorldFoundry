@@ -1,0 +1,17 @@
+schema_version: 2
+binding_id: h3-tiny
+model_id: h3-tiny
+aliases:
+- minimax-h3-tiny
+- h3-tiny-17b-fewstep
+- h3-tiny-17b-pruned
+- h3-tiny-17b-fl2va
+- h3-tiny-14b-okd
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.h3_tiny.pipeline_h3_tiny:H3TinyPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation
