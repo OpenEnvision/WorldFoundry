@@ -55,6 +55,42 @@ def test_official_cli_rejects_source_root_options(source_option: str) -> None:
         OfficialVideoRuntime.from_model_id("framepack", **{source_option: "/external/code"})
 
 
+@pytest.mark.unit
+def test_framepack_image_conditioning_uses_the_request_seed() -> None:
+    import torch
+    from diffusers.models.autoencoders.autoencoder_kl_hunyuan_video import AutoencoderKLHunyuanVideo
+
+    from worldfoundry.synthesis.visual_generation.framepack.framepack_runtime.diffusers_helper.hunyuan import (
+        vae_encode,
+    )
+
+    with torch.no_grad(), torch.random.fork_rng(devices=[]):
+        torch.manual_seed(0)
+        vae = AutoencoderKLHunyuanVideo(
+            latent_channels=2,
+            down_block_types=("HunyuanVideoDownBlock3D",),
+            up_block_types=("HunyuanVideoUpBlock3D",),
+            block_out_channels=(4,),
+            layers_per_block=1,
+            norm_num_groups=1,
+            spatial_compression_ratio=1,
+            mid_block_add_attention=False,
+        ).eval()
+        image = torch.linspace(-1, 1, 192).reshape(1, 3, 1, 8, 8)
+
+        ambient_rng = torch.get_rng_state()
+        first = vae_encode(image, vae, seed=7)
+        changed = vae_encode(image, vae, seed=8)
+        torch.testing.assert_close(torch.get_rng_state(), ambient_rng, rtol=0, atol=0)
+        torch.manual_seed(7)
+        expected = vae.encode(image).latent_dist.sample() * vae.config["scaling_factor"]
+        repeated = vae_encode(image, vae, seed=7)
+
+    assert not torch.equal(first, changed)
+    torch.testing.assert_close(first, expected, rtol=0, atol=0)
+    torch.testing.assert_close(first, repeated, rtol=0, atol=0)
+
+
 @pytest.mark.parametrize("pythonpath", [None, "/operator/site-packages"])
 def test_official_cli_inherits_environment_and_runs_in_output_directory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pythonpath: str | None

@@ -1,5 +1,12 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import torch
 from diffusers.pipelines.hunyuan_video.pipeline_hunyuan_video import DEFAULT_PROMPT_TEMPLATE
+
+if TYPE_CHECKING:
+    from diffusers.models.autoencoders.autoencoder_kl_hunyuan_video import AutoencoderKLHunyuanVideo
 
 
 @torch.no_grad()
@@ -105,7 +112,9 @@ def vae_decode(latents, vae, image_mode=False):
 
 
 @torch.no_grad()
-def vae_encode(image, vae):
-    latents = vae.encode(image.to(device=vae.device, dtype=vae.dtype)).latent_dist.sample()
-    latents = latents * vae.config.scaling_factor
+def vae_encode(image: torch.Tensor, vae: AutoencoderKLHunyuanVideo, *, seed: int) -> torch.Tensor:
+    (posterior,) = vae.encode(image.to(device=vae.device, dtype=vae.dtype), return_dict=False)
+    generator = torch.Generator(device=vae.device).manual_seed(seed)
+    latents = posterior.sample(generator=generator)
+    latents = latents * vae.config["scaling_factor"]
     return latents

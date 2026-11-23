@@ -37,6 +37,8 @@ FramePack 是斯坦福的**恒定记忆**长图生视频模型（由 ControlNet 
 | Seed | **31337** |
 | TeaCache | **开** |
 
+请求种子控制首帧图像的 VAE 采样及各视频段去噪使用的噪声。
+
 ## 在 WorldFoundry 中运行
 
 状态：**Runner 一致性待确认**。统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。先把 `lllyasviel/FramePackI2V_HY` 和 `lllyasviel/FramePack_F1_I2V_HY_20250503` 就位到本地，再执行 `wf run framepack`。未记录显存需求。
