@@ -702,6 +702,18 @@ def test_other_core_subtrees_remain_shared_by_every_case(realtime_layer_plan: di
         assert [reason["kind"] for reason in reasons] == ["shared_component_or_case_matrix"]
 
 
+def test_base_model_geometry_registry_data_selects_checkpoint_replays() -> None:
+    matrix = TOOLS / "geometry_regression_cases.json"
+    paths = ["worldfoundry/data/base_models/capabilities/geometry.yaml", "worldfoundry/data/base_models/stacks.yaml"]
+    plan = impact.select_cases(matrix, TOOLS / "geometry_regression_dependencies.json", TOOLS.parents[1], paths)
+
+    assert plan["status"] == "planned"
+    assert not plan["uncovered_paths"]
+    assert set(plan["selected_cases"]) == set(json.loads(matrix.read_text()))
+    for reasons in plan["reasons"].values():
+        assert reasons == [{"path": path, "kind": "shared_component_or_case_matrix"} for path in paths]
+
+
 def test_unimported_realtime_or_unlisted_core_files_keep_conservative_fallback(realtime_layer_plan: dict) -> None:
     assert realtime_layer_plan["status"] == "uncovered"
     assert realtime_layer_plan["uncovered_paths"] == sorted([NEW_REALTIME_MODULE, NEW_CORE_SUBPACKAGE])
