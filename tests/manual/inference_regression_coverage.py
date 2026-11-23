@@ -19,7 +19,9 @@ import yaml
 
 
 def _coverage_policy():
-    spec = importlib.util.spec_from_file_location("native_coverage_policy", Path(__file__).with_name("native_coverage_policy.py"))
+    spec = importlib.util.spec_from_file_location(
+        "native_coverage_policy", Path(__file__).with_name("native_coverage_policy.py")
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -49,8 +51,11 @@ def native_models(root: Path) -> tuple[list[dict], list[dict]]:
         aliases = config.get("aliases") or []
         if isinstance(aliases, str):
             aliases = [aliases]
-        if (not isinstance(binding_id, str) or not isinstance(aliases, list)
-                or not all(isinstance(alias, str) for alias in aliases)):
+        if (
+            not isinstance(binding_id, str)
+            or not isinstance(aliases, list)
+            or not all(isinstance(alias, str) for alias in aliases)
+        ):
             raise ValueError(f"Invalid native binding identities: {binding}")
         record = (binding, config)
         binding_records.append(record)
@@ -81,10 +86,15 @@ def native_models(root: Path) -> tuple[list[dict], list[dict]]:
                     if model_id is None:
                         # Some catalog variants describe only an upstream
                         # checkpoint, with no separately exposed native route.
-                        inactive.append({"catalog_id": parent, "category": category,
-                                         "variant_name": variant.get("name"),
-                                         "checkpoint": variant.get("checkpoint"),
-                                         "status": "variant_without_native_identity"})
+                        inactive.append(
+                            {
+                                "catalog_id": parent,
+                                "category": category,
+                                "variant_name": variant.get("name"),
+                                "checkpoint": variant.get("checkpoint"),
+                                "status": "variant_without_native_identity",
+                            }
+                        )
                         continue
                     if not isinstance(model_id, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*", model_id):
                         raise ValueError(f"Invalid catalog model/variant id: {parent}")
@@ -92,12 +102,19 @@ def native_models(root: Path) -> tuple[list[dict], list[dict]]:
                     if not isinstance(binding_id, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*", binding_id):
                         raise ValueError(f"Invalid pipeline binding id: {model_id}")
                     record = binding_lookup.get(binding_id.strip().lower())
-                    info = {"model_id": model_id, "catalog_id": parent, "category": category,
-                            "catalog_path": path.relative_to(root).as_posix()}
+                    info = {
+                        "model_id": model_id,
+                        "catalog_id": parent,
+                        "category": category,
+                        "catalog_path": path.relative_to(root).as_posix(),
+                    }
                     if record is None:
                         if "pipeline_binding" in variant:
                             rows[(model_id, binding_id)] = {
-                                **info, "binding_id": binding_id, "binding_status": "missing_binding", "target": None
+                                **info,
+                                "binding_id": binding_id,
+                                "binding_status": "missing_binding",
+                                "target": None,
                             }
                             continue
                         inactive.append({**info, "status": "no_native_binding"})
@@ -108,9 +125,13 @@ def native_models(root: Path) -> tuple[list[dict], list[dict]]:
                     if not re.fullmatch(r"worldfoundry(?:\.[a-zA-Z_]\w*)+:[a-zA-Z_]\w*", target):
                         raise ValueError(f"Invalid native binding target: {binding_id}")
                     module = root / (target.partition(":")[0].replace(".", "/") + ".py")
-                    info.update(binding_id=binding_id, binding_model_id=config.get("model_id"), target=target,
-                                binding_path=binding.relative_to(root).as_posix(),
-                                binding_status="ready" if module.is_file() else "missing_implementation")
+                    info.update(
+                        binding_id=binding_id,
+                        binding_model_id=config.get("model_id"),
+                        target=target,
+                        binding_path=binding.relative_to(root).as_posix(),
+                        binding_status="ready" if module.is_file() else "missing_implementation",
+                    )
                     key = (model_id, binding_id)
                     if key in rows and rows[key]["target"] != target:
                         raise ValueError(f"Contradictory catalog bindings: {model_id}")
@@ -133,11 +154,18 @@ def native_models(root: Path) -> tuple[list[dict], list[dict]]:
         if key in rows:
             continue
         parent = families[target]
-        rows[key] = {"model_id": model_id, "catalog_id": parent["catalog_id"], "category": parent["category"],
-                     "catalog_path": parent["catalog_path"], "binding_id": binding_id,
-                     "binding_model_id": model_id, "binding_path": binding.relative_to(root).as_posix(),
-                     "target": target, "binding_status": parent["binding_status"],
-                     "catalog_match": "registered_variant_with_same_pipeline_class"}
+        rows[key] = {
+            "model_id": model_id,
+            "catalog_id": parent["catalog_id"],
+            "category": parent["category"],
+            "catalog_path": parent["catalog_path"],
+            "binding_id": binding_id,
+            "binding_model_id": model_id,
+            "binding_path": binding.relative_to(root).as_posix(),
+            "target": target,
+            "binding_status": parent["binding_status"],
+            "catalog_match": "registered_variant_with_same_pipeline_class",
+        }
     return list(rows.values()), inactive
 
 
@@ -158,10 +186,14 @@ def coverage(root: Path, matrix: Path) -> dict:
             if case.get("target") != row["target"]:
                 raise ValueError(f"Case and catalog pipeline targets differ: {name}")
             matching.append(name)
-        row.update(case_ids=matching if row["binding_status"] == "ready" else [], status=(
-            row["binding_status"] if row["binding_status"] != "ready" else
-            ("case_defined" if matching else "missing_short_case")
-        ))
+        row.update(
+            case_ids=matching if row["binding_status"] == "ready" else [],
+            status=(
+                row["binding_status"]
+                if row["binding_status"] != "ready"
+                else ("case_defined" if matching else "missing_short_case")
+            ),
+        )
         covered.update(row["case_ids"])
     gaps = [row["model_id"] for row in rows if not row["case_ids"]]
     return {
@@ -264,17 +296,33 @@ def main() -> int:
             }
         report = coverage(root, matrix)
         report.update(revisions)
-        report["policy"] = policy.evaluate_policy(report, json.loads(matrix.read_text()),
-                                                 policy.load_frozen_baseline(baseline), root, changed, args.affected_model)
+        report["policy"] = policy.evaluate_policy(
+            report,
+            json.loads(matrix.read_text()),
+            policy.load_frozen_baseline(baseline),
+            root,
+            changed,
+            args.affected_model,
+        )
         report["policy"]["baseline_sha256"] = policy._BASELINE_SHA256
-        report["policy"]["change_scope"] = "commit_diff" if args.base else ("explicit_paths" if changed else "inventory_only")
-        code = 2 if report["policy"]["status"] != "passed" or (args.require_complete and report["missing_short_cases"]) else 0
+        report["policy"]["change_scope"] = (
+            "commit_diff" if args.base else ("explicit_paths" if changed else "inventory_only")
+        )
+        code = (
+            2
+            if report["policy"]["status"] != "passed" or (args.require_complete and report["missing_short_cases"])
+            else 0
+        )
     except (ValueError, OSError, KeyError, TypeError, yaml.YAMLError) as error:
         report, code = {"status": "failed", "error": str(error)}, 1
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
-    print(json.dumps({key: value for key, value in report.items() if key not in {"models", "catalog_without_native_binding"}},
-                     indent=2))
+    print(
+        json.dumps(
+            {key: value for key, value in report.items() if key not in {"models", "catalog_without_native_binding"}},
+            indent=2,
+        )
+    )
     return code
 
 
