@@ -1772,6 +1772,16 @@
         "tests/synthesis/test_base_synthesis_lazy_import.py"
       ],
       "reason": "Direct-package relocation is accepted only after commit-blob comparison proves identical bytes or the declared import-namespace rewrite; CPU contracts verify runtime discovery, configuration targets and bundled resources. This does not certify these models numerically."
+    },
+    {
+      "from_root": "worldfoundry/core/memory",
+      "to_root": "worldfoundry/synthesis/visual_generation/memory",
+      "files": ["mosaic.py"],
+      "required_cpu_contracts": [
+        "tests/eval_core/test_mosaicmem_integration.py",
+        "tests/runtime/test_geometry_regression_relocations.py"
+      ],
+      "reason": "The standalone MosaicMem memory implementation moved unchanged. The CPU contract exercises keyframe insertion, mosaic retrieval and latent-canvas composition from its new location."
     }
   ],
   "environment_variants": {
