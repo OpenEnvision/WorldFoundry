@@ -95,11 +95,20 @@ def test_historical_gap_stays_visible_and_does_not_fail_unaffected_changes(proje
     assert result["accepted_reference_verified"] is result["gpu_inference_verified"] is False
 
 
-@pytest.mark.parametrize("stale_head", [False, True])
-def test_commit_diff_coverage_requires_the_inspected_checkout(
-    project: tuple, monkeypatch: pytest.MonkeyPatch, stale_head: bool
+@pytest.mark.parametrize(
+    "checkout",
+    ["committed", "stale_head", "draft_docs", "dirty_policy", "staged_matrix", "untracked_binding", "ignored_binding"],
+)
+def test_commit_diff_coverage_requires_committed_inputs(
+    project: tuple, monkeypatch: pytest.MonkeyPatch, checkout: str
 ) -> None:
     root, matrix, _, _, baseline = project
+    dependencies = root / "tests/manual/geometry_regression_dependencies.json"
+    dependencies.parent.mkdir(parents=True)
+    dependencies.write_text('{"ignored_paths":[]}')
+    (root / "docs").mkdir()
+    guide = root / "docs/guide.md"
+    guide.write_text("Guide\n")
     git = ["git", "-C", str(root)]
     for command in (
         ["init", "-q"],
@@ -115,6 +124,28 @@ def test_commit_diff_coverage_requires_the_inspected_checkout(
     helper.write_text("class Operation: changed = True\n")
     subprocess.run([*git, "commit", "-qam", "change shared operator"], check=True)
     head = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+    if checkout == "draft_docs":
+        guide.write_text("Draft guide\n")
+        cache = root / "worldfoundry/operators/__pycache__/helper.cpython-311.pyc"
+        cache.parent.mkdir()
+        cache.write_bytes(b"local bytecode")
+        (root / "docs/draft.yaml").write_text("draft: true\n")
+        (root / ".git/info/exclude").write_text("__pycache__/\n/docs/draft.yaml\n")
+    elif checkout == "dirty_policy":
+        dependencies.write_text('{"ignored_paths":["worldfoundry/operators/helper.py"]}')
+    elif checkout == "staged_matrix":
+        cases = json.loads(matrix.read_text())
+        cases["large-short"] = _recipe("large")
+        matrix.write_text(json.dumps(cases))
+        subprocess.run([*git, "add", str(matrix)], check=True)
+    elif checkout in {"untracked_binding", "ignored_binding"}:
+        added = root / "worldfoundry/data/models/bindings/pipelines/new.yaml"
+        added.write_text(yaml.safe_dump({"model_id": "new", "pipeline": {"target": _recipe()["target"]}}))
+        if checkout == "ignored_binding":
+            relative = added.relative_to(root).as_posix()
+            (root / ".git/info/exclude").write_text("/" + relative + "\n")
+            subprocess.run([*git, "check-ignore", "--quiet", relative], check=True)
+
     baseline_path = root / "frozen.json"
     baseline_path.write_text(json.dumps(baseline))
     monkeypatch.setattr(policy, "_BASELINE_SHA256", hashlib.sha256(baseline_path.read_bytes()).hexdigest())
@@ -125,7 +156,7 @@ def test_commit_diff_coverage_requires_the_inspected_checkout(
         "matrix": matrix,
         "baseline": baseline_path,
         "base": base,
-        "head": base if stale_head else "HEAD",
+        "head": base if checkout == "stale_head" else "HEAD",
         "output": report_path,
     }
     argv = ["coverage"]
@@ -134,15 +165,23 @@ def test_commit_diff_coverage_requires_the_inspected_checkout(
     monkeypatch.setattr(sys, "argv", argv)
     status = inventory.main()
     report = json.loads(report_path.read_text())
-    if stale_head:
+    if checkout == "stale_head":
         assert status == 1, report
         assert "must match the inspected checkout" in report["error"]
+    elif checkout in {"dirty_policy", "staged_matrix", "untracked_binding", "ignored_binding"}:
+        assert status == 1, report
+        assert "committed inputs" in report["error"]
     else:
         assert status == 2
         assert report["source_revision"] == head and report["base_revision"] == base
         assert report["source_tree"] == subprocess.check_output([*git, "rev-parse", "HEAD^{tree}"], text=True).strip()
         violation = {"variant": "large@large", "reason": "affected_native_variant_without_replay_recipe"}
         assert violation in report["policy"]["violations"]
+    if checkout == "dirty_policy":
+        offset = argv.index("--base")
+        monkeypatch.setattr(sys, "argv", [*argv[:offset], *argv[offset + 2 :]])
+        assert inventory.main() == 0
+        assert json.loads(report_path.read_text())["policy"]["change_scope"] == "inventory_only"
 
 
 @pytest.mark.parametrize("mutation", ["remove", "identity_only", "wrong_variant", "missing_checkpoint", "no_outputs"])

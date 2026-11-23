@@ -500,6 +500,8 @@ without a runnable numerical replay. Releases requiring complete coverage
 can invoke the coverage script with `--require-complete`; gaps return exit 2.
 For commit-diff coverage, `--head` must resolve to the inspected checkout's
 commit. The report records the comparison base, candidate commit and tree.
+Commit-diff coverage reads the committed matrix, model YAML, dependency
+declarations and Python sources. Inventory mode can inspect work in progress.
 
 Under the model retirement policy of 2026-10-16, BiWM Wan2.1
 (`biwm-wan21@biwm-wan21`), BiWM Wan2.2 (`biwm-wan22@biwm-wan22`),
