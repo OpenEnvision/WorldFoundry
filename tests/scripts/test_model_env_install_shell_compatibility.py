@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -18,6 +21,55 @@ def test_model_env_installer_avoids_bash_namerefs() -> None:
 
     assert "local -n" not in source
     assert "WORLDFOUNDRY_PIP_INDEX_ARGS" in source
+
+
+@pytest.mark.parametrize("has_cuda_headers", [False, True])
+def test_unified_env_exposes_conda_cuda_headers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, has_cuda_headers: bool
+) -> None:
+    prefix = tmp_path / "selected env"
+    target = subprocess.check_output(["uname", "-m"], text=True).strip()
+    include = prefix / "targets" / f"{target}-linux" / "include"
+    if has_cuda_headers:
+        include.mkdir(parents=True)
+        (include / "cuda_runtime.h").touch()
+    existing = tmp_path / "existing include"
+    exports = tmp_path / "exports.sh"
+    fake_conda = tmp_path / "conda"
+    fake_conda.write_text("#!/bin/sh\nexit 17\n", encoding="utf-8")
+    fake_conda.chmod(0o755)
+    monkeypatch.setenv("CONDA_EXE", str(fake_conda))
+    monkeypatch.setenv("PYTHON", sys.executable)
+    monkeypatch.setenv("WORLDFOUNDRY_DETECTED_DRIVER_CUDA", "12.8")
+    monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path / "hfd"))
+    monkeypatch.setenv("WORLDFOUNDRY_HFD_DATASET_ROOT", str(tmp_path / "datasets"))
+    monkeypatch.setenv("WORLDFOUNDRY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "huggingface"))
+    monkeypatch.setenv("CPATH", str(existing))
+    result = subprocess.run(
+        [
+            "bash",
+            "scripts/setup/unified_install.sh",
+            "--verify-only",
+            "--cuda",
+            "cu128",
+            "--home",
+            str(tmp_path),
+            "--prefix",
+            str(prefix),
+            "--env-file",
+            str(exports),
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 17, result.stderr
+    observed = subprocess.check_output(
+        ["bash", "-c", 'source "$1"; printf "%s" "$CPATH"', "bash", str(exports)], text=True, timeout=10
+    )
+    assert observed == (f"{include}:{existing}" if has_cuda_headers else str(existing))
 
 
 def test_solarwm_public_wan_ids_reach_flash_attn_post_install() -> None:

@@ -224,6 +224,12 @@ export WORLDFOUNDRY_WORKSPACE_ROOT="${HOME_ROOT}"
 export CONDA_PREFIX="${ENV_PREFIX}"
 export PATH="${ENV_PREFIX}/bin:\${PATH}"
 export PYTHON="${ENV_PREFIX}/bin/python"
+# Torch extensions compile host C++ against the Conda toolkit headers.
+_wf_cuda_include="${ENV_PREFIX}/targets/\$(uname -m)-linux/include"
+if [ -f "\$_wf_cuda_include/cuda_runtime.h" ]; then
+  export CPATH="\$_wf_cuda_include\${CPATH:+:\$CPATH}"
+fi
+unset _wf_cuda_include
 export HF_HOME="${HF_HOME_ROOT}"
 export HF_HUB_CACHE="${HF_HOME_ROOT}/hub"
 export HF_DATASETS_CACHE="${HF_HOME_ROOT}/datasets"

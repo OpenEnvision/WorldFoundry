@@ -36,6 +36,10 @@ make test
 python -m pytest -q tests/runtime/test_geometry_regression_impact.py
 ```
 
+The generated environment adds the Conda CUDA toolkit's target-specific headers
+to the host compiler search path when present. PyTorch extensions such as
+gsplat use them to compile C++ sources.
+
 The default selection in `pyproject.toml` covers process logging, GPU lease
 bookkeeping with simulated devices, checkpoint staging, job persistence,
 Conda dispatch, pipeline cleanup, job shutdown, and packaging boundaries.

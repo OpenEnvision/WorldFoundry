@@ -32,6 +32,8 @@ make test
 python -m pytest -q tests/runtime/test_geometry_regression_impact.py
 ```
 
+生成的环境文件会将 Conda CUDA toolkit 中与当前架构对应的头文件目录加入主机编译器搜索路径。gsplat 等 PyTorch 扩展编译 C++ 源码时会用到这些头文件。
+
 默认 CPU 门禁覆盖进程日志、模拟 GPU 租约、checkpoint staging、任务持久化、Conda dispatch、推理取消与超时、worker 退出和打包边界。它不需要 CUDA、模型下载、Torch 或 API 凭据，CI 使用同一选择。`make test-infer` 是别名；系统的 `python` 仍为 Python 2 时，使用 `make test PYTHON=python3`。
 
 公共门禁仅依赖不含 Torch 的 `test` extra；PyAV、Protobuf 与 SoundFile 支持其中的实际 artifact reader。需要导入模型 runtime 或张量 metric 的契约属于 `test-infer-tensors`。
