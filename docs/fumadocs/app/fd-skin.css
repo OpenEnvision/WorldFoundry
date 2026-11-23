@@ -167,6 +167,7 @@
 .dark .pi-doc-link-active:hover {
   background: transparent;
   color: var(--pi-brand-accent);
+  font-weight: 600;
 }
 
 .dark .pi-doc-link-icon.is-active,
@@ -231,6 +232,11 @@
   font-weight: 400;
 }
 
+.dark .pi-doc-toc-links a[data-branch-active='true']:not([data-active='true']) {
+  border-left-color: color-mix(in srgb, var(--pi-brand-accent-soft) 78%, var(--pi-line));
+  color: var(--pi-ink);
+}
+
 .pi-doc-toc-links a[data-active='true'] {
   background: transparent;
   border-left-color: var(--pi-brand-accent);
@@ -256,6 +262,10 @@
 .pi-doc-action-link:hover {
   background: transparent;
   border-color: transparent;
+}
+
+.pi-doc-action-link[data-copied='true'] {
+  color: var(--pi-brand-accent);
 }
 
 .pi-doc-content {
@@ -285,7 +295,7 @@
   font-size: var(--pi-doc-body-size);
   line-height: var(--pi-doc-body-leading);
   margin: 0 0 var(--pi-doc-paragraph-gap);
-  text-indent: 0 !important;
+  text-indent: 0;
 }
 
 .pi-doc-content li {
@@ -389,8 +399,8 @@
 }
 
 .pi-doc-content figure.shiki {
-  border: 1px solid var(--color-fd-border) !important;
-  box-shadow: none !important;
+  border: 1px solid var(--color-fd-border);
+  box-shadow: none;
 }
 
 .pi-doc-content .grid.gap-3.my-4 > a.rounded-lg.border.bg-fd-card {
@@ -868,7 +878,11 @@
   box-shadow: var(--pi-shadow-soft);
 }
 
-.dark .pi-doc-content .wf-docs-tabs [role='tablist'],
+.dark .pi-doc-content .wf-docs-tabs [role='tablist'] {
+  --wf-tablist-bg: color-mix(in srgb, var(--pi-paper) 62%, var(--pi-elevated));
+  border-bottom-color: var(--pi-line);
+}
+
 .dark .pi-doc-content .my-4.flex.flex-col.overflow-hidden.rounded-xl.border.bg-fd-secondary .px-4 {
   background: color-mix(in srgb, var(--pi-paper) 62%, var(--pi-elevated)) !important;
   border-bottom-color: var(--pi-line);
@@ -920,19 +934,37 @@
   background: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated));
 }
 
-.dark .pi-doc-content table {
+.dark .pi-doc-content table:not(.wf-benchmark-board-table) {
   background: var(--pi-elevated) !important;
   border-color: var(--pi-line) !important;
 }
 
-.dark .pi-doc-content th {
+.dark .pi-doc-content table:not(.wf-benchmark-board-table) th {
   background: color-mix(in srgb, var(--pi-paper) 82%, var(--pi-elevated)) !important;
   color: var(--pi-ink) !important;
 }
 
-.dark .pi-doc-content td {
+.dark .pi-doc-content table:not(.wf-benchmark-board-table) td {
   background: color-mix(in srgb, var(--pi-paper) 94%, var(--pi-elevated)) !important;
   color: color-mix(in srgb, var(--pi-ink) 94%, var(--pi-muted)) !important;
+}
+
+.dark .pi-doc-content .wf-benchmark-board-table thead th {
+  background: transparent !important;
+  color: var(--pi-muted) !important;
+}
+
+.dark .pi-doc-content .wf-benchmark-board-table tbody th,
+.dark .pi-doc-content .wf-benchmark-board-table tbody td {
+  background: transparent !important;
+  color: color-mix(in srgb, var(--pi-ink) 94%, var(--pi-muted)) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dark .pi-doc-content .wf-benchmark-board-table tbody tr:hover th,
+  .dark .pi-doc-content .wf-benchmark-board-table tbody tr:hover td {
+    background: color-mix(in srgb, var(--pi-elevated) 78%, transparent) !important;
+  }
 }
 
 .dark .pi-doc-content :where(td, th) {
@@ -1312,9 +1344,10 @@
 }
 
 .dark .pi-open-logo {
-  background: var(--pi-elevated);
+  background: transparent;
   border-color: var(--pi-line);
   box-shadow: none;
+  filter: invert(1) hue-rotate(180deg);
 }
 
 /* Publisher marks are drawn for light backgrounds; keep a light plate in dark mode. */
@@ -1448,7 +1481,8 @@
   border-left-color: color-mix(in srgb, var(--pi-brand-accent) 35%, var(--pi-line)) !important;
 }
 
-.dark .pi-doc-content .my-4.rounded-xl.border.bg-fd-card:not(figure.shiki) {
+.dark .pi-doc-content .my-4.rounded-xl.border.bg-fd-card:not(figure.shiki),
+.dark .pi-doc-content .my-4.rounded-xl.border.bg-fd-card:not(figure.shiki):has([class*='fill-(--callout-color)']) {
   background: color-mix(in srgb, var(--pi-paper) 90%, var(--pi-elevated)) !important;
   border-color: var(--pi-line) !important;
   box-shadow: none !important;
@@ -1562,7 +1596,7 @@
   color: var(--pi-brand-accent) !important;
 }
 
-/* ---------- Home hero: RoboDojo-scale media card ---------- */
+/* ---------- Home hero: RoboDojo-scale overlapping media carousel ---------- */
 .wf-home-hero-carousel {
   margin: 0 auto;
   max-width: 100%;
@@ -1572,7 +1606,7 @@
 .wf-home-hero-carousel-viewport {
   align-items: center;
   display: flex;
-  height: clamp(32rem, 49vw, 57.1875rem);
+  height: clamp(20rem, 46.125vw, 62.65rem);
   justify-content: center;
   overflow: visible;
   perspective: 1800px;
@@ -1596,29 +1630,33 @@
   top: 50%;
   transform: translate(-50%, -50%) scale(0.86);
   transition:
-    box-shadow 280ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 280ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
-  width: min(92%, 111.375rem);
-  will-change: transform, opacity;
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  width: min(82vw, 111.375rem);
+  will-change: transform, opacity, box-shadow;
   z-index: 1;
 }
 
 .wf-home-hero-card.is-active {
+  filter: blur(0px);
   opacity: 1;
   pointer-events: auto;
   transform: translate(-50%, -50%) scale(1);
-  width: min(96vw, 111.375rem);
+  width: min(82vw, 111.375rem);
   z-index: 3;
 }
 
 .wf-home-hero-card.is-prev {
-  transform: translate(calc(-50% - 38%), -50%) scale(0.84);
+  filter: blur(1.5px);
+  transform: translate(calc(-50% - 38%), -50%) scale(0.96);
   z-index: 2;
 }
 
 .wf-home-hero-card.is-next {
-  transform: translate(calc(-50% + 38%), -50%) scale(0.84);
+  filter: blur(1.5px);
+  transform: translate(calc(-50% + 38%), -50%) scale(0.96);
   z-index: 2;
 }
 
@@ -1631,7 +1669,7 @@
   flex-direction: column;
   overflow: hidden;
   position: relative;
-  transition: box-shadow 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .wf-home-hero-card.is-active .wf-home-hero-card-frame {
@@ -1646,9 +1684,9 @@
 }
 
 .wf-home-hero-card-media {
-  aspect-ratio: 1784 / 915;
-  background: color-mix(in srgb, var(--pi-ink) 6%, var(--pi-paper));
-  min-height: clamp(32rem, 49vw, 57.1875rem);
+  aspect-ratio: 16 / 9;
+  background: #0a0c10;
+  min-height: 0;
   overflow: hidden;
   position: relative;
   width: 100%;
@@ -1665,32 +1703,66 @@
   width: 100%;
 }
 
-/* Title/lead/CTA sit directly on the active video, RoboDojo-style. */
-.wf-home-hero-card-overlay {
-  align-items: flex-end;
+.wf-home-hero-carousel-controls {
+  align-items: center;
   display: flex;
-  inset: 0;
-  padding: clamp(1.5rem, 4vw, 3.25rem);
-  pointer-events: none;
-  position: absolute;
-  z-index: 2;
+  gap: 0.875rem;
+  justify-content: center;
+  margin-top: 0.875rem;
+  pointer-events: auto;
 }
 
-.wf-home-hero-card-overlay::before {
-  /* Darken the lower-left copy area so small text stays legible over any frame. */
-  background:
-    linear-gradient(90deg, rgba(10, 9, 7, 0.5) 0%, rgba(10, 9, 7, 0.22) 45%, transparent 70%),
-    linear-gradient(
-      180deg,
-      transparent 0%,
-      transparent 24%,
-      rgba(10, 9, 7, 0.52) 64%,
-      rgba(10, 9, 7, 0.76) 100%
-    );
-  content: '';
-  inset: 0;
-  pointer-events: none;
-  position: absolute;
+.wf-home-hero-carousel-nav {
+  align-items: center;
+  background: var(--pi-elevated);
+  border: 1px solid var(--pi-line);
+  border-radius: 999px;
+  color: var(--pi-ink);
+  cursor: pointer;
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+  width: 2rem;
+}
+
+.wf-home-hero-carousel-nav:hover {
+  background: var(--pi-paper-hover);
+  border-color: var(--pi-soft-line);
+  color: var(--pi-brand-accent);
+}
+
+.wf-home-hero-carousel-nav:active {
+  transform: scale(0.97);
+}
+
+.wf-home-hero-carousel-dots {
+  display: inline-flex;
+  gap: 0.375rem;
+}
+
+.wf-home-hero-carousel-dots button {
+  background: color-mix(in srgb, var(--pi-ink) 22%, transparent);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  height: 0.4375rem;
+  padding: 0;
+  transition:
+    background 160ms ease,
+    transform 160ms ease,
+    width 160ms ease;
+  width: 0.4375rem;
+}
+
+.wf-home-hero-carousel-dots button.is-active {
+  background: var(--pi-brand-accent);
+  transform: scale(1.05);
+  width: 1.375rem;
 }
 
 @media (max-width: 900px) {
@@ -1714,10 +1786,6 @@
     top: 0;
     transform: translate(-50%, 0) scale(1);
     width: 100%;
-  }
-
-  .wf-home-hero-card-overlay {
-    padding: 1.25rem;
   }
 }
 
@@ -1744,20 +1812,17 @@
 /* ---------- Home hero: Fumadocs-style kicker ---------- */
 .wf-home-hero-kicker {
   animation: wf-hero-copy-enter 760ms cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
-  color: #f2e4cc;
+  color: var(--pi-brand-accent);
   font-family:
     'Noto Sans SC', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
     sans-serif;
   font-size: 0.8125rem;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.08em;
   line-height: 1.45;
-  margin: 0 0 0.75rem;
+  margin: 0 auto 0.75rem;
   max-width: 34em;
-  text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.5),
-    0 0 12px rgba(0, 0, 0, 0.35);
-  text-transform: none;
+  text-transform: uppercase;
   text-wrap: balance;
 }
 
@@ -1841,6 +1906,15 @@
 .pi-doc-welcome-badge:active,
 .wf-recipe-show-more:active,
 .wf-recipe-family-tabs button:active,
+.wf-command-builder-tabs button:active,
+.wf-command-builder-disclosure:active,
+.wf-command-builder-more-toggle:active,
+.pi-doc-content .wf-docs-tabs-trigger:active,
+.pi-doc-content figure.shiki > div:has(> button[type='button']) button:active,
+.pi-doc-pagination-link:active,
+.pi-doc-related-link:active,
+.pi-doc-menu-button:active,
+.pi-doc-benchmark-tree-toggle:active,
 .pi-doc-header .pi-nav a:active,
 .pi-language-switch a:active,
 .pi-github-link:active,
@@ -1880,6 +1954,55 @@
 .dark .pi-doc-content blockquote {
   background: color-mix(in srgb, var(--pi-paper) 86%, var(--pi-elevated));
   border-color: var(--pi-line);
+}
+
+.dark .wf-model-mark:not(.has-logo),
+.dark .wf-benchmark-mark:not(.has-logo) {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--pi-elevated) 90%, var(--pi-brand-accent)),
+      color-mix(in srgb, var(--pi-paper) 84%, var(--pi-brand-accent))
+    ),
+    var(--pi-elevated) !important;
+  border-color: color-mix(in srgb, var(--pi-brand-accent) 26%, var(--pi-line)) !important;
+  color: var(--pi-ink) !important;
+}
+
+.dark .wf-model-mark:not(.has-logo)[data-family='Embodied Action'],
+.dark .wf-benchmark-mark:not(.has-logo)[data-category='Embodied AI'] {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 7px,
+      color-mix(in srgb, var(--pi-brand-accent) 12%, transparent) 7px 8px
+    ),
+    color-mix(in srgb, var(--pi-elevated) 92%, var(--pi-brand-accent)) !important;
+}
+
+.dark .wf-model-mark:not(.has-logo)[data-family='World Rollout'],
+.dark .wf-benchmark-mark:not(.has-logo)[data-category='World Models'] {
+  background:
+    radial-gradient(
+      circle at 70% 28%,
+      color-mix(in srgb, var(--pi-brand-accent) 26%, transparent) 0 11%,
+      transparent 12%
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--pi-elevated) 90%, var(--pi-brand-accent)),
+      color-mix(in srgb, var(--pi-paper) 84%, var(--pi-brand-accent))
+    ) !important;
+}
+
+.dark .wf-model-mark:not(.has-logo)[data-family='3D / 4D Scene'] {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--pi-elevated) 90%, var(--pi-brand-accent)) 0 56%,
+      color-mix(in srgb, var(--pi-paper) 78%, var(--pi-brand-accent)) 56% 100%
+    ),
+    var(--pi-elevated) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
