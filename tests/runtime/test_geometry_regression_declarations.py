@@ -64,7 +64,11 @@ def test_family_declaration_requires_generated_outputs_and_declared_inputs(case_
     json_inputs = {item["path"] for item in case.get("input_json", {}).values()}
     for name, value in case.get("asset_sha256", {}).items():
         assert name in case["assets"]
-        assert re.fullmatch(r"\$\{WORLDFOUNDRY_REGRESSION_[A-Z0-9_]+_SHA256\}", value)
+        operator_pin = re.fullmatch(r"\$\{WORLDFOUNDRY_REGRESSION_[A-Z0-9_]+_SHA256\}", value)
+        release_pin = case["assets"][name].startswith("${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/") and re.fullmatch(
+            r"[0-9a-f]{64}", value
+        )
+        assert operator_pin or release_pin
     for path in case["assets"].values():
         if path.startswith("${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}") and Path(path).suffix in {
             ".png",

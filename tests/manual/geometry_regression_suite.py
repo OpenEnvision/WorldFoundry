@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import contextlib
 import fcntl
 import importlib.util
@@ -34,6 +35,18 @@ def load_module(path: Path):
 impact = load_module(Path(__file__).with_name("geometry_regression_impact.py"))
 replay = load_module(Path(__file__).with_name("geometry_regression.py"))
 REPLAY_SCRIPT = Path("tests/manual/geometry_regression.py")
+
+
+def accepts_reference_manifest(worker: Path) -> bool:
+    return any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "add_argument"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value == "--accepted-manifest"
+        for node in ast.walk(ast.parse(worker.read_text(), filename=str(worker)))
+    )
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -675,15 +688,19 @@ def run_suite(
             if preflight_only:
                 report["status"] = "preflight_passed"
                 return report
+            worker = source / REPLAY_SCRIPT
+            worker_checks_assets = accepts_reference_manifest(worker)
             holder.stop()
             for name in selected:
                 remaining = profile["suite_timeout_seconds"] - (time.monotonic() - started)
                 if remaining <= 0:
                     raise TimeoutError("Whole GPU suite exceeded its time budget")
                 candidate = root / "candidate" / name
+                manifest = Path(profile["reference"]) / name / "manifest.json"
+                case_env = child_environment(configurations[name])
                 command = [
                     configurations[name]["python"],
-                    str(source / REPLAY_SCRIPT),
+                    str(worker),
                     "run",
                     "--case",
                     str(root / "recipes.json"),
@@ -693,13 +710,22 @@ def run_suite(
                     str(source),
                     "--output-dir",
                     str(candidate),
-                    "--accepted-manifest",
-                    str(Path(profile["reference"]) / name / "manifest.json"),
                 ]
                 try:
+                    if worker_checks_assets:
+                        command.extend(["--accepted-manifest", str(manifest)])
+                    else:
+                        # Older workers record asset hashes but do not compare them before loading.
+                        case = resolve_case(recipes[name], case_env)
+                        pinned = replay.verify_asset_pins(case)
+                        expected = json.loads(manifest.read_text())["assets"]
+                        replay.hash_assets(case["assets"], expected, pinned=pinned)
+                        remaining = profile["suite_timeout_seconds"] - (time.monotonic() - started)
+                        if remaining <= 0:
+                            raise TimeoutError("Whole GPU suite exceeded its time budget")
                     exit_code = run_child(
                         command,
-                        child_environment(configurations[name]),
+                        case_env,
                         source,
                         root / f"{name}.log",
                         min(remaining, profile["case_timeout_seconds"]),

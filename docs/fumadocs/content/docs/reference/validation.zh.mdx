@@ -210,6 +210,10 @@ AnimateDiff V3 固定回放读取的 SD1.5 文件、运动模块、RealisticVisi
 及 OpenAI CLIP ViT-L/14 的配置和权重。将两份 CLIP 文件放在
 `WORLDFOUNDRY_CKPT_DIR/openai--clip-vit-large-patch14` 下。
 
+Echo-Infinity 固定从 `wan_models/Wan2.1-T2V-1.3B` 加载的去噪器配置和权重、
+VAE、T5 编码器以及 tokenizer 文件。生成器 checkpoint 的 SHA256 由回放配置提供。
+这个明确的文件清单需要使用同一配方记录的已验收参考。
+
 生成视频音轨通过 `audio_outputs: ["video.mp4"]` 显式选择。PyAV 将所选音轨
 解码为 `audio.<file>.samples` 下的 float32 PCM，同时记录采样率、通道数与通道布局。
 即使设置浮点容差，也要求 PCM 完全一致；缺失或空音轨验证失败。HyperFlow 同时
@@ -430,7 +434,7 @@ python3 tests/manual/geometry_regression_schedule.py remove \
 
 `latest.json` 在开始时记录 `running`，结束时记录最终结果；`runs/` 保存日志、源码版本和比较报告。默认保留最近七次运行目录，更早的简要报告归档到 `history/`。已验收基准必须位于可清理的运行目录之外，执行器不会重新生成或覆盖它。profile、本地 assets、权重和数值证据不进入 Git。
 
-`--preflight-only` 对照已验收基准检查选中案例的资源文件清单和运行环境。资源检查失败时会在获取 GPU 租约前将受影响的案例记录到 `asset_preflight_failures`。正式回放还会在加载模型权重前核对资源的 SHA-256。数值推理证据来自完成的回放。
+`--preflight-only` 对照已验收基准检查选中案例的资源文件清单和运行环境。资源检查失败时会在获取 GPU 租约前将受影响的案例记录到 `asset_preflight_failures`。正式回放还会在加载模型权重前核对资源的 SHA-256。对于回放脚本尚无已验收清单参数的旧快照，控制器在启动快照中的回放脚本前核对摘要。数值推理证据来自完成的回放。
 
 主机 profile 还应固定数值环境配置，包括 `OMP_NUM_THREADS` 和 `MKL_NUM_THREADS`；即使所有包版本一致，CPU 深度重建也可能随线程数改变。为不同 Python/Torch/CUDA/C++ ABI 使用独立的 `TORCH_EXTENSIONS_DIR`，并保证扩展编译器采用 Torch 的 C++ ABI；单独新建缓存无法纠正编译器的 ABI 默认值。DreamX 在调用者显式启用确定性算法时关闭 cuDNN 自动选算法，避免不同进程选择不同卷积算法。确定性策略变化后的参考结果须另存，附上与受控原实现的数值对齐证明；不能覆盖旧参考或放宽阈值掩盖差异。
 

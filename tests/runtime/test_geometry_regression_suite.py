@@ -684,6 +684,44 @@ def test_each_case_uses_its_accepted_environment_and_groups_preflight(replay_hos
     assert replay_host["env"]["CASE_ENV"] == "default"
 
 
+@pytest.mark.parametrize("altered_asset", [False, True])
+def test_legacy_committed_worker_still_requires_accepted_asset_digests(
+    replay_host: dict, monkeypatch: pytest.MonkeyPatch, altered_asset: bool
+) -> None:
+    source = Path(replay_host["source_root"])
+    script = source / suite.REPLAY_SCRIPT
+    legacy_worker = script.read_text().replace('    run.add_argument("--accepted-manifest", type=Path)\n', "")
+    script.write_text(legacy_worker.replace("            accepted_manifest=args.accepted_manifest,\n", ""))
+    subprocess.run(["git", "-C", str(source), "commit", "-qam", "legacy worker"], check=True)
+
+    events, _ = no_gpu(monkeypatch)
+    if altered_asset:
+        manifest = Path(replay_host["reference"]) / "a/manifest.json"
+        weights = Path(json.loads(manifest.read_text())["case"]["assets"]["weights"])
+        (weights / "model.safetensors").write_bytes(b"modified checkpoint")
+
+    def run(command: list[str], env: dict, cwd: Path, *args: object, **kwargs: object) -> int:
+        assert not altered_asset, "Asset mismatch reached the worker"
+        worker = Path(command[1])
+        assert worker == cwd / suite.REPLAY_SCRIPT
+        assert worker.read_text() == script.read_text()
+        assert "--accepted-manifest" not in command
+        events.append("worker")
+        return 0
+
+    monkeypatch.setattr(suite, "run_child", run)
+    report = suite.run_suite(replay_host, case_ids=["a"])
+    if altered_asset:
+        assert report["status"] == "failed", report
+        assert (
+            "Replay asset SHA256 differs from accepted reference: weights/model.safetensors"
+            in report["cases"]["a"]["error"]
+        )
+    else:
+        assert report["status"] == "passed", report
+        assert "worker" in events
+
+
 def test_misspelled_case_environment_cannot_be_silently_ignored(replay_host, monkeypatch):
     events, _ = no_gpu(monkeypatch)
     replay_host["case_environments"] = {"misspelled-model": {"python": sys.executable}}
