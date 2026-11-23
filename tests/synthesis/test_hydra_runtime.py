@@ -73,3 +73,72 @@ def test_predict_launches_package_module_with_unchanged_inputs(
     assert captured["env"] == {"HF_HUB_OFFLINE": "1"}
     assert "python_paths" not in captured
     assert result == ({"video": str(output), "status": "succeeded"} if return_dict else str(output))
+
+
+def test_default_runtime_uses_the_prepared_pinned_snapshots(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from worldfoundry.studio.inference.catalog.models.video_generation import (
+        _hydra_default_load_kwargs,
+        _hydra_default_ref,
+    )
+
+    hub = tmp_path / "hub"
+    hydra = hub / "models--H-EmbodVis--HyDRA/snapshots/c2b83e1bc452974a9e599b026e0e09f084a0165f"
+    wan = hub / "models--Wan-AI--Wan2.1-T2V-1.3B/snapshots/37ec512624d61f7aa208f7ea8140a131f93afc9a"
+    files = [
+        hydra / "hydra.ckpt",
+        wan / "diffusion_pytorch_model.safetensors",
+        wan / "models_t5_umt5-xxl-enc-bf16.pth",
+        wan / "Wan2.1_VAE.pth",
+        wan / "google/umt5-xxl/tokenizer.json",
+        wan / "google/umt5-xxl/tokenizer_config.json",
+        wan / "google/umt5-xxl/special_tokens_map.json",
+        wan / "google/umt5-xxl/spiece.model",
+    ]
+    for file in files:
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.touch()
+    monkeypatch.setenv("HF_HUB_CACHE", str(hub))
+    monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path / "hfd"))
+    monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(tmp_path / "checkpoints"))
+    monkeypatch.delenv("WORLDFOUNDRY_HYDRA_CHECKPOINT", raising=False)
+    monkeypatch.delenv("WORLDFOUNDRY_WAN21_1P3B_ROOT", raising=False)
+
+    runtime = runtime_module.HydraRuntime(device="cpu")
+
+    assert runtime.checkpoint_path == hydra / "hydra.ckpt"
+    assert runtime.base_model_path == wan
+    assert _hydra_default_ref() == str(hydra / "hydra.ckpt")
+    assert _hydra_default_load_kwargs() == {"base_model_path": str(wan)}
+
+
+def test_build_pipeline_uses_tokenizer_under_the_snapshot_for_symlinked_t5(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from worldfoundry.synthesis.visual_generation.hydra.hydra_runtime import infer_hydra
+
+    tokenizer = tmp_path / "snapshots/revision/google/umt5-xxl"
+    tokenizer.mkdir(parents=True)
+    blob = tmp_path / "blobs/text-weights"
+    blob.parent.mkdir()
+    blob.touch()
+    text_weights = tokenizer.parents[1] / "models_t5_umt5-xxl-enc-bf16.pth"
+    text_weights.symlink_to(blob)
+    calls = {}
+
+    class Pipeline:
+        @classmethod
+        def from_components(cls, **kwargs):
+            calls.update(kwargs)
+            return cls()
+
+        def load_hydra_checkpoint(self, *args, **kwargs):
+            return self
+
+        def to(self, *args, **kwargs):
+            return self
+
+    monkeypatch.setattr(infer_hydra, "HyDRAPipeline", Pipeline)
+    monkeypatch.setattr(infer_hydra, "load_model", lambda *args, **kwargs: object())
+    infer_hydra.build_pipeline("cpu", "hydra.ckpt", "dit.safetensors", str(text_weights), "vae.pth", True)
+
+    assert calls["tokenizer_path"] == str(tokenizer)

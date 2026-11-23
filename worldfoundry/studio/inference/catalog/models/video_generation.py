@@ -136,20 +136,21 @@ def _stable_video_infinity_default_load_kwargs() -> dict[str, Any]:
 
 
 def _hydra_default_ref() -> str:
-    return resolve._checkpoint_model_ref(
-        "H-EmbodVis--HyDRA/hydra.ckpt",
-        fallback=str(hfd_root_path() / "H-EmbodVis--HyDRA" / "hydra.ckpt"),
-    )
+    checkpoint = resolve._checkpoint_model_ref("H-EmbodVis--HyDRA/hydra.ckpt")
+    if checkpoint and Path(checkpoint).is_file():
+        return checkpoint
+    from worldfoundry.synthesis.visual_generation.hydra.worldfoundry_runtime import default_hydra_checkpoint
+
+    return str(default_hydra_checkpoint())
 
 
 def _hydra_default_load_kwargs() -> dict[str, str]:
-    return {
-        "base_model_path": resolve._checkpoint_model_ref(
-            "Wan-AI--Wan2.1-T2V-1.3B",
-            "Wan2.1-T2V-1.3B",
-            fallback=str(checkpoint_root_path() / "Wan2.1-T2V-1.3B"),
-        )
-    }
+    base = resolve._checkpoint_model_ref("Wan-AI--Wan2.1-T2V-1.3B", "Wan2.1-T2V-1.3B")
+    if base and Path(base).is_dir():
+        return {"base_model_path": base}
+    from worldfoundry.synthesis.visual_generation.hydra.worldfoundry_runtime import default_hydra_base_model
+
+    return {"base_model_path": str(default_hydra_base_model(checkpoint_root_path() / "Wan2.1-T2V-1.3B"))}
 
 
 def _vmem_default_load_kwargs() -> dict[str, Any]:

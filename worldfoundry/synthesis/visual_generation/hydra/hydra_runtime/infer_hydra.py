@@ -241,7 +241,7 @@ def build_pipeline(
         device="cpu",
         state_dict_converter=WanVideoVAEStateDictConverter().from_civitai,
     )
-    tokenizer_path = Path(base_text_encoder_path).resolve().parent / "google" / "umt5-xxl"
+    tokenizer_path = Path(base_text_encoder_path).absolute().parent / "google" / "umt5-xxl"
     if not tokenizer_path.is_dir():
         raise FileNotFoundError(f"Wan tokenizer directory not found: {tokenizer_path}")
     pipe = HyDRAPipeline.from_components(
