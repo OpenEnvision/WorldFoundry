@@ -881,15 +881,15 @@ def save_image_or_video_tensor(
     ffmpeg_params: list[str] | None = None,
     value_range: str | tuple[float, float] = "auto",
     layout: VideoTensorLayout | None = None,
-    image_format: str = "JPEG",
+    image_format: str | None = None,
     video_format: str = "mp4",
     **kwargs,
 ) -> str | None:
     """Save a normalized ``[C,T,H,W]`` or ``[B,C,T,H,W]`` tensor as image/video.
 
     A single-frame tensor is saved as an image; multi-frame tensors are saved as
-    videos. Local paths and URI-like targets supported by ``worldfoundry.core.io``
-    storage helpers are both accepted.
+    videos. Image paths ending in ``.png`` default to PNG. Other image targets
+    default to JPEG. Local paths and URI-like targets are both accepted.
     """
 
     from io import BytesIO
@@ -903,12 +903,13 @@ def save_image_or_video_tensor(
     if frames.shape[0] == 1:
         image = Image.fromarray(frames[0][..., :3]).convert("RGB")
         if is_file_obj:
-            image.save(target, format=image_format, quality=quality or 85, **kwargs)
+            image.save(target, format=image_format or "JPEG", quality=quality or 85, **kwargs)
             return None
 
         path_text = str(target)
         if not Path(path_text).suffix:
             path_text = f"{path_text}.jpg"
+        image_format = image_format or ("PNG" if Path(path_text).suffix.lower() == ".png" else "JPEG")
         if parse_uri_scheme(path_text) == "file":
             output_path = uri_to_local_path(path_text)
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -964,9 +965,11 @@ def write_video_torchvision(
     """Write RGB video frames with a ``torchvision.io.write_video``-compatible signature."""
 
     try:
-        from torchvision.io import write_video as torchvision_write_video
+        import torchvision.io
     except (ImportError, AttributeError, RuntimeError):
         torchvision_write_video = None
+    else:
+        torchvision_write_video = getattr(torchvision.io, "write_video", None)
 
     if torchvision_write_video is not None:
         try:

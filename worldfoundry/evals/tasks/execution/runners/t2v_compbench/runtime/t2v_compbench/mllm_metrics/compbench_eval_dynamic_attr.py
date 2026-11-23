@@ -11,7 +11,6 @@ import numpy as np
 import requests
 import torch
 from PIL import Image
-from torchvision.io import write_video
 
 from worldfoundry.base_models.llm_mllm_core.mllm.llava_next.llava.constants import (
     DEFAULT_IMAGE_TOKEN,
@@ -25,6 +24,7 @@ from worldfoundry.base_models.llm_mllm_core.mllm.llava_next.llava.mm_utils impor
 )
 from worldfoundry.base_models.llm_mllm_core.mllm.llava_next.llava.model.builder import load_pretrained_model
 from worldfoundry.base_models.llm_mllm_core.mllm.llava_next.llava.utils import disable_torch_init
+from worldfoundry.core.media.codecs.video import write_video_torchvision as write_video
 from worldfoundry.evals.tasks.execution.runners.t2v_compbench.runtime.t2v_compbench.asset_paths import asset_path
 
 

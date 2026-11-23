@@ -687,6 +687,15 @@ def test_nwm_prediction_pngs_require_exact_pixels(tmp_path: Path, change: bool) 
     assert result["status"] == ("failed" if change else "passed")
 
 
+def test_png_replay_rejects_jpeg_payload(tmp_path: Path) -> None:
+    from PIL import Image
+
+    image = tmp_path / "prediction.png"
+    Image.new("RGB", (3, 2)).save(image, format="JPEG")
+    with pytest.raises(ValueError, match="Expected PNG image, got JPEG"):
+        replay.exported_arrays(tmp_path, [str(image)])
+
+
 def write_aac_video(
     path: Path, *, rate: int = 16000, channels: int = 2, frequency: int = 440, audio: bool = True
 ) -> None:

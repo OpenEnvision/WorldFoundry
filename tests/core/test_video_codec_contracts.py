@@ -181,7 +181,7 @@ def test_opencv_fallback_uses_fourcc_and_releases_writer(
         def release(self) -> None:
             closed.append(True)
 
-    monkeypatch.delattr(torchvision.io, "write_video")
+    monkeypatch.delattr(torchvision.io, "write_video", raising=False)
     monkeypatch.setattr(cv2, "VideoWriter", Writer)
     if fail_write:
         with pytest.raises(RuntimeError, match="write failed"):

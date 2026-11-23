@@ -156,7 +156,7 @@ def test_rolling_forcing_inference_preserves_video_encoding_options(
     from worldfoundry.core.model_loading import checkpoints
     from worldfoundry.synthesis.visual_generation.rolling_forcing import inference
 
-    original_writer = tv_io.write_video
+    original_writer = getattr(tv_io, "write_video", None)
     config = tmp_path / "config.yaml"
     config.write_text("num_frame_per_block: 3\n", encoding="utf-8")
     config.with_name("default_config.yaml").write_text("{}\n", encoding="utf-8")
@@ -218,7 +218,7 @@ def test_rolling_forcing_inference_preserves_video_encoding_options(
     torch.testing.assert_close(captured["frames"], expected, rtol=0, atol=0)
     assert captured["path"] == tmp_path / "camera_move-0.mp4"
     assert captured["options"] == {"fps": 16, "codec": "libx264", "macro_block_size": 16}
-    assert tv_io.write_video is original_writer
+    assert getattr(tv_io, "write_video", None) is original_writer
 
 
 @pytest.mark.unit

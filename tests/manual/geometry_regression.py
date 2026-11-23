@@ -307,6 +307,9 @@ def exported_arrays(root: Path, files: list[str]) -> dict:
             from PIL import Image
 
             with Image.open(path) as image:
+                expected_format = "PNG" if path.suffix.lower() == ".png" else "JPEG"
+                if image.format != expected_format:
+                    raise ValueError(f"Expected {expected_format} image, got {image.format}: {path}")
                 collect_arrays(np.asarray(image), arrays, key)
         elif path.suffix == ".json":
             collect_arrays(json.loads(path.read_text()), arrays, key)
