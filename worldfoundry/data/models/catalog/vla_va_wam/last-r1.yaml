@@ -2,6 +2,50 @@ runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRu
 availability: open_source
 checkpoint_refs:
 - repo_id: chenhao01/LaST-R1
+  revision: d62fa3df151cd3dd65cc4a1fbc230f3632ed3390
+  filename: LaST-R1-RL/last-r1-rl-libero_10/added_tokens.json
+- repo_id: chenhao01/LaST-R1
+  revision: d62fa3df151cd3dd65cc4a1fbc230f3632ed3390
+  filename: LaST-R1-RL/last-r1-rl-libero_10/chat_template.jinja
+- repo_id: chenhao01/LaST-R1
+  revision: d62fa3df151cd3dd65cc4a1fbc230f3632ed3390
+  filename: LaST-R1-RL/last-r1-rl-libero_10/config.json
+- repo_id: chenhao01/LaST-R1
+  revision: d62fa3df151cd3dd65cc4a1fbc230f3632ed3390
+  filename: LaST-R1-RL/last-r1-rl-libero_10/generation_config.json
+- repo_id: chenhao01/LaST-R1
+  revision: d62fa3df151cd3dd65cc4a1fbc230f3632ed3390
+  filename: LaST-R1-RL/last-r1-rl-libero_10/merges.txt
+- repo_id: chenhao01/LaST-R1
+  revision: d62fa3df151cd3dd65cc4a1fbc230f3632ed3390
+  filename: LaST-R1-RL/last-r1-rl-libero_10/model-00001-of-00002.safetensors
+- repo_id: chenhao01/LaST-R1
+  revision: d62fa3df151cd3dd65cc4a1fbc230f3632ed3390
+  filename: LaST-R1-RL/last-r1-rl-libero_10/model-00002-of-00002.safetensors
+- repo_id: chenhao01/LaST-R1
+  revision: d62fa3df151cd3dd65cc4a1fbc230f3632ed3390
+  filename: LaST-R1-RL/last-r1-rl-libero_10/model.safetensors.index.json
+- repo_id: chenhao01/LaST-R1
+  revision: d62fa3df151cd3dd65cc4a1fbc230f3632ed3390
+  filename: LaST-R1-RL/last-r1-rl-libero_10/preprocessor_config.json
+- repo_id: chenhao01/LaST-R1
+  revision: d62fa3df151cd3dd65cc4a1fbc230f3632ed3390
+  filename: LaST-R1-RL/last-r1-rl-libero_10/special_tokens_map.json
+- repo_id: chenhao01/LaST-R1
+  revision: d62fa3df151cd3dd65cc4a1fbc230f3632ed3390
+  filename: LaST-R1-RL/last-r1-rl-libero_10/statistics.json
+- repo_id: chenhao01/LaST-R1
+  revision: d62fa3df151cd3dd65cc4a1fbc230f3632ed3390
+  filename: LaST-R1-RL/last-r1-rl-libero_10/tokenizer.json
+- repo_id: chenhao01/LaST-R1
+  revision: d62fa3df151cd3dd65cc4a1fbc230f3632ed3390
+  filename: LaST-R1-RL/last-r1-rl-libero_10/tokenizer_config.json
+- repo_id: chenhao01/LaST-R1
+  revision: d62fa3df151cd3dd65cc4a1fbc230f3632ed3390
+  filename: LaST-R1-RL/last-r1-rl-libero_10/video_preprocessor_config.json
+- repo_id: chenhao01/LaST-R1
+  revision: d62fa3df151cd3dd65cc4a1fbc230f3632ed3390
+  filename: LaST-R1-RL/last-r1-rl-libero_10/vocab.json
 id: last-r1
 integration:
   status: integrated
@@ -45,9 +89,9 @@ docs:
     code (CHEN-H01/LaST-R1 at ba4e9396).
   architecture_zh: LaST-R1 在 Qwen3-VL 上增加 latent 推理 token、由 56 个双向注意的动作 token 解码出的 8 步 7 维动作，以及价值头。WorldFoundry
     已将官方模型代码（CHEN-H01/LaST-R1，ba4e9396）的推理路径纳入包内。
-  usage_notes: Stage the libero_10 RL checkpoint from chenhao01/LaST-R1. The in-tree adapter returns eight finite
-    seven-dimensional actions from one image and instruction.
-  usage_notes_zh: 准备 chenhao01/LaST-R1 中的 libero_10 RL 权重。树内适配器从一幅图像与一条指令返回八步有限值的七维动作。
+  usage_notes: Stage the LIBERO-10 RL checkpoint from chenhao01/LaST-R1 at revision d62fa3df151cd3dd65cc4a1fbc230f3632ed3390.
+    The in-tree adapter returns eight finite seven-dimensional actions from one image and instruction.
+  usage_notes_zh: 准备 chenhao01/LaST-R1 固定版本 d62fa3df151cd3dd65cc4a1fbc230f3632ed3390 的 LIBERO-10 RL 权重。树内适配器从一幅图像与一条指令返回八步有限值的七维动作。
   limitations:
   - Integration is scoped to offline action inference; closed-loop LIBERO rollout and task success rate are not
     validated.

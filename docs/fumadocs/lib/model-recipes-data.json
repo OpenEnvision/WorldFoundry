@@ -66969,7 +66969,8 @@
       ],
       "checkpoints": [
         {
-          "id": "chenhao01/LaST-R1"
+          "id": "chenhao01/LaST-R1",
+          "revision": "d62fa3df151cd3dd65cc4a1fbc230f3632ed3390"
         }
       ],
       "variants": [],
@@ -67100,10 +67101,10 @@
           "LaST-R1 在 Qwen3-VL 上增加 latent 推理 token、由 56 个双向注意的动作 token 解码出的 8 步 7 维动作，以及价值头。WorldFoundry 已将官方模型代码（CHEN-H01/LaST-R1，ba4e9396）的推理路径纳入包内。"
         ],
         "usageNotes": [
-          "Stage the libero_10 RL checkpoint from chenhao01/LaST-R1. The in-tree adapter returns eight finite seven-dimensional actions from one image and instruction."
+          "Stage the LIBERO-10 RL checkpoint from chenhao01/LaST-R1 at revision d62fa3df151cd3dd65cc4a1fbc230f3632ed3390. The in-tree adapter returns eight finite seven-dimensional actions from one image and instruction."
         ],
         "usageNotesZh": [
-          "准备 chenhao01/LaST-R1 中的 libero_10 RL 权重。树内适配器从一幅图像与一条指令返回八步有限值的七维动作。"
+          "准备 chenhao01/LaST-R1 固定版本 d62fa3df151cd3dd65cc4a1fbc230f3632ed3390 的 LIBERO-10 RL 权重。树内适配器从一幅图像与一条指令返回八步有限值的七维动作。"
         ],
         "highlights": [
           "Vla",
