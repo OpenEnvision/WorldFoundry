@@ -830,6 +830,8 @@ the runner. Profiles, local assets, weights and evidence stay outside Git.
 with their accepted references. A failed resource check lists each affected
 case under `asset_preflight_failures` before acquiring a GPU lease. The full
 replay also compares asset SHA-256 digests before loading model weights.
+For older snapshots without the worker's accepted-manifest option, the
+controller compares those digests before starting the committed worker.
 Numerical inference evidence comes from the completed replay.
 
 Pin numerical environment settings in the host profile too, including
