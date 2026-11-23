@@ -8015,9 +8015,17 @@
       "return_dict": true
     },
     "assets": {
-      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/showlab--show-o",
-      "vq_model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/showlab--magvitv2",
-      "llm": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/microsoft--phi-1_5"
+      "checkpoint_config": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/showlab--show-o/config.json",
+      "checkpoint_pytorch_model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/showlab--show-o/pytorch_model.safetensors",
+      "llm_added_tokens": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/microsoft--phi-1_5/added_tokens.json",
+      "llm_config": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/microsoft--phi-1_5/config.json",
+      "llm_merges": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/microsoft--phi-1_5/merges.txt",
+      "llm_special_tokens_map": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/microsoft--phi-1_5/special_tokens_map.json",
+      "llm_tokenizer": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/microsoft--phi-1_5/tokenizer.json",
+      "llm_tokenizer_config": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/microsoft--phi-1_5/tokenizer_config.json",
+      "llm_vocab": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/microsoft--phi-1_5/vocab.json",
+      "vq_model_config": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/showlab--magvitv2/config.json",
+      "vq_model_pytorch_model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/showlab--magvitv2/pytorch_model.safetensors"
     },
     "required_outputs": [
       "export.image.png"
@@ -8025,7 +8033,20 @@
     "export_artifacts": [
       "image.png"
     ],
-    "scope": "Released Show-o text-to-image and shared MAGVIT visual tokenizer with source 256px/18-step defaults; exact decoded generated image."
+    "scope": "Released Show-o text-to-image and shared MAGVIT visual tokenizer with source 256px/18-step defaults; exact decoded generated image.",
+    "asset_sha256": {
+      "checkpoint_config": "bbc2e4b0076d2b1a8b624c916c66252745c776abf7622e91b761ccd59fc00c5f",
+      "checkpoint_pytorch_model": "67ca6506dc5a0d47bed8f4aa957c9b23153df0d33540b188ac65115cad7eaea4",
+      "llm_added_tokens": "eca8e90d1be6af3afeb1a37f070f9492645c551a9fb2e1ce2a4a8b21f04ffc8b",
+      "llm_config": "2fe52126434075e8a23aca5bfed8cca8aff7051779e6f11c76de9e9e9923dcef",
+      "llm_merges": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5",
+      "llm_special_tokens_map": "6f50ab5a5a509a1c309d6171f339b196a900dc9c99ad0408ff23bb615fdae7ad",
+      "llm_tokenizer": "337da36be7a71a6e88aa9148967a7bc8736f4b47c7de8e19ba92b89e80734cfc",
+      "llm_tokenizer_config": "001d5ef96609ff1bc02c1b7edabf97d4617c450620cf8dfbbad97c27cd9b5cb6",
+      "llm_vocab": "3ba3c3109ff33976c4bd966589c11ee14fcaa1f4c9e5e154c2ed7f99d80709e7",
+      "vq_model_config": "75b8e650dce094065e2da4983c323f8ca943ed76b8ec8960aef99dafa3d04e6d",
+      "vq_model_pytorch_model": "79656bf974d99c215465a61df5e93b97e03282b0941f62f6294719527873b778"
+    }
   },
   "infinite-world-camera-short": {
     "id": "infinite-world-camera-short",
