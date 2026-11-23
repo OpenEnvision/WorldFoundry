@@ -286,6 +286,8 @@ make verify-inference PYTHON=python3 \
 
 覆盖报告按 catalog 的 native binding 和同一 pipeline class 下注册的 variant 列出缺口。相同 class、模型家族、alias 或历史 `verified` 状态都不会自动给另一个 model ID 分配案例。`case_defined` 只表示有测试配方；报告不会将其提升成 reference 已验收或 GPU 已通过。固定基线保留既有缺口，同时 CI 拒绝新增未覆盖身份、既有配方退化，以及实际受影响却没有可执行数值回放的 native 变体。需要完整覆盖的发布可添加 `--require-complete`，存在缺口时退出码为 2。
 
+按提交差异检查覆盖率时，`--head` 必须解析为当前检查的提交。报告记录比较基线、候选提交和源码树。
+
 按 2026-10-16 的模型下线策略，BiWM Wan2.1（`biwm-wan21@biwm-wan21`）、
 BiWM Wan2.2（`biwm-wan22@biwm-wan22`）、IRASim（`irasim@irasim`）和
 Pandora（`pandora@pandora`）已移出支持范围。冻结基线中的历史记录保持不变；

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -90,6 +93,56 @@ def test_historical_gap_stays_visible_and_does_not_fail_unaffected_changes(proje
     assert result["existing_uncovered_variants"] == ["large@large"]
     assert report["status"] == "partial"
     assert result["accepted_reference_verified"] is result["gpu_inference_verified"] is False
+
+
+@pytest.mark.parametrize("stale_head", [False, True])
+def test_commit_diff_coverage_requires_the_inspected_checkout(
+    project: tuple, monkeypatch: pytest.MonkeyPatch, stale_head: bool
+) -> None:
+    root, matrix, _, _, baseline = project
+    git = ["git", "-C", str(root)]
+    for command in (
+        ["init", "-q"],
+        ["config", "user.name", "Regression test"],
+        ["config", "user.email", "test@example.invalid"],
+        ["add", "."],
+        ["commit", "-qm", "baseline"],
+    ):
+        subprocess.run([*git, *command], check=True)
+    base = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+    baseline["source_revision"] = base
+    helper = root / "worldfoundry/operators/helper.py"
+    helper.write_text("class Operation: changed = True\n")
+    subprocess.run([*git, "commit", "-qam", "change shared operator"], check=True)
+    head = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+    baseline_path = root / "frozen.json"
+    baseline_path.write_text(json.dumps(baseline))
+    monkeypatch.setattr(policy, "_BASELINE_SHA256", hashlib.sha256(baseline_path.read_bytes()).hexdigest())
+    monkeypatch.setattr(inventory, "_coverage_policy", lambda: policy)
+    report_path = root / "coverage.json"
+    arguments = {
+        "source-root": root,
+        "matrix": matrix,
+        "baseline": baseline_path,
+        "base": base,
+        "head": base if stale_head else "HEAD",
+        "output": report_path,
+    }
+    argv = ["coverage"]
+    for option, value in arguments.items():
+        argv.extend(("--" + option, str(value)))
+    monkeypatch.setattr(sys, "argv", argv)
+    status = inventory.main()
+    report = json.loads(report_path.read_text())
+    if stale_head:
+        assert status == 1, report
+        assert "must match the inspected checkout" in report["error"]
+    else:
+        assert status == 2
+        assert report["source_revision"] == head and report["base_revision"] == base
+        assert report["source_tree"] == subprocess.check_output([*git, "rev-parse", "HEAD^{tree}"], text=True).strip()
+        violation = {"variant": "large@large", "reason": "affected_native_variant_without_replay_recipe"}
+        assert violation in report["policy"]["violations"]
 
 
 @pytest.mark.parametrize("mutation", ["remove", "identity_only", "wrong_variant", "missing_checkpoint", "no_outputs"])
