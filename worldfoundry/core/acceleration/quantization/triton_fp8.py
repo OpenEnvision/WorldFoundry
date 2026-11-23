@@ -70,6 +70,10 @@ def _quantize_rowwise_fp8_kernel(
         # row quantization; there is no materialized activation in HBM.
         values = values.to(input_ptr.dtype.element_ty).to(tl.float32)
     amax = tl.max(tl.abs(values), axis=0)
+    # Inductor may lower Python scalar arguments as FP64. Keep the eager
+    # kernel's FP32 scale and avoid an unsupported FP64-to-FP8 cast.
+    fp8_max = tl.cast(fp8_max, tl.float32)
+    tiny = tl.cast(tiny, tl.float32)
     scale = tl.maximum(amax / fp8_max, tiny)
     quantized = values / scale
     quantized = tl.minimum(tl.maximum(quantized, -fp8_max), fp8_max)
