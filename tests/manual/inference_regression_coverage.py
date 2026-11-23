@@ -14,14 +14,17 @@ import json
 import re
 import subprocess
 from pathlib import Path
+from types import ModuleType
 
 import yaml
 
 
-def _coverage_policy():
+def _coverage_policy() -> ModuleType:
     spec = importlib.util.spec_from_file_location(
         "native_coverage_policy", Path(__file__).with_name("native_coverage_policy.py")
     )
+    if spec is None or spec.loader is None:
+        raise ValueError("Could not load native coverage policy")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -139,7 +142,7 @@ def native_models(root: Path) -> tuple[list[dict], list[dict]]:
     # Some runtime variants are declared only in bindings. Associate them with
     # a catalog family by the exact class for inventory purposes; coverage
     # below still requires each variant's own model id and recipe.
-    families = {}
+    families: dict[str, dict] = {}
     for row in rows.values():
         if row.get("target"):
             families.setdefault(row["target"], row)
