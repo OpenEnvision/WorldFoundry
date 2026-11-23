@@ -459,6 +459,7 @@
       "worldfoundry/synthesis/action_generation/diffusion_policy/**"
     ],
     "action-roboflamingo": [
+      "worldfoundry/base_models/_vendor_imports.py",
       "worldfoundry/synthesis/action_generation/roboflamingo/**"
     ],
     "action-tinyvla": [
