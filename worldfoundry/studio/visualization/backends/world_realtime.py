@@ -2709,6 +2709,10 @@ class RealtimePeerManager:
             )
         )
 
+        # The previous socket can close before its model session finishes resetting.
+        if self._draining:
+            await asyncio.wait_for(self._drain_done.wait(), timeout=_realtime_shutdown_timeout_s())
+
         async with self._lock:
             if self.active:
                 raise RuntimeError("A realtime world session is already active.")

@@ -143,6 +143,16 @@ def test_resident_sensor_socket_order_reset_and_recovery(
         peers = RealtimePeerManager(runtime=runtime, fps=16, chunk_frames=2)
         handler_errors: list[BaseException] = []
         completed: asyncio.Queue[None] = asyncio.Queue()
+        reset_started = asyncio.Event()
+        reset_release = asyncio.Event()
+        reset = runtime.reset
+
+        async def hold_failed_session_reset() -> None:
+            reset_started.set()
+            await reset_release.wait()
+            await reset()
+
+        monkeypatch.setattr(runtime, "reset", hold_failed_session_reset)
 
         async def handler(request: web.Request) -> web.WebSocketResponse:
             socket = web.WebSocketResponse()
@@ -189,9 +199,14 @@ def test_resident_sensor_socket_order_reset_and_recovery(
                             break
                     await asyncio.wait_for(socket.receive(), timeout=10)
                 await asyncio.wait_for(completed.get(), timeout=10)
+                await asyncio.wait_for(reset_started.wait(), timeout=10)
                 producer.failure = None
                 async with client.ws_connect(f"http://127.0.0.1:{port}/realtime") as socket:
                     await socket.send_json({"type": "configure", "session": {"output_resolution": "native"}})
+                    try:
+                        await _receive_json(socket, "configuring")
+                    finally:
+                        reset_release.set()
                     await _receive_json(socket, "ready")
                     await socket.send_json({"type": "step"})
                     metadata, recovered = await _receive_chunk(socket)
@@ -218,6 +233,7 @@ def test_resident_sensor_socket_order_reset_and_recovery(
             assert handler_errors == []
             assert len(producer.threads) == 1 and threading.get_ident() not in producer.threads
         finally:
+            reset_release.set()
             await peers.close_active()
             await runtime.close()
             await runner.cleanup()
