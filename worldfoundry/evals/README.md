@@ -28,7 +28,7 @@ Guide: [Evaluation](https://openenvision.github.io/WorldFoundry/docs/evaluation)
 | `models/runners/` | `resolve_model_zoo_runner()` and runner registry/plugins |
 | `tasks/execution/orchestration/` | Run modes: `run.py` (`wf run` dispatch), `service.py` (surface intents), evaluate, model × benchmark, suites, plans, resume, cache, scoring |
 | `tasks/execution/runners/<benchmark>/` | Per-benchmark official runners (VBench, EvalCrafter, WorldScore, …) |
-| `tasks/metrics/<metric>/` | Executable metrics (FVD, FID, LPIPS, SSIM, CLIP/DINO similarity, …) and `registry.py` |
+| `tasks/metrics/{distribution,perceptual,scorer}/<metric>/` | Categorized executable metrics (FID, FVD, JEDi, CMMD, Clean-FID, LPIPS, SSIM, PSNR, DINO, LAION aesthetic, OpenS2V, …), `_shared/`, and `registry.py` |
 | `tasks/embodied/` | Simulator-backed closed-loop evaluation and policy adapters |
 | `tasks/datasets/`, `tasks/catalog/`, `tasks/contracts/` | Dataset manifests, benchmark catalog loading, task contracts |
 | `reporting/` | Run manifests, scorecards, reports, run index and comparison |

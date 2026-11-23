@@ -71,3 +71,251 @@ print(float(score.item()))
 ```
 
 **返回**: 匹配分数张量；越高越好。
+
+### 质量与 reward 指标
+
+### `laion_aesthetic` (↑)
+**原理：** LAION aesthetic predictor 使用 CLIP ViT-L/14 提取 768 维图像特征并进行 L2 归一化，再通过基于人类美学评分训练的线性头回归美学分数。分数越高表示预测的视觉美学质量越高（约 0–10 尺度）。缺失线性头 checkpoint 时会直接报错，不会返回替代分数。
+
+
+**用法**: 用 LAION 线性美学头对图像或采样帧打分。
+
+**参考:** L2 归一化 CLIP ViT-L/14 特征上的线性美学预测器。 仓库: [LAION-AI/aesthetic-predictor](https://github.com/LAION-AI/aesthetic-predictor)
+
+**资产：** CLIP `openai:ViT-L-14` 及线性头权重 `sa_0_4_vit_l_14_linear.pth`（可显式传 `checkpoint=...`，默认解析已准备的 `vbench_aesthetic_linear_checkpoint` base-model asset）。
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_laion_aesthetic
+
+score = compute_laion_aesthetic(
+    ["frame_001.png", "frame_002.png"],
+    checkpoint="/path/to/sa_0_4_vit_l_14_linear.pth",
+    device="cuda",
+)
+print(score)
+```
+
+**返回**: 输入图像集合的平均美学浮点分数；越高越好。
+
+### `facescore` (↑)
+**原理：** FaceScore is a learned face-quality metric for human or face generation. It was introduced to address the mismatch between generic image metrics and human judgments of face realism and quality. The metric fine-tunes a reward/scoring model on face-preference pairs, then outputs a scalar face-quality score for generated images. Higher values indicate better face quality according to the learned preference model. Use it only when face content is expected and the benchmark protocol allows face-specific scoring.
+
+
+**用法**: 单张人像的脸部质量 reward。
+
+**参考:** 针对生成人脸真实感与美学的 reward model 打分。 论文: [FaceScore](https://arxiv.org/abs/2406.17100) 仓库: [OPPO-Mente-Lab/FaceScore](https://github.com/OPPO-Mente-Lab/FaceScore)
+
+**资产：** Hugging Face repo `AIGCer-OPPO/FaceScore`（默认 `~/.cache/FaceScore`）；离线可将 `model_name` 设为本地 checkpoint 路径。
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_facescore
+
+score = compute_facescore("outputs/face.png", device="cuda")
+print(score)
+```
+
+**返回**: 浮点 reward；越高人脸质量越好。
+
+### `artscore` (↑)
+**原理：** ArtScore estimates how strongly an image resembles authentic artwork rather than a photograph or non-artistic image. The proposed method trains a neural scorer using pseudo-annotated images with varying degrees of "artness," then predicts an artness level for arbitrary images. Higher values indicate stronger artistic style or art-likeness. This metric is useful for art-generation benchmarks, but it should not be interpreted as a universal aesthetic-quality score.
+
+
+**用法**: 估计艺术感（油画 vs 照片）。
+
+**参考:** 估计图像艺术感（油画 vs 照片）的神经网络评分。 论文: [ArtScore](https://arxiv.org/abs/2305.04923) 仓库: [jchen175/ArtScore](https://github.com/jchen175/ArtScore)
+
+**资产：** 需要完整的 ArtScore `.pt` state dictionary 和 torchvision。Checkpoint 放在 `WORLDFOUNDRY_CKPT_DIR` 并传 `checkpoint_path=...`。默认 backbone 为 ResNet50；ResNet101 checkpoint 使用 `backbone_config="resnet101"`。
+
+```python
+import torch
+from PIL import Image
+from torchvision import transforms
+from worldfoundry.evals.tasks.metrics import load_artscore_model
+
+model = load_artscore_model("checkpoints/artscore.pt", device="cuda")
+preprocess = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+])
+image = preprocess(Image.open("sample.png").convert("RGB")).unsqueeze(0).to("cuda")
+with torch.inference_mode():
+    score = model(image)
+print(score.item())
+```
+
+**返回**: 艺术感分数；越高越偏艺术风格。
+
+### `facesim_cur` (↑)
+**原理：** `facesim_cur` measures identity similarity between a reference face and generated video frames. It detects and aligns faces with InsightFace, extracts CurricularFace recognition embeddings, and computes cosine similarity:
+
+```text
+FaceSim(ref, gen) = cos(e_ref, e_gen)
+```
+
+WorldFoundry's `facesim_cur` path uses the OpenS2V face-similarity stack with InsightFace and CurricularFace weights. Higher values indicate stronger identity preservation. The metric is undefined or unreliable when faces cannot be detected, are heavily occluded, or are outside the supported face-recognition domain.
+
+
+**用法**: 参考主体图与生成视频间的 InsightFace+CurricularFace 人脸身份相似度（OpenS2V-Eval）。
+
+**参考:** InsightFace 检测 + CurricularFace embedding 的人脸余弦相似度。 论文: [OpenS2V-Nexus](https://arxiv.org/abs/2505.20292) 仓库: [PKU-YuanGroup/OpenS2V-Nexus](https://github.com/PKU-YuanGroup/OpenS2V-Nexus)
+
+**资产：** `WORLDFOUNDRY_OPENS2V_WEIGHT_DIR` 或 `BestWishYsh/OpenS2V-Weight`，目录内需有 `face_extractor/` 和 `glint360k_curricular_face_r101_backbone.bin`。
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_facesim_cur
+
+result = compute_facesim_cur(
+    input_video_folder="opens2v/videos",
+    input_image_folder="opens2v/ref_images",
+    input_json_file="opens2v/eval.json",
+    device="cuda",
+)
+print(result["mean_facesim_cur"])
+```
+
+**返回**: 含 `mean_facesim_cur` 与逐视频 `videos` 分数的 dict；需先设置 `WORLDFOUNDRY_OPENS2V_WEIGHT_DIR`。
+
+### `gme_score / nexus_score / natural_score` (↑)
+#### `gme_score`
+
+**原理：** GmeScore is an OpenS2V-style semantic relevance metric. It uses a vision-language model, such as GME-Qwen2-VL in the WorldFoundry implementation, to score how well generated visual content matches the text or subject condition. The computation is model-dependent, but conceptually it embeds or judges the generated artifact against the conditioning text and returns a scalar alignment score. Higher values indicate stronger text relevance or semantic consistency.
+
+#### `nexus_score`
+
+**原理：** NexusScore is an OpenS2V metric designed for subject consistency. It combines subject-aware visual matching with object/region-aware components, such as detector features and multimodal embeddings. Conceptually, it checks whether the generated output preserves the reference subject rather than merely matching a broad prompt. Higher scores indicate better subject preservation. Because it is a composite metric, the exact detector, backbone, thresholds, and aggregation rule should be documented in the benchmark protocol.
+
+#### `natural_score`
+
+**原理：** NaturalScore is an OpenS2V metric for perceived naturalness. The metric uses a learned or API-backed judge to estimate whether the generated output looks natural and plausible. Higher scores indicate better naturalness. Because the WorldFoundry implementation may depend on an external GPT API, reproducible benchmark reports should document the model version, prompt template, temperature or decoding settings, and any retry policy.
+
+
+**用法**: OpenS2V subject-to-video 评估（目录 + JSON manifest）。
+
+**参考：**
+- **`gme_score`:** GME-Qwen2-VL 图像-文本对齐，用于 subject-to-video 评估。 论文: [OpenS2V-Nexus](https://arxiv.org/abs/2505.20292) 仓库: [PKU-YuanGroup/OpenS2V-Nexus](https://github.com/PKU-YuanGroup/OpenS2V-Nexus)
+- **`nexus_score`:** YOLO-World + GME 主体短语匹配成功率。 论文: [OpenS2V-Nexus](https://arxiv.org/abs/2505.20292) 仓库: [PKU-YuanGroup/OpenS2V-Nexus](https://github.com/PKU-YuanGroup/OpenS2V-Nexus)
+- **`natural_score`:** GPT API 对生成 subject-to-video 片段的自然度评分。 论文: [OpenS2V-Nexus](https://arxiv.org/abs/2505.20292) 仓库: [PKU-YuanGroup/OpenS2V-Nexus](https://github.com/PKU-YuanGroup/OpenS2V-Nexus)
+
+**资产：**
+- **`gme_score`:** `WORLDFOUNDRY_GME_MODEL_PATH` 或 Hugging Face snapshot `Alibaba-NLP/gme-Qwen2-VL-7B-Instruct/`。
+- **`nexus_score`:** 离线需同时设置 `WORLDFOUNDRY_YOLO_WORLD_CKPT`、`WORLDFOUNDRY_YOLO_CLIP_MODEL`（`openai/clip-vit-base-patch32`）和 `WORLDFOUNDRY_GME_MODEL_PATH`。
+- **`natural_score`:** 无本地 checkpoint — OpenAI-compatible judge API（`OPENAI_API_KEY` 或 `api_key=...`）。
+
+```python
+from worldfoundry.evals.tasks.metrics import (
+    compute_gme_score,
+    compute_nexus_score,
+    compute_natural_score,
+)
+
+manifest = "opens2v/eval.json"  # keyed by video stem
+videos = "opens2v/videos"
+refs = "opens2v/ref_images"
+
+gme = compute_gme_score(
+    input_video_folder=videos,
+    input_json_file=manifest,
+    device="cuda",
+)
+nexus = compute_nexus_score(
+    input_video_folder=videos,
+    input_image_folder=refs,
+    input_json_file=manifest,
+    device="cuda",
+)
+natural = compute_natural_score(
+    input_video_folder=videos,
+)  # needs OPENAI_API_KEY
+print(gme, nexus, natural)
+```
+
+**返回**: 含均值与逐视频结果的 dict；见 OpenS2V eval JSON 结构。
+
+Manifest 示例：`{"video_001": {"prompt": "...", "img_paths": [...], "class_label": [...]}}`。
+
+### 编辑与语义对齐 scorer
+
+### `semsr` (↑)
+
+**用法**: trigger/origin/target 三图组的 Semantic Shift Rate。
+
+**参考:** 语义偏移率 SemSR：CLIP 语义偏移归一化（触发 vs 原始图像）。 论文: [arXiv:2402.07562](https://arxiv.org/abs/2402.07562) 仓库: WorldFoundry（按论文复现）
+
+**资产：** 从图像计算时使用 CLIP backbone 权重（scorer / HF cache）。
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_semsr_from_images
+
+result = compute_semsr_from_images(
+    image_ust="trigger.png",
+    image_ori="origin.png",
+    image_tar="target.png",
+    semantic_text="a photo of a cat",
+)
+print(result["semsr"])
+```
+
+**返回**: 含 `semsr`、`sem_shift` 与 CLIP 相似度的 dict。
+
+### `manipulation_direction` (↑)
+
+**用法**: 图像编辑评估的 CLIP 变化向量对齐。
+
+**参考:** 操控方向 MD：CLIP 图像/文本变化向量余弦相似度。 论文: [Sensors 2023](https://doi.org/10.3390/s23229287) 仓库: WorldFoundry（按论文复现）
+
+**资产：** CLIP 图像/文本 encoder，经 HF 或 scorer cache 加载。
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_manipulation_direction_from_pairs
+
+md = compute_manipulation_direction_from_pairs(
+    image_input="before.png",
+    image_manipulated="after.png",
+    text_original="a red car",
+    text_replaced="a blue car",
+)
+print(md)
+```
+
+**返回**: `[-1, 1]` 余弦相似度；越高说明编辑越沿文本方向。
+
+### `vs_similarity` (↑)
+
+**用法**: 成对 embedding 的 HDGAN 视觉–语义相似度。
+
+**参考:** HDGAN 视觉-语义相似度（配对 embedding 余弦）。 论文: [HDGAN](https://arxiv.org/abs/1802.09178) 仓库: WorldFoundry（按论文复现）
+
+**资产：** 由 API 提供 HDGAN embedding 输入；无 bundled standalone checkpoint。
+
+```python
+import numpy as np
+from worldfoundry.evals.tasks.metrics import compute_vs_similarity
+
+image_embeds = np.load("img_emb.npy")  # (N, D)
+text_embeds = np.load("txt_emb.npy")   # (N, D)
+print(compute_vs_similarity(image_embeds, text_embeds, paired=True))
+```
+
+**返回**: 成对 batch 的 VS 相似度 float。
+
+### `quality_loss` (↓)
+
+**用法**: CLIPScore × 文字出现概率（prompt 优化指标）。
+
+**参考:** 质量损失：CLIPScore × 生成图含文字/字符概率 PC。 论文: [IEEE Access 2023.3348778](https://doi.org/10.1109/access.2023.3348778) 仓库: WorldFoundry（按论文复现）
+
+**资产：** CLIPScore 风格 CLIP 权重，经 `WORLDFOUNDRY_T2V_METRICS_CACHE_DIR` / HF cache 加载。
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_quality_loss_for_pair
+
+out = compute_quality_loss_for_pair(
+    image="sample.png",
+    prompt="HELLO WORLD",
+    has_text=True,
+)
+print(out)  # clip_score, text_presence_probability, quality_loss
+```
+
+**返回**: dict；无文字时 quality_loss 降低是预期行为。

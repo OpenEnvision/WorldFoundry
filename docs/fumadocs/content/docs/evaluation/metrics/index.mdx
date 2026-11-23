@@ -1,13 +1,13 @@
 ---
 title: Metrics
-description: In-tree metric registry, distribution metrics, and multimodal scorers.
+description: In-tree metric registry and categorized distribution, perceptual, and scorer compute APIs.
 ---
 
 import MetricsSetup from '../../../../mdx/partials/metrics-usage-setup.mdx';
 
-WorldFoundry ships an in-tree metric layer — a registry of scorers and distribution compute routines that runners invoke through a stable contract. Benchmarks decide *what* to measure on *which* data; metrics decide *how* to turn predictions into numbers. Each entry declares inputs, optional checkpoint dependencies, and output shape; runners reference metric IDs and the registry resolves aliases, validates availability, and routes to the right `compute_*`. This keeps model code out of scoring while making scoring reproducible across machines. This hub documents what the repository actually implements — it is not a survey of every published score.
+WorldFoundry ships an in-tree metric layer — a registry of categorized compute routines and multimodal scorers that runners invoke through a stable contract. Benchmarks decide *what* to measure on *which* data; metrics decide *how* to turn predictions into numbers. Each entry declares inputs, optional checkpoint dependencies, and output shape; runners reference metric IDs and the registry resolves aliases, validates availability, and routes to the right `compute_*`. This keeps model code out of scoring while making scoring reproducible across machines. This hub documents what the repository actually implements — it is not a survey of every published score.
 
-The in-tree catalog has two families: **multimodal scorers** (CLIP, VQA, ITM) and **distribution** (FID, IS, KID, FVD, JEDi). The registry also records the direction of common pairwise scores such as LPIPS, SSIM, and PSNR that official benchmark runners report. Metrics that need pretrained backbones declare those dependencies explicitly — missing checkpoints fail loudly, never silently substitute a proxy. A third page, [Registry & reference](/docs/evaluation/metrics/reference), covers discovery (`wf metric list`), parameterized ids, checkpoint staging, and package layout. For benchmark-specific evaluator assets and commands, see [Benchmark Hub](/docs/evaluation/benchmark-hub); individual pages call out approximations and cases where official scripts must be used instead of the generic compute API.
+The in-tree catalog is organized into three compute families mirroring `worldfoundry/evals/tasks/metrics/{distribution,perceptual,scorer}/`: **scorers** (CLIP, VQA, ITM, LAION aesthetic, FaceScore, ArtScore, OpenS2V, editing/alignment), **distribution** (FID, IS, KID, CMMD, Clean-FID, diversity/coverage, FVD, FVMD, JEDi), and **perceptual** (LPIPS, SSIM, MS-SSIM, PSNR, DINO, DreamSim, FSIM, CPBD, IRS, masks, detection, layout). Metrics that need pretrained backbones declare those dependencies explicitly — missing checkpoints fail loudly, never silently substitute a proxy. [Registry & reference](/docs/evaluation/metrics/reference) covers discovery (`wf metric list`), parameterized ids, checkpoint staging, and package layout. For benchmark-specific evaluator assets and commands, see [Benchmark Hub](/docs/evaluation/benchmark-hub); individual pages call out approximations and cases where official scripts must be used instead of the generic compute API.
 
 ## Getting started
 
@@ -42,8 +42,9 @@ The scorecard JSON is written under `--output-dir`.
 
 ## Pages
 
-- [Multimodal scorers](/docs/evaluation/metrics/scorers) — CLIPScore, VQAScore, ITMScore.
-- [Distribution](/docs/evaluation/metrics/distribution) — FID, IS, KID, FVD, JEDi.
+- [Scorers](/docs/evaluation/metrics/scorers) — CLIPScore, VQAScore, ITMScore, LAION aesthetic, FaceScore, ArtScore, OpenS2V, and editing/alignment scorers (`family=scorer`).
+- [Distribution](/docs/evaluation/metrics/distribution) — FID, IS, KID, CMMD, Clean-FID, diversity/coverage, conditional distance, FVD, FVMD, and JEDi (`family=distribution`).
+- [Perceptual](/docs/evaluation/metrics/perceptual) — LPIPS, SSIM, MS-SSIM, PSNR, DINO similarity, DreamSim, FSIM, CPBD, IRS, mask accuracy, object detection, and layout (`family=perceptual`).
 - [Registry & reference](/docs/evaluation/metrics/reference) — `MetricRegistry`, registered-metric tables, CLI surface, checkpoints, architecture.
 
 ## Related pages

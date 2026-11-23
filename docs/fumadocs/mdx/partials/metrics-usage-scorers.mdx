@@ -71,3 +71,251 @@ print(float(score.item()))
 ```
 
 **Returns**: Matching score tensor; higher = better match.
+
+### Quality & reward metrics
+
+### `laion_aesthetic` (↑)
+**Principle:** LAION aesthetic quality scores visual appeal by encoding images with CLIP ViT-L/14, L2-normalizing the 768-dimensional image embeddings, and applying a linear aesthetic-predictor head trained on human aesthetic ratings. Higher values indicate stronger predicted aesthetic quality (roughly on a 0–10 scale). Missing checkpoints fail loudly rather than returning a proxy score.
+
+
+**When**: Score image or sampled-frame visual aesthetics with the LAION linear aesthetic head.
+
+**Reference:** Linear aesthetic predictor over L2-normalized CLIP ViT-L/14 features. Repo: [LAION-AI/aesthetic-predictor](https://github.com/LAION-AI/aesthetic-predictor)
+
+**Assets:** CLIP `openai:ViT-L-14` plus linear head `sa_0_4_vit_l_14_linear.pth` (resolved from explicit `checkpoint=...` or the staged `vbench_aesthetic_linear_checkpoint` base-model asset).
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_laion_aesthetic
+
+score = compute_laion_aesthetic(
+    ["frame_001.png", "frame_002.png"],
+    checkpoint="/path/to/sa_0_4_vit_l_14_linear.pth",
+    device="cuda",
+)
+print(score)
+```
+
+**Returns**: Mean float aesthetic score across inputs; higher is better.
+
+### `facescore` (↑)
+**Principle:** FaceScore is a learned face-quality metric for human or face generation. It was introduced to address the mismatch between generic image metrics and human judgments of face realism and quality. The metric fine-tunes a reward/scoring model on face-preference pairs, then outputs a scalar face-quality score for generated images. Higher values indicate better face quality according to the learned preference model. Use it only when face content is expected and the benchmark protocol allows face-specific scoring.
+
+
+**When**: Face quality reward on a single portrait image.
+
+**Reference:** Reward model scoring facial realism and aesthetics in generated humans. Paper: [FaceScore](https://arxiv.org/abs/2406.17100) Repo: [OPPO-Mente-Lab/FaceScore](https://github.com/OPPO-Mente-Lab/FaceScore)
+
+**Assets:** Hugging Face repo `AIGCer-OPPO/FaceScore` (default `~/.cache/FaceScore`); pass `model_name` as a local checkpoint path for offline runs.
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_facescore
+
+score = compute_facescore("outputs/face.png", device="cuda")
+print(score)
+```
+
+**Returns**: Float reward; higher = better face quality.
+
+### `artscore` (↑)
+**Principle:** ArtScore estimates how strongly an image resembles authentic artwork rather than a photograph or non-artistic image. The proposed method trains a neural scorer using pseudo-annotated images with varying degrees of "artness," then predicts an artness level for arbitrary images. Higher values indicate stronger artistic style or art-likeness. This metric is useful for art-generation benchmarks, but it should not be interpreted as a universal aesthetic-quality score.
+
+
+**When**: Estimate artness (fine-art vs photorealistic).
+
+**Reference:** Neural network estimating artness (fine-art vs photorealistic appearance). Paper: [ArtScore](https://arxiv.org/abs/2305.04923) Repo: [jchen175/ArtScore](https://github.com/jchen175/ArtScore)
+
+**Assets:** A complete ArtScore `.pt` state dictionary and torchvision. Stage the checkpoint under `WORLDFOUNDRY_CKPT_DIR` and pass `checkpoint_path=...`. The default backbone is ResNet50; use `backbone_config="resnet101"` for a ResNet101 checkpoint.
+
+```python
+import torch
+from PIL import Image
+from torchvision import transforms
+from worldfoundry.evals.tasks.metrics import load_artscore_model
+
+model = load_artscore_model("checkpoints/artscore.pt", device="cuda")
+preprocess = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+])
+image = preprocess(Image.open("sample.png").convert("RGB")).unsqueeze(0).to("cuda")
+with torch.inference_mode():
+    score = model(image)
+print(score.item())
+```
+
+**Returns**: Artness score; higher = more art-like.
+
+### `facesim_cur` (↑)
+**Principle:** `facesim_cur` measures identity similarity between a reference face and generated video frames. It detects and aligns faces with InsightFace, extracts CurricularFace recognition embeddings, and computes cosine similarity:
+
+```text
+FaceSim(ref, gen) = cos(e_ref, e_gen)
+```
+
+WorldFoundry's `facesim_cur` path uses the OpenS2V face-similarity stack with InsightFace and CurricularFace weights. Higher values indicate stronger identity preservation. The metric is undefined or unreliable when faces cannot be detected, are heavily occluded, or are outside the supported face-recognition domain.
+
+
+**When**: Face identity similarity between reference subject images and generated videos (OpenS2V-Eval).
+
+**Reference:** Face cosine similarity via InsightFace detection + CurricularFace embeddings. Paper: [OpenS2V-Nexus](https://arxiv.org/abs/2505.20292) Repo: [PKU-YuanGroup/OpenS2V-Nexus](https://github.com/PKU-YuanGroup/OpenS2V-Nexus)
+
+**Assets:** `WORLDFOUNDRY_OPENS2V_WEIGHT_DIR` or `BestWishYsh/OpenS2V-Weight` with `face_extractor/` and `glint360k_curricular_face_r101_backbone.bin`.
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_facesim_cur
+
+result = compute_facesim_cur(
+    input_video_folder="opens2v/videos",
+    input_image_folder="opens2v/ref_images",
+    input_json_file="opens2v/eval.json",
+    device="cuda",
+)
+print(result["mean_facesim_cur"])
+```
+
+**Returns**: Dict with `mean_facesim_cur` and per-video `videos` scores; set `WORLDFOUNDRY_OPENS2V_WEIGHT_DIR` first.
+
+### `gme_score / nexus_score / natural_score` (↑)
+#### `gme_score`
+
+**Principle:** GmeScore is an OpenS2V-style semantic relevance metric. It uses a vision-language model, such as GME-Qwen2-VL in the WorldFoundry implementation, to score how well generated visual content matches the text or subject condition. The computation is model-dependent, but conceptually it embeds or judges the generated artifact against the conditioning text and returns a scalar alignment score. Higher values indicate stronger text relevance or semantic consistency.
+
+#### `nexus_score`
+
+**Principle:** NexusScore is an OpenS2V metric designed for subject consistency. It combines subject-aware visual matching with object/region-aware components, such as detector features and multimodal embeddings. Conceptually, it checks whether the generated output preserves the reference subject rather than merely matching a broad prompt. Higher scores indicate better subject preservation. Because it is a composite metric, the exact detector, backbone, thresholds, and aggregation rule should be documented in the benchmark protocol.
+
+#### `natural_score`
+
+**Principle:** NaturalScore is an OpenS2V metric for perceived naturalness. The metric uses a learned or API-backed judge to estimate whether the generated output looks natural and plausible. Higher scores indicate better naturalness. Because the WorldFoundry implementation may depend on an external GPT API, reproducible benchmark reports should document the model version, prompt template, temperature or decoding settings, and any retry policy.
+
+
+**When**: OpenS2V subject-to-video evaluation with folder layout + JSON manifest.
+
+**Reference:**
+- **`gme_score`:** GME-Qwen2-VL image-text alignment for subject-to-video evaluation. Paper: [OpenS2V-Nexus](https://arxiv.org/abs/2505.20292) Repo: [PKU-YuanGroup/OpenS2V-Nexus](https://github.com/PKU-YuanGroup/OpenS2V-Nexus)
+- **`nexus_score`:** YOLO-World + GME subject phrase-matching success score. Paper: [OpenS2V-Nexus](https://arxiv.org/abs/2505.20292) Repo: [PKU-YuanGroup/OpenS2V-Nexus](https://github.com/PKU-YuanGroup/OpenS2V-Nexus)
+- **`natural_score`:** GPT API naturalness rating for generated subject-to-video clips. Paper: [OpenS2V-Nexus](https://arxiv.org/abs/2505.20292) Repo: [PKU-YuanGroup/OpenS2V-Nexus](https://github.com/PKU-YuanGroup/OpenS2V-Nexus)
+
+**Assets:**
+- **`gme_score`:** `WORLDFOUNDRY_GME_MODEL_PATH` or `Alibaba-NLP/gme-Qwen2-VL-7B-Instruct/` Hugging Face snapshot.
+- **`nexus_score`:** `WORLDFOUNDRY_YOLO_WORLD_CKPT`, `WORLDFOUNDRY_YOLO_CLIP_MODEL` (`openai/clip-vit-base-patch32`), and `WORLDFOUNDRY_GME_MODEL_PATH` for offline runs.
+- **`natural_score`:** No local checkpoint — OpenAI-compatible judge API (`OPENAI_API_KEY` or `api_key=...`).
+
+```python
+from worldfoundry.evals.tasks.metrics import (
+    compute_gme_score,
+    compute_nexus_score,
+    compute_natural_score,
+)
+
+manifest = "opens2v/eval.json"  # keyed by video stem
+videos = "opens2v/videos"
+refs = "opens2v/ref_images"
+
+gme = compute_gme_score(
+    input_video_folder=videos,
+    input_json_file=manifest,
+    device="cuda",
+)
+nexus = compute_nexus_score(
+    input_video_folder=videos,
+    input_image_folder=refs,
+    input_json_file=manifest,
+    device="cuda",
+)
+natural = compute_natural_score(
+    input_video_folder=videos,
+)  # needs OPENAI_API_KEY
+print(gme, nexus, natural)
+```
+
+**Returns**: Dict payloads with mean and per-video scores; see OpenS2V eval JSON schema.
+
+Manifest entry example: `{"video_001": {"prompt": "...", "img_paths": [...], "class_label": [...]}}`.
+
+### Editing & alignment scorers
+
+### `semsr` (↑)
+
+**When**: Semantic Shift Rate for trigger/origin/target image triplets.
+
+**Reference:** Semantic Shift Rate: normalized CLIP semantic shift for trigger vs origin images. Paper: [arXiv:2402.07562](https://arxiv.org/abs/2402.07562) Repo: WorldFoundry (paper reimplementation)
+
+**Assets:** CLIP backbone weights via scorer / HF cache when computing from images.
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_semsr_from_images
+
+result = compute_semsr_from_images(
+    image_ust="trigger.png",
+    image_ori="origin.png",
+    image_tar="target.png",
+    semantic_text="a photo of a cat",
+)
+print(result["semsr"])
+```
+
+**Returns**: Dict with `semsr`, `sem_shift`, and CLIP similarities.
+
+### `manipulation_direction` (↑)
+
+**When**: CLIP change-vector alignment for image editing evaluation.
+
+**Reference:** Manipulation Direction (MD): cosine similarity of CLIP image/text change vectors. Paper: [Sensors 2023](https://doi.org/10.3390/s23229287) Repo: WorldFoundry (paper reimplementation)
+
+**Assets:** CLIP image/text encoders via HF or scorer cache.
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_manipulation_direction_from_pairs
+
+md = compute_manipulation_direction_from_pairs(
+    image_input="before.png",
+    image_manipulated="after.png",
+    text_original="a red car",
+    text_replaced="a blue car",
+)
+print(md)
+```
+
+**Returns**: Cosine similarity in `[-1, 1]`; higher = edit follows text direction.
+
+### `vs_similarity` (↑)
+
+**When**: HDGAN visual–semantic similarity from paired embeddings.
+
+**Reference:** HDGAN visual-semantic similarity between paired image/text embeddings. Paper: [HDGAN](https://arxiv.org/abs/1802.09178) Repo: WorldFoundry (paper reimplementation)
+
+**Assets:** HDGAN embedding inputs supplied by the API; no bundled standalone checkpoint.
+
+```python
+import numpy as np
+from worldfoundry.evals.tasks.metrics import compute_vs_similarity
+
+image_embeds = np.load("img_emb.npy")  # (N, D)
+text_embeds = np.load("txt_emb.npy")   # (N, D)
+print(compute_vs_similarity(image_embeds, text_embeds, paired=True))
+```
+
+**Returns**: Float VS similarity for paired batches.
+
+### `quality_loss` (↓)
+
+**When**: CLIPScore × text-presence probability (prompt optimization metric).
+
+**Reference:** Quality Loss: CLIPScore multiplied by text/character presence probability (PC). Paper: [IEEE Access 2023.3348778](https://doi.org/10.1109/access.2023.3348778) Repo: WorldFoundry (paper reimplementation)
+
+**Assets:** CLIPScore-style CLIP weights via `WORLDFOUNDRY_T2V_METRICS_CACHE_DIR` / HF cache.
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_quality_loss_for_pair
+
+out = compute_quality_loss_for_pair(
+    image="sample.png",
+    prompt="HELLO WORLD",
+    has_text=True,
+)
+print(out)  # clip_score, text_presence_probability, quality_loss
+```
+
+**Returns**: Dict; lower quality_loss with missing text is expected behavior.

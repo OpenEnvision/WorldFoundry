@@ -1,0 +1,248 @@
+### 成对感知与图像质量指标
+
+### `lpips / ssim / ms_ssim / psnr` (mixed)
+#### `lpips`
+
+**原理：** LPIPS measures learned perceptual distance between two images. The method feeds both images through a pretrained deep network, extracts intermediate features, normalizes them, computes layer-wise feature distances, and combines them with learned weights. Lower values indicate stronger perceptual similarity. LPIPS is appropriate for paired image comparison, reconstruction, editing, and condition-preservation tasks; it is not a set-level distribution metric.
+
+#### `ssim`
+
+**原理：** SSIM measures structural similarity between two aligned images. It compares local luminance, contrast, and structure statistics. A common simplified form is:
+
+```text
+SSIM(x, y) =
+((2 μ_x μ_y + C1)(2 σ_xy + C2)) /
+((μ_x² + μ_y² + C1)(σ_x² + σ_y² + C2))
+```
+
+Higher values indicate stronger structural similarity. SSIM assumes a meaningful paired reference and can be less appropriate when many visually valid outputs are possible.
+
+#### `ms_ssim`
+
+**原理：** MS-SSIM extends SSIM across multiple image scales. It repeatedly downsamples the images, computes contrast and structure comparisons at multiple resolutions, and combines them with scale weights. Higher values indicate stronger multi-scale structural similarity. This is useful for restoration and compression tasks where both fine and coarse structure matter.
+
+#### `psnr`
+
+**原理：** PSNR is a pixel-error reconstruction metric derived from mean squared error. Given image dynamic range `MAX_I` and mean squared error `MSE`, it computes:
+
+```text
+PSNR = 10 log10(MAX_I² / MSE)
+```
+
+Higher values indicate lower pixel-level error. PSNR is fast and standard for compression or deterministic reconstruction, but it often correlates poorly with human perceptual quality on generative tasks.
+
+
+**用法**: 对齐图像对上的成对重建/一致性指标。
+
+**参考：**
+- **`lpips`:** Learned Perceptual Image Patch Similarity（LPIPS）。 论文: [Zhang et al.](https://arxiv.org/abs/1801.03924) 仓库: [richzhang/PerceptualSimilarity](https://github.com/richzhang/PerceptualSimilarity)
+- **`ssim`:** Structural Similarity Index。 论文: [Wang et al.](https://ieeexplore.ieee.org/document/1284395) 仓库: WorldFoundry（PIQ/torchmetrics）
+- **`ms_ssim`:** Multi-scale SSIM。 论文: [Wang et al.](https://ieeexplore.ieee.org/document/1292216) 仓库: WorldFoundry（PIQ/torchmetrics）
+- **`psnr`:** Peak Signal-to-Noise Ratio。 仓库: WorldFoundry（PIQ/torchmetrics）
+
+**资产：**
+- **`lpips`:** VGG16 与 LPIPS / DISTS / PieAPP 辅助权重，经 torchvision 与 torch hub release URL 加载。
+- **`ssim`:** 无需模型 checkpoint — 只需要对齐图像数组。
+- **`ms_ssim`:** 无需模型 checkpoint — 只需要对齐图像数组。
+
+```python
+import numpy as np
+from PIL import Image
+from worldfoundry.evals.tasks.metrics import (
+    compute_lpips,
+    compute_ssim,
+    compute_ms_ssim,
+    compute_psnr,
+    compute_perceptual_bundle,
+)
+
+ref = np.array(Image.open("ref.png").convert("RGB"))
+gen = np.array(Image.open("gen.png").convert("RGB"))
+
+print("lpips", compute_lpips(ref, gen))          # lower better
+print("ssim", compute_ssim(ref, gen))            # higher better
+print("ms_ssim", compute_ms_ssim(ref, gen))
+print("psnr", compute_psnr(ref, gen))
+print("bundle", compute_perceptual_bundle(ref, gen))
+```
+
+**返回**: 各 metric 为 float；LPIPS 越低越好，SSIM/MS-SSIM/PSNR 越高越好。
+
+### `dino_similarity / dreamsim / fsim / cpbd` (mixed)
+#### `dino_similarity`
+
+**原理：** DINO similarity compares paired images in a self-supervised DINO or DINOv2 feature space. The usual computation extracts image embeddings and computes cosine similarity or another normalized feature similarity:
+
+```text
+DINO-Sim(ref, gen) = cos(DINO(ref), DINO(gen))
+```
+
+Higher values indicate stronger representation-level similarity. Because DINO features often capture semantic and object-centric structure, this metric can be more meaningful than raw pixel metrics for semantic consistency.
+
+#### `dreamsim`
+
+**原理：** DreamSim is a learned perceptual similarity metric trained to align with human similarity judgments over image triplets. It combines or builds on strong visual representations and fine-tunes them for holistic perceptual similarity. The computation embeds both images and returns a learned distance. Lower values indicate stronger perceived similarity. It is useful when differences in object identity, layout, pose, and semantic content matter.
+
+#### `fsim`
+
+**原理：** FSIM compares two aligned images using low-level feature similarity, especially phase congruency and gradient magnitude. Phase congruency captures perceptually significant local structure, and gradient magnitude captures contrast-related detail. The final score pools local similarity maps, often weighted by feature saliency. Higher values indicate stronger full-reference feature similarity.
+
+#### `cpbd`
+
+**原理：** CPBD is a no-reference blur or sharpness metric based on the cumulative probability of blur detection. It detects edges, estimates blur width and local contrast, models the probability that blur is perceptually detectable, and pools these probabilities into a scalar sharpness score. Higher values indicate sharper images. CPBD does not require a reference image, but it only measures blur/sharpness, not realism or semantic correctness.
+
+
+**用法**: numpy 图像上的感知相似度或无参考锐度。
+
+**参考：**
+- **`dino_similarity`:** DINO/DINOv2 feature 余弦相似度。 论文: [Caron et al.](https://arxiv.org/abs/2104.14294) 仓库: [facebookresearch/dino](https://github.com/facebookresearch/dino)
+- **`dreamsim`:** DreamSim ensemble 感知距离。 论文: [Fu et al.](https://arxiv.org/abs/2306.09374) 仓库: [ssundaram21/dreamsim](https://github.com/ssundaram21/dreamsim)
+- **`fsim`:** 彩色图像 Feature Similarity Index。 论文: [Zhang et al.](https://ieeexplore.ieee.org/document/5705575) 仓库: WorldFoundry（PIQ/torchmetrics）
+- **`cpbd`:** Cumulative Probability of Blur Detection 锐度。 论文: [Narvekar & Karam](https://ieeexplore.ieee.org/document/5204303) 仓库: WorldFoundry（PIQ/torchmetrics）
+
+**资产：**
+- **`dino_similarity`:** `facebook/dinov2-base` 或 `facebook/dino-vitb16`，先查 base-model capability 再走 HF `from_pretrained`。可用 `WORLDFOUNDRY_DINOV2_BASE_MODEL_DIR` / `WORLDFOUNDRY_DINO_VITB16_MODEL_DIR` 覆盖。
+- **`dreamsim`:** `ssundaram21/dreamsim` release ZIP；向 `compute_dreamsim(..., cache_dir=...)` 传入本地目录。
+- **`fsim`:** 无需模型 checkpoint — 只需要对齐图像数组。
+
+```python
+import numpy as np
+from PIL import Image
+from worldfoundry.evals.tasks.metrics import (
+    compute_dino_similarity,
+    compute_dreamsim,
+    compute_fsim,
+    compute_cpbd,
+)
+
+ref = np.array(Image.open("ref.png").convert("RGB"))
+gen = np.array(Image.open("gen.png").convert("RGB"))
+
+print("dino", compute_dino_similarity(ref, gen))
+print("dreamsim", compute_dreamsim(ref, gen))
+print("fsim", compute_fsim(ref, gen))
+print("cpbd", compute_cpbd(gen))  # single image, no reference
+```
+
+**返回**: 浮点分数；DreamSim 越低越相似。
+
+### `irs` (↑)
+
+**用法**: 相对真实图统计校准的 Image Realism Score。
+
+**参考:** 图像真实感分 IRS：五种统计量构成 pentagon 面积。 论文: [arXiv:2309.14756](https://arxiv.org/abs/2309.14756) 仓库: WorldFoundry（按论文复现）
+
+**资产：** 无需模型 checkpoint — 由输入图像直接计算统计量。
+
+```python
+from PIL import Image
+from worldfoundry.evals.tasks.metrics import compute_irs_with_reference
+
+real_paths = ["real/1.jpg", "real/2.jpg"]
+test_paths = ["gen/1.jpg", "gen/2.jpg"]
+real_images = [Image.open(p) for p in real_paths]
+test_images = [Image.open(p) for p in test_paths]
+
+out = compute_irs_with_reference(test_images, real_images)
+print(out["irs_mean"], out["irs_scores"])
+```
+
+**返回**: 含逐图 IRS 与拟合 reference means 的 dict。
+
+### Mask、目标检测与布局指标
+
+### `mask_accuracy` (↑)
+**原理：** `mask_accuracy` compares predicted masks against reference masks. Pixel accuracy computes the fraction of correctly matched mask pixels, while mask IoU computes overlap divided by union:
+
+```text
+IoU(mask_ref, mask_pred) =
+|mask_ref ∩ mask_pred| / |mask_ref ∪ mask_pred|
+```
+
+Higher values indicate better mask agreement. The benchmark protocol should specify thresholding, label mapping, ignored regions, and whether it reports pixel accuracy, IoU, or both.
+
+
+**用法**: 预测 mask 与 GT 的准确率 / IoU。
+
+**参考:** 预测与 GT mask 的像素准确率与 IoU。 仓库: [z-x-yang/Segment-and-Track-Anything](https://github.com/z-x-yang/Segment-and-Track-Anything)（协议）
+
+**资产：** 无需模型 checkpoint — 只需要预测 mask 与 GT mask。
+
+```python
+import numpy as np
+from worldfoundry.evals.tasks.metrics import compute_mask_accuracy, compute_mask_iou
+
+pred = np.load("pred_mask.npy")  # HxW binary or label map
+gt = np.load("gt_mask.npy")
+print(compute_mask_accuracy(pred, gt))
+print(compute_mask_iou(pred, gt))
+```
+
+**返回**: `[0, 1]` 的 accuracy 与 IoU。
+
+### `object_detection` (↑)
+**原理：** `object_detection` measures whether expected objects are detected in generated outputs. The typical computation runs an object detector, maps expected classes to detector classes, applies confidence and IoU thresholds, and reports a success rate:
+
+```text
+success_rate = matched_expected_objects / expected_objects
+```
+
+Higher values indicate better object presence or localization. The result depends heavily on detector choice, class vocabulary, confidence thresholds, and prompt-to-object parsing.
+
+
+**用法**: WorldScore 风格短语匹配检测成功率。
+
+**参考:** 短语匹配目标检测成功率（WorldScore 风格）。 论文: [WorldScore (ICCV 2025)](https://arxiv.org/abs/2504.00983) 仓库: [haoyi-duan/WorldScore](https://github.com/haoyi-duan/WorldScore)
+
+**资产：** 无需模型 checkpoint — 按 WorldScore 协议提供 phrase/box 输入。
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_object_detection_success_rate
+
+result = compute_object_detection_success_rate(
+    generated_dir="/data/generated",
+    prompts_path="/data/prompts.json",
+)
+print(result)
+```
+
+**返回**: 成功率 dict；输入 schema 见 `perceptual/object_detection/` wrapper。
+
+### `lqs` (↑)
+**原理：** Layout Quality Score evaluates generated layouts against ground-truth or expected layouts. The original layout-to-image formulation considers both absolute bounding-box distribution errors and mutual spatial relationships between boxes. Higher values in WorldFoundry should indicate better layout agreement if the wrapper exposes a quality score rather than an error score. The protocol must define the layout schema, coordinate system, object matching rule, and handling of missing or extra boxes.
+
+
+**用法**: 预测 vs GT bbox layout 的 Layout Quality Score。
+
+**参考:** 布局质量分：LR + LP + LC + AC（边界框布局）。 论文: [Yang et al.](https://arxiv.org/abs/2208.06162) 仓库: WorldFoundry（按论文复现）
+
+**资产：** 无需模型 checkpoint — 只需要预测与 GT layout bbox。
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_lqs
+
+gt_layout = [{"label": "person", "bbox": [10, 20, 110, 220]}]
+pred_layout = [{"label": "person", "bbox": [12, 18, 108, 218]}]
+print(compute_lqs(gt_layout, pred_layout))
+```
+
+**返回**: 含 LR/LP/LC/AC 分量与组合 LQS 的 dict。
+
+### `object_wise_consistency` (↑)
+
+**用法**: 位置感知 T2I：guidance box 与检测框匹配。
+
+**参考:** 对象级一致性：检测框与引导框 max IoU 及 R_suc（IoU>0.5）。 论文: [arXiv:2304.13427](https://arxiv.org/abs/2304.13427) 仓库: WorldFoundry（按论文复现）
+
+**资产：** 无需模型 checkpoint — 只需要 guidance box 与 detector 输出。
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_object_wise_consistency
+
+guidance = [([10, 20, 100, 200], "cat"), ([120, 30, 220, 180], "dog")]
+detections = [([12, 22, 98, 198], "cat"), ([125, 35, 215, 175], "dog")]
+
+print(compute_object_wise_consistency(guidance, detections, iou_threshold=0.5))
+```
+
+**返回**: 含 mean IoU 与 `object_wise_success_rate` 的 dict。
