@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import atexit
 import contextlib
+import inspect
 import json
 import logging
 import os
@@ -11,6 +12,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Mapping, Sequence
@@ -65,6 +67,8 @@ from worldfoundry.studio.inference.requests import (
 )
 from worldfoundry.studio.serving import (
     bind_security_warning,
+    configured_auth_token,
+    is_loopback_host,
     path_allowed,
     request_token_valid,
     require_auth_token_for_host,
@@ -94,11 +98,12 @@ MANAGER = StudioManager(max_cached_pipelines=WORKSPACE_MAX_CACHED_PIPELINES, rec
 
 def _initial_studio_job_counter(workspace_root: str) -> int:
     max_counter = 0
-    runtime_jobs_root = Path(workspace_root) / "runtime_jobs"
-    for path in runtime_jobs_root.glob("studio-*"):
-        suffix = path.name.removeprefix("studio-")
-        if suffix.isdigit():
-            max_counter = max(max_counter, int(suffix))
+    root = Path(workspace_root)
+    for subdir in ("runtime_jobs", "evaluations"):
+        for path in (root / subdir).glob("studio-*"):
+            suffix = path.name.removeprefix("studio-")
+            if suffix.isdigit():
+                max_counter = max(max_counter, int(suffix))
     return max_counter
 
 
@@ -122,13 +127,25 @@ SETTINGS: dict[str, Any] = dict(DEFAULT_SETTINGS)
 # must serialize its write paths (see also _VISUALIZER_LOCK below).
 _SETTINGS_LOCK = threading.Lock()
 MEDIA_TYPES = {
+    ".avi": "video/x-msvideo",
+    ".flac": "audio/flac",
     ".gif": "image/gif",
     ".jpeg": "image/jpeg",
     ".jpg": "image/jpeg",
+    ".json": "application/json; charset=utf-8",
     ".m4v": "video/mp4",
+    ".md": "text/markdown; charset=utf-8",
+    ".mkv": "video/x-matroska",
+    ".mov": "video/quicktime",
+    ".mp3": "audio/mpeg",
     ".mp4": "video/mp4",
+    ".ogg": "audio/ogg",
     ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".txt": "text/plain; charset=utf-8",
+    ".wav": "audio/wav",
     ".webm": "video/webm",
+    ".webp": "image/webp",
 }
 MEDIA_VISUALIZER_EXTS = {
     ".png",
@@ -165,7 +182,7 @@ class VisualizerLaunchRequest(BaseModel):
     model_id: str = ""
     asset_path: str = ""
     simulator_url: str = ""
-    host: str = "127.0.0.1"
+    host: str = ""
     port: int | None = None
     reuse: bool = True
     params: dict[str, Any] = Field(default_factory=dict)
@@ -276,16 +293,26 @@ def _load_settings_from_disk() -> None:
         return
     with _SETTINGS_LOCK:
         for key, value in payload.items():
-            if key in SETTINGS:
+            if key not in SETTINGS:
+                continue
+            try:
                 SETTINGS[key] = _coerce_setting_value(key, value)
+            except (HTTPException, ValueError, TypeError):
+                logger.warning(
+                    "Ignoring invalid Studio setting %r=%r from %s; keeping default.",
+                    key,
+                    value,
+                    path,
+                )
 
 
-def _save_settings_to_disk() -> None:
+def _save_settings_to_disk(values: Mapping[str, Any] | None = None) -> None:
     path = _settings_file()
     if path is None:
         return
+    data = SETTINGS if values is None else dict(values)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(SETTINGS, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _workspace_visualizer_dir() -> Path:
@@ -431,17 +458,66 @@ def _visualizer_port(mode: str, host: str, requested_port: int | None) -> int:
     raise HTTPException(status_code=409, detail=f"no free port found near {preferred}")
 
 
-def _wait_for_visualizer(url: str, *, timeout: float = 35.0) -> bool:
+def _wait_for_visualizer(
+    url: str,
+    *,
+    timeout: float = 35.0,
+    process: subprocess.Popen[str] | None = None,
+    auth_token: str = "",
+) -> bool:
     deadline = time.time() + timeout
-    request = urllib.request.Request(url, headers={"User-Agent": "WorldFoundry Workspace"})
+    headers = {"User-Agent": "WorldFoundry Workspace"}
+    token = (auth_token or "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, headers=headers)
     while time.time() < deadline:
+        if process is not None and process.poll() is not None:
+            return False
         try:
             with urllib.request.urlopen(request, timeout=2) as response:
-                if 200 <= int(response.status) < 500:
+                if 200 <= int(response.status) < 400:
                     return True
+        except urllib.error.HTTPError as exc:
+            status = int(getattr(exc, "code", 0) or 0)
+            with contextlib.suppress(Exception):
+                exc.close()
+            if 200 <= status < 400:
+                return True
         except Exception:
-            time.sleep(0.5)
+            pass
+        if process is not None and process.poll() is not None:
+            return False
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            break
+        time.sleep(min(0.5, remaining))
     return False
+
+
+def _probe_visualizer_ready(
+    health_url: str,
+    *,
+    timeout: float,
+    process: subprocess.Popen[str],
+    auth_token: str,
+) -> bool:
+    probe = _wait_for_visualizer
+    kwargs: dict[str, Any] = {"timeout": timeout}
+    params = inspect.signature(probe).parameters
+    accepts_varkw = any(param.kind is inspect.Parameter.VAR_KEYWORD for param in params.values())
+    if accepts_varkw or "process" in params:
+        kwargs["process"] = process
+    if accepts_varkw or "auth_token" in params:
+        kwargs["auth_token"] = auth_token
+    return bool(probe(health_url, **kwargs))
+
+
+def _default_visualizer_host(mode: str, workspace_bind_host: str = "127.0.0.1") -> str:
+    if mode == "points":
+        return "127.0.0.1"
+    normalized = (workspace_bind_host or "127.0.0.1").strip() or "127.0.0.1"
+    return "127.0.0.1" if is_loopback_host(normalized) else normalized
 
 
 def _visualizer_startup_timeout(mode: str) -> float:
@@ -514,16 +590,28 @@ def _visualizer_reusable(
     model_id: str,
     asset_path: str,
     params: Mapping[str, Any],
+    simulator_url: str | None = None,
+    host: str | None = None,
+    port: int | None = None,
 ) -> TypeGuard[ManagedVisualizer]:
     """Return whether a managed viewer already serves this exact target."""
 
-    return bool(
-        existing is not None
-        and existing.model_id == model_id
-        and existing.asset_path == asset_path
-        and existing.params == dict(params)
-        and (existing.external or _visualizer_process_alive(existing.process))
-    )
+    if existing is None:
+        return False
+    if existing.model_id != model_id or existing.asset_path != asset_path or existing.params != dict(params):
+        return False
+    if not (existing.external or _visualizer_process_alive(existing.process)):
+        return False
+    if simulator_url is not None:
+        requested_external_url = simulator_url.strip()
+        if existing.external:
+            if requested_external_url != existing.url:
+                return False
+        elif requested_external_url:
+            return False
+    if host is not None and existing.host != host:
+        return False
+    return port is None or existing.port == port
 
 
 def _validate_visualizer_asset(mode: str, asset_path: str) -> str:
@@ -546,9 +634,7 @@ def _workspace_child_python() -> str:
     )
 
 
-def _visualizer_launch_command(
-    mode: str, payload: VisualizerLaunchRequest, host: str, port: int
-) -> tuple[list[str], str, str]:
+def _validate_visualizer_launch(mode: str, payload: VisualizerLaunchRequest) -> tuple[str, str, str]:
     STUDIO_VISUALIZATIONS.backend_for(mode)
     model_id = (payload.model_id or DEFAULT_VISUALIZER_MODELS.get(mode) or "").strip()
     if not model_id:
@@ -561,6 +647,15 @@ def _visualizer_launch_command(
     external_url = (payload.simulator_url or "").strip()
     if mode in VISUALIZER_URL_REQUIRED and not external_url:
         raise HTTPException(status_code=400, detail=f"{mode} requires a simulator URL")
+    if mode == "rerun" and not asset_path and not external_url:
+        raise HTTPException(status_code=400, detail="rerun requires an asset path or simulator URL")
+    return model_id, asset_path, external_url
+
+
+def _visualizer_launch_command(
+    mode: str, payload: VisualizerLaunchRequest, host: str, port: int
+) -> tuple[list[str], str, str]:
+    model_id, asset_path, external_url = _validate_visualizer_launch(mode, payload)
     if mode in {"embodied", "rerun"} and external_url:
         return [], model_id, asset_path
     cmd = [
@@ -621,20 +716,34 @@ def _artifact_visualization_action(
     }
 
 
-def _launch_visualizer(mode: str, payload: VisualizerLaunchRequest) -> dict[str, Any]:
+def _launch_visualizer(
+    mode: str,
+    payload: VisualizerLaunchRequest,
+    *,
+    default_host: str = "127.0.0.1",
+    auth_token: str = "",
+) -> dict[str, Any]:
     # Serialize launches: concurrent requests for one mode would otherwise both
     # pass the reuse check and race subprocess start/stop on VISUALIZER_MANAGED.
     with _VISUALIZER_LOCK:
-        return _launch_visualizer_locked(mode, payload)
+        return _launch_visualizer_locked(mode, payload, default_host=default_host, auth_token=auth_token)
 
 
-def _launch_visualizer_locked(mode: str, payload: VisualizerLaunchRequest) -> dict[str, Any]:
+def _launch_visualizer_locked(
+    mode: str,
+    payload: VisualizerLaunchRequest,
+    *,
+    default_host: str = "127.0.0.1",
+    auth_token: str = "",
+) -> dict[str, Any]:
     if mode not in STUDIO_VISUALIZATIONS.modes:
         raise HTTPException(status_code=404, detail=f"unknown visualizer: {mode}")
     requested_model_id = (payload.model_id or DEFAULT_VISUALIZER_MODELS.get(mode) or "").strip()
     requested_asset_path = (payload.asset_path or "").strip()
     if requested_asset_path:
         requested_asset_path = str(Path(requested_asset_path).expanduser().resolve())
+    host = (payload.host or default_host or "127.0.0.1").strip() or "127.0.0.1"
+    external_url = (payload.simulator_url or "").strip()
     params = _resolved_visualizer_params(
         mode,
         model_id=requested_model_id,
@@ -648,15 +757,18 @@ def _launch_visualizer_locked(mode: str, payload: VisualizerLaunchRequest) -> di
         model_id=requested_model_id,
         asset_path=requested_asset_path,
         params=params,
+        simulator_url=external_url,
+        host=host,
+        port=payload.port,
     ):
         return _visualizer_status(existing)
+
+    _validate_visualizer_launch(mode, payload)
 
     if existing is not None:
         _stop_visualizer(mode)
 
     backend = STUDIO_VISUALIZATIONS.backend_for(mode)
-    host = (payload.host or "127.0.0.1").strip() or "127.0.0.1"
-    external_url = (payload.simulator_url or "").strip()
     port = int(payload.port or backend.default_port)
     if not (mode in {"embodied", "rerun"} and external_url):
         port = _visualizer_port(mode, host, payload.port)
@@ -697,12 +809,15 @@ def _launch_visualizer_locked(mode: str, payload: VisualizerLaunchRequest) -> di
         source_url = f"ws://{browser_host}:{rerun_ws_port}"
         url = url.rstrip("/") + "/?url=" + urllib.parse.quote(source_url, safe="") + f"&renderer={_rerun_renderer()}"
     health_url = _visualizer_health_url(mode, url)
+    probe_auth_token = (auth_token or configured_auth_token()).strip()
     log_path = _workspace_visualizer_dir() / f"{mode}-{int(time.time())}.log"
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(item for item in (str(REPO_ROOT), env.get("PYTHONPATH", "")) if item)
     env.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
     env.setdefault("PYTHONFAULTHANDLER", "1")
     env.setdefault("PYTHONUNBUFFERED", "1")
+    if probe_auth_token and not env.get("WORLDFOUNDRY_STUDIO_AUTH_TOKEN"):
+        env["WORLDFOUNDRY_STUDIO_AUTH_TOKEN"] = probe_auth_token
     visualizer_env = _visualizer_env_overrides(mode, params)
     if rerun_grpc_port is not None:
         visualizer_env["WORLDFOUNDRY_STUDIO_RERUN_GRPC_PORT"] = str(rerun_grpc_port)
@@ -727,7 +842,12 @@ def _launch_visualizer_locked(mode: str, payload: VisualizerLaunchRequest) -> di
             # process group leader, which _terminate_process_group relies on.
             start_new_session=hasattr(os, "setsid"),
         )
-    ready = _wait_for_visualizer(health_url, timeout=_visualizer_startup_timeout(mode))
+    ready = _probe_visualizer_ready(
+        health_url,
+        timeout=_visualizer_startup_timeout(mode),
+        process=process,
+        auth_token=probe_auth_token,
+    )
     if not ready:
         returncode = process.poll()
         if returncode is None:
@@ -1368,6 +1488,9 @@ def _result_artifact_paths(result: Any) -> list[tuple[str, str]]:
         output_dir = result.get("output_dir")
         if output_dir:
             add_path("output_dir", output_dir)
+            report_path = Path(str(output_dir)).expanduser() / "report.md"
+            if report_path.is_file():
+                add_path("report.md", report_path)
     return rows
 
 
@@ -1643,6 +1766,7 @@ def _job_payload(job: StudioJob, *, include_logs: bool = False) -> dict[str, Any
         "result": _job_result_payload(job.result),
         "visualization_actions": _result_visualization_actions(job.result, model_id=job.model_id),
         "output_dir": _result_output_dir(job.result) or str(dict(job.metadata).get("output_dir") or ""),
+        "logs_total": len(job.logs),
         "logs": job.logs[-200:] if include_logs else [],
     }
 
@@ -1741,7 +1865,7 @@ def _safe_file_response(path_text: str | None, request: Request | None = None) -
     return FileResponse(path, media_type=media_type, headers=headers)
 
 
-def create_app(auth_token: str = "") -> FastAPI:
+def create_app(auth_token: str = "", *, bind_host: str = "127.0.0.1") -> FastAPI:
     """Build the Workspace FastAPI app.
 
     This app is a single-user local tool: SETTINGS, VISUALIZER_MANAGED, JOBS,
@@ -1753,7 +1877,9 @@ def create_app(auth_token: str = "") -> FastAPI:
     """
 
     _load_settings_from_disk()
+    resolved_bind_host = (bind_host or "127.0.0.1").strip() or "127.0.0.1"
     app = FastAPI(title="OpenEnvision Workspace")
+    app.state.bind_host = resolved_bind_host
     app.router.add_event_handler("shutdown", _shutdown_workspace)
 
     if auth_token:
@@ -1793,14 +1919,19 @@ def create_app(auth_token: str = "") -> FastAPI:
 
     @app.get("/api/settings")
     def get_settings() -> dict[str, Any]:
-        return dict(SETTINGS)
+        with _SETTINGS_LOCK:
+            return dict(SETTINGS)
 
     @app.post("/api/settings")
     def update_settings(payload: SettingsUpdateRequest) -> dict[str, Any]:
         coerced = {key: _coerce_setting_value(key, value) for key, value in payload.values.items()}
         with _SETTINGS_LOCK:
+            candidate = {**SETTINGS, **coerced}
+            try:
+                _save_settings_to_disk(candidate)
+            except OSError as exc:
+                raise HTTPException(status_code=500, detail=f"failed to save settings: {exc}") from exc
             SETTINGS.update(coerced)
-            _save_settings_to_disk()
             return dict(SETTINGS)
 
     @app.get("/api/models")
@@ -1808,7 +1939,11 @@ def create_app(auth_token: str = "") -> FastAPI:
         models = [dict(model) for model in _workspace_models()]
         if workload_type and workload_type != "all":
             models = [
-                model for model in models if model["workload_type"] == workload_type or workload_type == "inference"
+                model
+                for model in models
+                if model["workload_type"] == workload_type
+                or any(variant.get("workload_type") == workload_type for variant in model.get("variants", ()))
+                or workload_type == "inference"
             ]
         return models
 
@@ -1846,6 +1981,7 @@ def create_app(auth_token: str = "") -> FastAPI:
                 {
                     "mode": backend.mode,
                     "title": backend.title,
+                    "default_host": _default_visualizer_host(mode, resolved_bind_host),
                     "default_port": backend.default_port,
                     "default_model": DEFAULT_VISUALIZER_MODELS.get(mode, ""),
                     "aliases": list(backend.aliases),
@@ -1860,7 +1996,13 @@ def create_app(auth_token: str = "") -> FastAPI:
 
     @app.post("/api/visualizers/{mode}/launch")
     def launch_visualizer(mode: str, payload: VisualizerLaunchRequest) -> dict[str, Any]:
-        return _launch_visualizer(mode.strip().lower(), payload)
+        normalized_mode = mode.strip().lower()
+        return _launch_visualizer(
+            normalized_mode,
+            payload,
+            default_host=_default_visualizer_host(normalized_mode, resolved_bind_host),
+            auth_token=auth_token,
+        )
 
     @app.post("/api/visualizers/{mode}/stop")
     def stop_visualizer(mode: str) -> dict[str, Any]:
@@ -1923,7 +2065,10 @@ def create_app(auth_token: str = "") -> FastAPI:
                 raise HTTPException(status_code=400, detail=f"unsupported evaluation mode: {payload.eval_mode}")
             if mode in _PREPARED_EVALUATION_MODES:
                 output_dir = _optional_path(payload.output_dir) or _workspace_job_output_dir("evaluations", None)
-                prepared = _prepared_evaluation_from_payload(payload, output_dir)
+                try:
+                    prepared = _prepared_evaluation_from_payload(payload, output_dir)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
                 if not prepared.ready:
                     messages = "; ".join(issue.message for issue in prepared.issues if issue.severity == "error")
                     raise HTTPException(status_code=400, detail=messages or "evaluation preflight failed")
@@ -2127,7 +2272,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     import uvicorn
 
-    uvicorn.run(create_app(auth_token=auth_token), host=args.host, port=args.port)
+    uvicorn.run(create_app(auth_token=auth_token, bind_host=args.host), host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

@@ -934,7 +934,7 @@
           <div class="toolbar"><div class="filters"><label>Type<select id="jobTypeFilter"><option value="all">All jobs</option><option value="inference">Inference</option><option value="evaluation">Evaluation</option></select></label><label>Status<select id="statusFilter"><option value="all">All status</option><option>queued</option><option>running</option><option>completed</option><option>failed</option><option>cancelled</option></select></label></div><button class="btn" id="refreshJobs">Refresh</button></div>
           <div class="split" id="jobSplit" data-split-key="worldfoundry.studio.jobSplitLeft" data-split-default="360" data-split-min-left="240" data-split-min-right="360"><div class="panel"><div class="panelHead"><strong>Job Queue</strong><span class="muted tiny" id="jobCount">0 jobs</span></div><div class="jobList" id="jobList"></div></div><div class="splitHandle" role="separator" aria-orientation="vertical" aria-label="Resize job queue and detail" title="Drag to resize · double-click to reset" tabindex="0"></div><div class="panel"><div class="panelHead"><strong>Job Detail</strong><button class="btn danger" id="stopJob">Stop</button></div><div class="detail" id="jobDetail"><span class="muted">Select a job.</span></div></div></div>
         </section>
-        <section id="view-catalog" class="view"><div class="toolbar"><div class="filters"><label>Search<input id="catalogSearch" placeholder="model, tag, family" /></label><label>Workload<select id="catalogWorkload"><option value="all">All</option><option value="t2v">T2V</option><option value="i2v">I2V</option><option value="v2v">V2V</option><option value="3d">3D</option><option value="geometry">Geometry</option><option value="action">Action</option><option value="api">API</option><option value="world">World</option></select></label></div></div><div class="gridCards" id="catalogGrid"></div></section>
+        <section id="view-catalog" class="view"><div class="toolbar"><div class="filters"><label>Search<input id="catalogSearch" placeholder="model, tag, family" /></label><label>Workload<select id="catalogWorkload"><option value="all">All</option><option value="t2v">T2V</option><option value="i2v">I2V</option><option value="v2v">V2V</option><option value="image">Image</option><option value="v2a">Video to Audio</option><option value="3d">3D</option><option value="geometry">Geometry</option><option value="action">Action</option><option value="api">API</option><option value="world">World</option></select></label></div></div><div class="gridCards" id="catalogGrid"></div></section>
         <section id="view-gallery" class="view"><div class="gridCards" id="galleryGrid"></div></section>
         <section id="view-artifacts" class="view"><div class="panel"><div class="panelHead"><strong>Artifacts</strong></div><div class="detail" id="artifactList"></div></div></section>
         <section id="view-visualizers" class="view">
@@ -958,7 +958,7 @@
       <div class="modalBody">
         <div class="formGrid">
           <label>Job Type<select id="jobType"><option value="inference">Inference</option><option value="evaluation">Evaluation</option></select></label>
-          <label>Workload<select id="workloadType"><option value="t2v">T2V</option><option value="i2v">I2V</option><option value="v2v">V2V</option><option value="3d">3D</option><option value="geometry">Geometry</option><option value="action">Action</option><option value="api">API</option><option value="world">World</option></select></label>
+          <label>Workload<select id="workloadType"><option value="t2v">T2V</option><option value="i2v">I2V</option><option value="v2v">V2V</option><option value="image">Image</option><option value="v2a">Video to Audio</option><option value="3d">3D</option><option value="geometry">Geometry</option><option value="action">Action</option><option value="api">API</option><option value="world">World</option></select></label>
           <label class="wide">Model<select id="modelSelect"></select></label>
           <label>Variant<select id="variantSelect"></select></label>
           <label>Task<select id="taskProfile"></select></label>
@@ -1026,7 +1026,7 @@
   </dialog>
   <script>
     const studioAuthToken = new URLSearchParams(window.location.search).get("token") || "";
-    const state = { view: "inference", jobs: [], models: [], evaluationCatalog: {benchmarks: [], metrics: [], models: []}, visualizers: [], visualizerPreviewMode: "", activeJob: "", detailRenderKey: "", detailTab: "preview", detailLogCount: 0, logStreamFilter: "all", logFollowTail: true, settings: {}, lazyVideoObserver: null, autoVideoPreloads: 0, visualizerRefreshInFlight: false, visualizerLastSync: 0 };
+    const state = { view: "inference", jobs: [], models: [], evaluationCatalog: {benchmarks: [], metrics: [], models: []}, visualizers: [], visualizerDrafts: {}, visualizerPreviewMode: "", activeJob: "", detailRenderKey: "", detailTab: "preview", detailLogCount: 0, detailLogTotal: 0, logStreamFilter: "all", logFollowTail: true, settings: {}, lazyVideoObserver: null, autoVideoPreloads: 0, visualizerRefreshInFlight: false, visualizerLastSync: 0 };
     const MAX_AUTO_VIDEO_PRELOADS = 4;
     const JOB_VIEWS = new Set(["inference", "evaluation"]);
     const INFER_INFRA_FIELDS = ["workloadType","modelSelect","variantSelect","taskProfile","device","backend","attention","modelRef","endpoint","apiKey","callJson","loadJson"];
@@ -1166,8 +1166,10 @@
     }
     function applyInferValue(target, fieldId, value, payload) {
       if (value === undefined || value === null || value === "") return;
-      const key = PARAM_KEY_BY_FIELD_ID[fieldId] || fieldId.replaceAll("-", "_");
+      const rawKey = String(fieldId || "").replaceAll("-", "_");
+      const key = target === "params" ? (PARAM_KEY_BY_FIELD_ID[fieldId] || rawKey) : rawKey;
       if (target === "prompt") payload.prompt = String(value);
+      else if (target === "negative_prompt") payload.negative_prompt = String(value);
       else if (target === "input_path") payload.input_path = String(value);
       else if (target === "params") payload.params[key] = value;
       else if (target === "load_kwargs") payload.load_kwargs[key] = value;
@@ -1378,9 +1380,14 @@
       ensureSelectOption(id, value, label || value);
       $(id).value = value;
     }
+    function resetCreateJsonFields() {
+      setJsonInputValue("callJson", {});
+      setJsonInputValue("loadJson", {});
+    }
     function selectInferModel(modelId, variantId, taskId) {
       const model = state.models.find(item => item.id === modelId);
-      const workload = (model && model.workload_type) || $("workloadType").value || "world";
+      const variant = model && variantId ? (model.variants || []).find(item => item.variant_id === variantId) : null;
+      const workload = (variant && variant.workload_type) || (model && model.workload_type) || $("workloadType").value || "world";
       setSelectValue("workloadType", workload);
       populateModelSelect();
       setSelectValue("modelSelect", modelId);
@@ -1391,6 +1398,7 @@
       if (taskId) {
         setSelectValue("taskProfile", taskId);
       }
+      resetCreateJsonFields();
       renderInferDynamicFields();
       renderInferSpecSummary();
       applySelectedModelDefaults();
@@ -1398,6 +1406,9 @@
     }
     function firstDefined(...values) {
       return values.find(value => value !== undefined && value !== null && value !== "");
+    }
+    function firstNonNull(...values) {
+      return values.find(value => value !== undefined && value !== null);
     }
     function recordRequest(full) {
       const metadata = (full && full.metadata) || {};
@@ -1420,6 +1431,15 @@
       "output", "output_path", "output-path", "output_dir", "output-dir", "out_path", "out-path",
       "out_dir", "out-dir", "outdir", "save_path", "save-path", "save_dir", "save-dir"
     ]);
+    const REFINE_DEDICATED_ALIASES = {
+      numFrames: ["num_frames", "frames", "num-frames", "video_length"],
+      fps: ["fps", "frame_rate"],
+      height: ["height", "user_height", "output_h", "resize_h", "image_height"],
+      width: ["width", "user_width", "output_w", "resize_w", "image_width"],
+      steps: ["num_inference_steps", "num-inference-steps", "steps", "sampling_steps", "sampling-steps", "infer_steps", "num_steps"],
+      guidance: ["guidance_scale", "guidance-scale", "guidance", "cfg_scale", "scale"],
+      seed: ["seed"]
+    };
     function sanitizedRefineKwargs(value) {
       if (Array.isArray(value)) {
         return value.map(item => sanitizedRefineKwargs(item));
@@ -1435,6 +1455,32 @@
       });
       return clean;
     }
+    function consumeAliasedValue(bucket, aliases, predicate = null) {
+      if (!bucket || typeof bucket !== "object") return undefined;
+      const normalizedAliases = new Set(aliases.map(normalizeFieldId));
+      let found;
+      let hasFound = false;
+      Object.keys(bucket).forEach(key => {
+        if (!normalizedAliases.has(normalizeFieldId(key))) return;
+        const candidate = bucket[key];
+        if (predicate && !predicate(candidate)) return;
+        if (!hasFound && candidate !== undefined && candidate !== null && candidate !== "") {
+          found = candidate;
+          hasFound = true;
+        }
+        delete bucket[key];
+      });
+      return hasFound ? found : undefined;
+    }
+    function readAliasedValue(bucket, aliases) {
+      if (!bucket || typeof bucket !== "object") return undefined;
+      const normalizedAliases = new Set(aliases.map(normalizeFieldId));
+      for (const [key, candidate] of Object.entries(bucket)) {
+        if (!normalizedAliases.has(normalizeFieldId(key))) continue;
+        if (candidate !== undefined && candidate !== null && candidate !== "") return candidate;
+      }
+      return undefined;
+    }
     function payloadFromRefineRecord(full) {
       const metadata = full.metadata || {};
       const request = recordRequest(full);
@@ -1442,18 +1488,44 @@
       const variant = contract.variant || {};
       const task = contract.task || {};
       const result = full.result || {};
+      const requestParams = request.params && typeof request.params === "object" ? { ...request.params } : {};
       return {
         modelId: full.model_id || contract.model_family_id || metadata.model_id || "",
         variantId: firstDefined(metadata.variant_id, request.variant_id, contract.variant_id, variant.variant_id, "default"),
         taskId: firstDefined(metadata.task_profile_id, request.task_profile_id, contract.task_profile_id, task.task_id, "default"),
         prompt: firstDefined(metadata.prompt, request.prompt, ""),
-        negativePrompt: firstDefined(metadata.negative_prompt, request.negative_prompt, ""),
+        negativePrompt: firstDefined(metadata.negative_prompt, request.negative_prompt, request.call_kwargs && request.call_kwargs.negative_prompt, ""),
         inputPath: bestRefineInputPath(result, full),
         device: firstDefined(metadata.device, request.device, "cuda"),
         modelRef: firstDefined(request.model_ref, variant.model_ref, metadata.model_ref, ""),
+        request,
+        params: requestParams,
         callKwargs: sanitizedRefineKwargs({...((variant.call_kwargs || {})), ...((request.call_kwargs || {}))}),
         loadKwargs: sanitizedRefineKwargs({...((variant.load_kwargs || {})), ...((request.load_kwargs || {}))})
       };
+    }
+    function applyDynamicControlValue(input, value) {
+      if (value === undefined || value === null) return;
+      if (input.type === "checkbox") {
+        input.checked = Boolean(value);
+        return;
+      }
+      if (input.tagName === "SELECT") {
+        const text = String(value);
+        if (!Array.from(input.options).some(option => option.value === text)) {
+          const option = document.createElement("option");
+          option.value = text;
+          option.textContent = text;
+          input.appendChild(option);
+        }
+        input.value = text;
+        return;
+      }
+      if (Array.isArray(value) || typeof value === "object") {
+        input.value = JSON.stringify(value);
+        return;
+      }
+      input.value = String(value);
     }
     async function refineFromRecord(jobId, runId) {
       try {
@@ -1465,15 +1537,95 @@
         setView("inference");
         $("jobType").value = "inference";
         selectInferModel(refine.modelId, refine.variantId, refine.taskId);
-        setControlDefault("prompt", refine.prompt);
-        setControlDefault("negativePrompt", refine.negativePrompt);
+        const remainingCall = { ...refine.callKwargs };
+        const remainingLoad = { ...refine.loadKwargs };
+        const priorParams = refine.params || {};
+        const priorRequest = refine.request || {};
+
+        consumeAliasedValue(remainingCall, ["prompt"]);
+        const negativePrompt = firstDefined(
+          consumeAliasedValue(remainingCall, ["negative_prompt", "negative-prompt"]),
+          refine.negativePrompt
+        );
+        setControlDefault("prompt", refine.prompt ?? "");
+        if (fieldControlVisible("negativePrompt")) setControlDefault("negativePrompt", negativePrompt ?? "");
         setControlDefault("inputPath", refine.inputPath);
         setControlDefault("device", refine.device);
         if (refine.modelRef) setControlDefault("modelRef", refine.modelRef);
-        delete refine.callKwargs.output_path;
-        delete refine.callKwargs.output_dir;
-        setJsonInputValue("callJson", refine.callKwargs);
-        setJsonInputValue("loadJson", refine.loadKwargs);
+
+        Object.entries(REFINE_DEDICATED_ALIASES).forEach(([controlId, aliases]) => {
+          if (!fieldControlVisible(controlId)) return;
+          const field = taskFieldForAliases(INFER_TASK_FIELD_CONTROLS[controlId] || aliases);
+          const target = (field && field.target) || "params";
+          const fieldAliases = field ? [field.field_id, ...aliases] : aliases;
+          const fromCall = target === "load_kwargs" ? undefined : consumeAliasedValue(remainingCall, fieldAliases);
+          const fromLoad = target === "call_kwargs" ? undefined : consumeAliasedValue(remainingLoad, fieldAliases);
+          const fromOtherCall = target === "load_kwargs" ? consumeAliasedValue(remainingCall, fieldAliases) : undefined;
+          const fromOtherLoad = target === "call_kwargs" ? consumeAliasedValue(remainingLoad, fieldAliases) : undefined;
+          const fromParams = readAliasedValue(priorParams, fieldAliases);
+          const fromRequest = controlId === "numFrames"
+            ? priorRequest.num_frames
+            : controlId === "fps"
+              ? priorRequest.fps
+              : undefined;
+          const resolved = target === "load_kwargs"
+            ? firstNonNull(fromLoad, fromOtherCall, fromParams, fromRequest)
+            : firstNonNull(fromCall, fromLoad, fromOtherLoad, fromParams, fromRequest);
+          if (resolved !== undefined) setControlDefault(controlId, resolved);
+        });
+
+        document.querySelectorAll("[data-infer-field-id]").forEach(input => {
+          const fieldId = input.dataset.inferFieldId || "";
+          const target = input.dataset.target || "call_kwargs";
+          const aliases = [fieldId, fieldId.replaceAll("-", "_")];
+          if (fieldId === "interactions") aliases.push("interaction_signal", "interaction", "action");
+          let resolved;
+          if (target === "load_kwargs") {
+            resolved = firstNonNull(consumeAliasedValue(remainingLoad, aliases), readAliasedValue(priorParams, aliases));
+          } else if (target === "call_kwargs") {
+            resolved = firstNonNull(consumeAliasedValue(remainingCall, aliases), readAliasedValue(priorParams, aliases));
+          } else {
+            const fromCall = consumeAliasedValue(remainingCall, aliases);
+            const fromLoad = consumeAliasedValue(remainingLoad, aliases);
+            const fromParams = readAliasedValue(priorParams, aliases);
+            const fromRequest = fieldId === "interactions" ? priorRequest.interactions : undefined;
+            resolved = firstNonNull(fromCall, fromLoad, fromParams, fromRequest);
+          }
+          if (resolved !== undefined) applyDynamicControlValue(input, resolved);
+        });
+
+        if (fieldControlVisible("attention")) {
+          const attn = firstDefined(
+            consumeAliasedValue(remainingLoad, ["attention_backend"]),
+            consumeAliasedValue(remainingCall, ["attention_backend"]),
+            readAliasedValue(priorParams, ["attention_backend"])
+          );
+          if (attn !== undefined) setControlDefault("attention", attn);
+        }
+        Object.entries(RUNTIME_CHECK_OPTIONS).forEach(([controlId, key]) => {
+          if (!runtimeCheckVisible(controlId)) return;
+          const isBool = value => typeof value === "boolean";
+          const value = firstNonNull(
+            consumeAliasedValue(remainingLoad, [key], isBool),
+            consumeAliasedValue(remainingCall, [key], isBool),
+            readAliasedValue(priorParams, [key])
+          );
+          if (value !== undefined) $(controlId).checked = Boolean(value);
+        });
+        Object.entries(RUNTIME_VALUE_CONTROLS).forEach(([controlId, spec]) => {
+          if (!fieldControlVisible(controlId)) return;
+          const value = firstNonNull(
+            consumeAliasedValue(remainingLoad, [spec.key]),
+            consumeAliasedValue(remainingCall, [spec.key]),
+            readAliasedValue(priorParams, [spec.key])
+          );
+          if (value !== undefined) setControlDefault(controlId, value);
+        });
+
+        delete remainingCall.output_path;
+        delete remainingCall.output_dir;
+        setJsonInputValue("callJson", remainingCall);
+        setJsonInputValue("loadJson", remainingLoad);
         $("createDialog").showModal();
       } catch (error) {
         alert(error.message || String(error));
@@ -1481,18 +1633,18 @@
     }
     async function visualizeArtifact(mode, path, modelId) {
       if (!mode || !path) return;
-      const payload = {
-        model_id: modelId || "",
-        asset_path: path,
-        host: "127.0.0.1",
-        port: null,
-        reuse: false,
-        params: visualizerDefaultParams(mode)
-      };
       setView("visualizers");
       state.visualizers = await api("/api/visualizers");
       renderVisualizers(false);
       updateVisualizerStatus(mode, "Launching...");
+      const payload = {
+        model_id: modelId || "",
+        asset_path: path,
+        host: visualizerHostForLaunch(mode),
+        port: null,
+        reuse: false,
+        params: visualizerDefaultParams(mode)
+      };
       try {
         const status = await api(`/api/visualizers/${encodeURIComponent(mode)}/launch`, {
           method: "POST",
@@ -1502,11 +1654,12 @@
         state.visualizers = await api("/api/visualizers");
         const row = state.visualizers.find(item => item.mode === mode);
         if (row) row.status = status;
+        delete state.visualizerDrafts[mode];
       } catch (error) {
         updateVisualizerStatus(mode, `Launch failed: ${escapeHtml(error.message || error)}`);
         return;
       }
-      renderVisualizers(false);
+      renderVisualizers(false, { preferredMode: mode, resetDraftModes: [mode] });
     }
     function renderEvaluationSummary(result) {
       if (!result || !(result.schema_version === "worldfoundry-evaluate-run-result" || result.scorecard_path)) return "";
@@ -1665,7 +1818,11 @@
           const panel = $("jobLogPanel");
           if (panel && panel.dataset.logSource) {
             try {
-              updateJobLogs(JSON.parse(panel.dataset.logSource), { forceRebuild: true });
+              const sourceRows = JSON.parse(panel.dataset.logSource);
+              updateJobLogs(
+                { logs: sourceRows, logs_total: state.detailLogTotal || sourceRows.length, status: panel.dataset.jobStatus || "" },
+                { forceRebuild: true }
+              );
             } catch {}
           }
         };
@@ -1709,29 +1866,45 @@
     function updateJobLogs(full, options = {}) {
       const panel = $("jobLogPanel");
       if (!panel) return false;
-      const logRows = full.logs || [];
+      const isArray = Array.isArray(full);
+      const logRows = isArray ? full : (full && Array.isArray(full.logs) ? full.logs : []);
+      const totalCount = isArray
+        ? (state.detailLogTotal || logRows.length)
+        : (Number.isFinite(full && full.logs_total) ? full.logs_total : logRows.length);
+      const status = isArray
+        ? (panel.dataset.jobStatus || "")
+        : ((full && full.status) || panel.dataset.jobStatus || "");
       const forceRebuild = !!options.forceRebuild;
-      updateLogBadge(logRows.length);
+      updateLogBadge(totalCount);
       panel.dataset.logSource = JSON.stringify(logRows);
+      panel.dataset.jobStatus = status;
       const prevCount = state.detailLogCount || 0;
+      const prevTotal = state.detailLogTotal || 0;
       const filterChanged = panel.dataset.logFilter !== state.logStreamFilter;
-      if (filterChanged || forceRebuild || prevCount > logRows.length || state.logStreamFilter !== panel.dataset.activeFilter) {
+      const windowShifted = totalCount > prevTotal && logRows.length <= prevCount;
+      if (filterChanged || forceRebuild || prevCount > logRows.length || windowShifted || state.logStreamFilter !== panel.dataset.activeFilter) {
         const nearBottom = logPanelNearBottom(panel);
         panel.innerHTML = renderLogPanelHtml(logRows);
         panel.dataset.logFilter = state.logStreamFilter;
         panel.dataset.activeFilter = state.logStreamFilter;
         state.detailLogCount = logRows.length;
-        if (state.logFollowTail && (nearBottom || full.status === "running" || full.status === "queued")) scrollLogPanelToBottom(panel);
+        state.detailLogTotal = totalCount;
+        if (state.logFollowTail && (nearBottom || status === "running" || status === "queued")) scrollLogPanelToBottom(panel);
         return true;
       }
-      if (logRows.length <= prevCount) return false;
+      if (logRows.length <= prevCount) {
+        state.detailLogTotal = totalCount;
+        return false;
+      }
       const nearBottom = logPanelNearBottom(panel);
-      logRows.slice(prevCount).forEach(row => {
-        if (state.logStreamFilter !== "all" && String(row.stream || "log") !== state.logStreamFilter) return;
-        panel.insertAdjacentHTML("beforeend", renderLogLine(row));
-      });
+      const addedRows = logRows.slice(prevCount).filter(row => state.logStreamFilter === "all" || String(row.stream || "log") === state.logStreamFilter);
+      if (addedRows.length) {
+        panel.querySelectorAll(":scope > .muted").forEach(node => node.remove());
+        panel.insertAdjacentHTML("beforeend", addedRows.map(renderLogLine).join(""));
+      }
       state.detailLogCount = logRows.length;
-      if (state.logFollowTail && (nearBottom || full.status === "running" || full.status === "queued")) scrollLogPanelToBottom(panel);
+      state.detailLogTotal = totalCount;
+      if (state.logFollowTail && (nearBottom || status === "running" || status === "queued")) scrollLogPanelToBottom(panel);
       return true;
     }
     function renderJobs() {
@@ -1752,6 +1925,7 @@
           state.activeJob = nextJob;
           state.detailRenderKey = "";
           state.detailLogCount = 0;
+          state.detailLogTotal = 0;
           const selected = state.jobs.find(item => item.id === nextJob);
           state.detailTab = (selected && (selected.status === "running" || selected.status === "queued")) ? "logs" : "preview";
         }
@@ -1769,21 +1943,26 @@
       if (!job) {
         state.detailRenderKey = "";
         state.detailLogCount = 0;
+        state.detailLogTotal = 0;
         $("jobDetail").innerHTML = `<span class="muted">Select a job.</span>`;
         return;
       }
+      const requestedJobId = job.id;
       let full = job;
-      try { full = await api("/api/jobs/" + job.id); } catch {}
+      try { full = await api("/api/jobs/" + encodeURIComponent(requestedJobId)); } catch {}
+      if (state.activeJob !== requestedJobId) return;
       const logRows = full.logs || [];
+      const logTotal = Number.isFinite(full.logs_total) ? full.logs_total : logRows.length;
       const result = full.result || {};
       const actionKey = (full.visualization_actions || []).map(action => [action.mode, action.path, action.label].join(":")).join("|");
-      const detailKey = [job.id, full.status, full.error || "", result.preview_video || "", result.preview_image || "", result.preview_model || "", result.preview_splat || "", actionKey].join("|");
+      const detailKey = [requestedJobId, full.status, full.error || "", result.preview_video || "", result.preview_image || "", result.preview_model || "", result.preview_splat || "", actionKey].join("|");
       const needsShellRender = state.detailRenderKey !== detailKey;
       if (needsShellRender) {
         state.detailRenderKey = detailKey;
         state.detailLogCount = 0;
-        const video = result.preview_video ? renderVideoBox(`/api/jobs/${job.id}/video`, { eager: true, poster: `/api/jobs/${job.id}/image` }) : "";
-        const image = result.preview_image ? renderImageBox(`/api/jobs/${job.id}/image`) : "";
+        state.detailLogTotal = 0;
+        const video = result.preview_video ? renderVideoBox(`/api/jobs/${requestedJobId}/video`, { eager: true, poster: `/api/jobs/${requestedJobId}/image` }) : "";
+        const image = result.preview_image ? renderImageBox(`/api/jobs/${requestedJobId}/image`) : "";
         const evaluationSummary = renderEvaluationSummary(result);
         const resultActions = renderResultActions(full, result);
         const resultJson = full.result ? JSON.stringify(full.result, null, 2) : "";
@@ -1791,7 +1970,7 @@
         $("jobDetail").innerHTML = `
           <div class="detailTabs">
             <button type="button" class="detailTab ${state.detailTab === "preview" ? "active" : ""}" data-detail-tab="preview">Preview</button>
-            <button type="button" class="detailTab ${state.detailTab === "logs" ? "active" : ""}" data-detail-tab="logs">Logs<span class="logBadge" id="jobLogBadge">${logRows.length}</span></button>
+            <button type="button" class="detailTab ${state.detailTab === "logs" ? "active" : ""}" data-detail-tab="logs">Logs<span class="logBadge" id="jobLogBadge">${logTotal}</span></button>
             <button type="button" class="detailTab ${state.detailTab === "result" ? "active" : ""}" data-detail-tab="result">Result</button>
           </div>
           <div class="detailTabPanel ${state.detailTab === "preview" ? "active" : ""}" data-detail-panel="preview">
@@ -1826,14 +2005,36 @@
         const panel = $("jobLogPanel");
         if (panel) {
           panel.dataset.logSource = JSON.stringify(logRows);
+          panel.dataset.jobStatus = full.status || "";
           panel.dataset.logFilter = state.logStreamFilter;
           panel.dataset.activeFilter = state.logStreamFilter;
           state.detailLogCount = logRows.length;
+          state.detailLogTotal = logTotal;
           if (state.logFollowTail && (full.status === "running" || full.status === "queued")) scrollLogPanelToBottom(panel);
         }
       } else {
+        const panel = $("jobLogPanel");
+        if (panel && logTotal > (state.detailLogTotal || 0) && (state.detailLogTotal || 0) > 0) {
+          try {
+            const delta = await api(`/api/jobs/${encodeURIComponent(requestedJobId)}/logs?after=${state.detailLogTotal}`);
+            if (state.activeJob !== requestedJobId) return;
+            const existingRows = panel.dataset.logSource ? JSON.parse(panel.dataset.logSource) : [];
+            const addedRows = Array.isArray(delta.logs) ? delta.logs : [];
+            const offset = Number.isFinite(delta.offset) ? delta.offset : (state.detailLogTotal + addedRows.length);
+            if (offset >= state.detailLogTotal) {
+              let merged = existingRows.concat(addedRows);
+              let forceRebuild = false;
+              if (merged.length > 2000) {
+                merged = merged.slice(-2000);
+                forceRebuild = true;
+              }
+              updateJobLogs({ logs: merged, logs_total: offset, status: full.status }, { forceRebuild });
+              return;
+            }
+          } catch {}
+          if (state.activeJob !== requestedJobId) return;
+        }
         updateJobLogs(full);
-        updateLogBadge(logRows.length);
       }
     }
     async function loadModels() {
@@ -1964,7 +2165,11 @@
     }
     function populateModelSelect() {
       const workload = $("workloadType").value;
-      const models = state.models.filter(m => m.workload_type === workload || workload === "inference");
+      const models = state.models.filter(
+        m => m.workload_type === workload
+          || (m.variants || []).some(v => v.workload_type === workload)
+          || workload === "inference"
+      );
       $("modelSelect").innerHTML = models.map(m => optionHtml(m.id, `${m.name} · ${m.category}`)).join("");
       populateInferSpecControls();
       applySelectedModelDefaults();
@@ -2090,21 +2295,26 @@
       const variant = selectedVariant() || {};
       const callKwargs = variant.call_kwargs || {};
       setControlDefault("prompt", variant.default_prompt || taskDefaultForAliases(["prompt"], ""));
+      setControlDefault("negativePrompt", variant.default_negative_prompt || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.negativePrompt, ""));
       setControlDefault("inputPath", variant.default_input_path || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.inputPath, ""));
-      setControlDefault("numFrames", callKwargs.num_frames || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.numFrames, state.settings.num_frames));
-      setControlDefault("fps", callKwargs.fps || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.fps, state.settings.fps));
-      setControlDefault("height", callKwargs.height || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.height, state.settings.height));
-      setControlDefault("width", callKwargs.width || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.width, state.settings.width));
-      setControlDefault("steps", callKwargs.num_inference_steps || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.steps, state.settings.num_inference_steps));
-      setControlDefault("guidance", callKwargs.guidance_scale || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.guidance, state.settings.guidance_scale));
-      setControlDefault("seed", callKwargs.seed || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.seed, state.settings.seed));
+      setControlDefault("numFrames", firstNonNull(callKwargs.num_frames, callKwargs.frames, taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.numFrames, state.settings.num_frames)));
+      setControlDefault("fps", firstNonNull(callKwargs.fps, taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.fps, state.settings.fps)));
+      setControlDefault("height", firstNonNull(callKwargs.height, taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.height, state.settings.height)));
+      setControlDefault("width", firstNonNull(callKwargs.width, taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.width, state.settings.width)));
+      setControlDefault("steps", firstNonNull(callKwargs.num_inference_steps, callKwargs.steps, callKwargs.sampling_steps, taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.steps, state.settings.num_inference_steps)));
+      setControlDefault("guidance", firstNonNull(callKwargs.guidance_scale, callKwargs.guidance, taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.guidance, state.settings.guidance_scale)));
+      setControlDefault("seed", firstNonNull(callKwargs.seed, taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.seed, state.settings.seed)));
     }
     function populateInferSpecControls() {
       const model = selectedModel();
       const variants = model && model.variants && model.variants.length ? model.variants : [{variant_id: "default", label: "Default"}];
       const tasks = model && model.tasks && model.tasks.length ? model.tasks : [{task_id: "default", label: "Default Inference"}];
+      const workload = $("workloadType").value;
+      const preferredVariant = (model && model.workload_type !== workload && workload !== "inference")
+        ? variants.find(v => v.workload_type === workload)
+        : null;
       $("variantSelect").innerHTML = variants.map(v => optionHtml(v.variant_id, `${v.label || v.variant_id} · ${v.status || "configured"}`)).join("");
-      $("variantSelect").value = (model && model.default_variant_id) || variants[0].variant_id;
+      $("variantSelect").value = (preferredVariant && preferredVariant.variant_id) || (model && model.default_variant_id) || variants[0].variant_id;
       $("taskProfile").innerHTML = tasks.map(t => optionHtml(t.task_id, t.label || t.task_id)).join("");
       $("taskProfile").value = (model && model.default_task_id) || tasks[0].task_id;
       renderInferDynamicFields();
@@ -2241,13 +2451,50 @@
       const actions = [link, visualize].filter(Boolean).join("");
       return `<div class="metric"><span>${escapeHtml(row.model_name)} · ${escapeHtml(row.job_type)} · ${escapeHtml(row.job_id || row.run_id || "")}</span><strong>${escapeHtml(row.name)}</strong><p class="muted tiny">${escapeHtml(row.path)}</p>${actions ? `<div class="artifactLinks">${actions}</div>` : ""}</div>`;
     }
+    function isLoopbackHostname(hostname) {
+      const value = String(hostname || "").trim().toLowerCase();
+      return value === "127.0.0.1" || value === "localhost" || value === "::1" || value === "[::1]";
+    }
+    function visualizerHostForLaunch(mode) {
+      if (mode === "points" || isLoopbackHostname(window.location.hostname)) return "127.0.0.1";
+      const row = state.visualizers.find(item => item.mode === mode);
+      if (row && row.default_host) return row.default_host;
+      return "";
+    }
+    function rewriteLoopbackUrlForBrowser(raw) {
+      const url = new URL(raw, window.location.href);
+      const localHosts = new Set(["127.0.0.1", "localhost", "0.0.0.0", "::1", "[::1]", "::", "[::]"]);
+      const browserHost = window.location.hostname;
+      if (browserHost && localHosts.has(url.hostname) && !localHosts.has(browserHost)) {
+        url.hostname = browserHost;
+      }
+      return url;
+    }
     function viewerUrlForBrowser(raw) {
       if (!raw) return "";
       try {
-        const url = new URL(raw, window.location.href);
-        const localHosts = new Set(["127.0.0.1", "localhost", "0.0.0.0"]);
-        if (localHosts.has(url.hostname) && !localHosts.has(window.location.hostname)) {
-          url.hostname = window.location.hostname;
+        const url = rewriteLoopbackUrlForBrowser(raw);
+        const nestedSource = url.searchParams.get("url");
+        if (nestedSource) {
+          try {
+            const rewrittenNested = rewriteLoopbackUrlForBrowser(nestedSource);
+            let nestedText = rewrittenNested.toString();
+            if (!nestedSource.endsWith("/") && rewrittenNested.pathname === "/" && !rewrittenNested.search && !rewrittenNested.hash && nestedText.endsWith("/")) {
+              nestedText = nestedText.slice(0, -1);
+            }
+            url.searchParams.set("url", nestedText);
+          } catch {}
+        }
+        const browserHost = window.location.hostname;
+        if (
+          studioAuthToken &&
+          browserHost &&
+          url.hostname === browserHost &&
+          !isLoopbackHostname(url.hostname) &&
+          ["http:", "https:"].includes(url.protocol) &&
+          !url.searchParams.has("token")
+        ) {
+          url.searchParams.set("token", studioAuthToken);
         }
         return url.toString();
       } catch {
@@ -2278,6 +2525,7 @@
       if (!running.length) {
         panel.classList.add("hidden");
         frame.removeAttribute("src");
+        delete frame.dataset.previewKey;
         state.visualizerPreviewMode = "";
         if (tabs) tabs.innerHTML = "";
         return;
@@ -2297,7 +2545,21 @@
         });
       }
       const url = viewerUrlForBrowser(selected.status.url);
-      if (frame.getAttribute("src") !== url) frame.setAttribute("src", url);
+      const previewKey = [
+        selected.mode,
+        url,
+        selected.status.started_at ?? "",
+        selected.status.asset_path || ""
+      ].join("|");
+      if (frame.getAttribute("src") !== url || frame.dataset.previewKey !== previewKey) {
+        frame.dataset.previewKey = previewKey;
+        if (frame.getAttribute("src") === url) {
+          frame.removeAttribute("src");
+          frame.src = url;
+        } else {
+          frame.setAttribute("src", url);
+        }
+      }
       const popout = $("visualizerPreviewPopout");
       if (popout) popout.onclick = () => window.open(url, "_blank", "noopener,noreferrer");
     }
@@ -2332,14 +2594,45 @@
         : visualizerDefaultParams(mode);
       return JSON.stringify(params, null, 2);
     }
-    function visualizerCard(v) {
+    function captureVisualizerDrafts(excludeModes = new Set()) {
+      const grid = $("visualizerGrid");
+      if (!grid) return;
+      grid.querySelectorAll("[data-visualizer-mode]").forEach(card => {
+        const mode = card.dataset.visualizerMode || "";
+        if (!mode || excludeModes.has(mode)) return;
+        const draft = { ...(state.visualizerDrafts[mode] || {}) };
+        let dirty = Object.keys(draft).length > 0;
+        card.querySelectorAll("[data-visualizer-field]").forEach(el => {
+          const name = el.dataset.visualizerField;
+          if (!name) return;
+          const initial = el.dataset.initialValue ?? el.defaultValue ?? "";
+          if (el.value !== initial) {
+            draft[name] = el.value;
+            dirty = true;
+          }
+        });
+        if (dirty) state.visualizerDrafts[mode] = draft;
+      });
+    }
+    function visualizerCard(v, draft = null) {
       const mode = v.mode;
       const status = v.status || null;
+      const activeDraft = draft || (state.visualizerDrafts && state.visualizerDrafts[mode]) || {};
+      const hasDraft = (name) => Object.prototype.hasOwnProperty.call(activeDraft, name);
       const aliases = (v.aliases || []).join(", ") || mode;
       const assetDisplay = v.requires_asset ? "Asset path" : "Asset path";
-      const paramsText = visualizerParamsText(mode, status);
+      const baseModel = (status && status.model_id) || v.default_model || "";
+      const basePort = String((status && status.port) || v.default_port || "");
+      const baseAsset = (status && status.asset_path) || "";
+      const baseUrl = (status && status.external && status.url) ? status.url : "";
+      const baseParams = visualizerParamsText(mode, status);
+      const modelValue = hasDraft("model") ? activeDraft.model : baseModel;
+      const portValue = hasDraft("port") ? activeDraft.port : basePort;
+      const assetValue = hasDraft("asset") ? activeDraft.asset : baseAsset;
+      const urlValue = hasDraft("url") ? activeDraft.url : baseUrl;
+      const paramsText = hasDraft("params") ? activeDraft.params : baseParams;
       const urlField = v.accepts_external_url
-        ? `<label class="wide visualizerField">External URL<input data-visualizer-field="url" placeholder="${escapeHtml(visualizerPlaceholder(mode, "url"))}" /></label>`
+        ? `<label class="wide visualizerField">External URL<input data-visualizer-field="url" data-initial-value="${escapeHtml(baseUrl)}" value="${escapeHtml(urlValue)}" placeholder="${escapeHtml(visualizerPlaceholder(mode, "url"))}" /></label>`
         : `<label class="wide visualizerField visualizerFieldReserved" aria-hidden="true"><span>External URL</span><input disabled tabindex="-1" aria-hidden="true" placeholder="${escapeHtml(visualizerPlaceholder(mode, "url"))}" /></label>`;
       return `<div class="itemCard visualizerCard" data-visualizer-mode="${escapeHtml(mode)}" data-default-port="${escapeHtml(v.default_port || "")}">
         <div class="visualizerHead">
@@ -2347,11 +2640,11 @@
         </div>
         <p class="visualizerAliases">Aliases: ${escapeHtml(aliases)}</p>
         <div class="visualizerControls">
-          <label>Model<input data-visualizer-field="model" value="${escapeHtml(v.default_model || "")}" /></label>
-          <label>Port<input data-visualizer-field="port" type="number" min="1" max="65535" value="${escapeHtml(v.default_port || "")}" /></label>
-          <label class="wide">${escapeHtml(assetDisplay)}<input data-visualizer-field="asset" placeholder="${escapeHtml(visualizerPlaceholder(mode, "asset"))}" /></label>
+          <label>Model<input data-visualizer-field="model" data-initial-value="${escapeHtml(baseModel)}" value="${escapeHtml(modelValue)}" /></label>
+          <label>Port<input data-visualizer-field="port" data-initial-value="${escapeHtml(basePort)}" type="number" min="1" max="65535" value="${escapeHtml(portValue)}" /></label>
+          <label class="wide">${escapeHtml(assetDisplay)}<input data-visualizer-field="asset" data-initial-value="${escapeHtml(baseAsset)}" value="${escapeHtml(assetValue)}" placeholder="${escapeHtml(visualizerPlaceholder(mode, "asset"))}" /></label>
           ${urlField}
-          <label class="wide visualizerField">Params JSON<textarea data-visualizer-field="params" spellcheck="false">${escapeHtml(paramsText)}</textarea></label>
+          <label class="wide visualizerField">Params JSON<textarea data-visualizer-field="params" data-initial-value="${escapeHtml(baseParams)}" spellcheck="false">${escapeHtml(paramsText)}</textarea></label>
         </div>
         <div class="visualizerFooter">
           <div class="visualizerActions">
@@ -2370,6 +2663,7 @@
         status.url || "",
         status.asset_path || "",
         status.model_id || "",
+        status.started_at ?? "",
         JSON.stringify(status.params || {}),
         status.returncode ?? "",
         status.log_path || ""
@@ -2425,7 +2719,7 @@
         model_id: field("model"),
         asset_path: field("asset"),
         simulator_url: field("url"),
-        host: "127.0.0.1",
+        host: visualizerHostForLaunch(mode),
         port: portText && portText !== defaultPort ? Number(portText) : null,
         reuse: true,
         params
@@ -2441,7 +2735,8 @@
         });
         const row = state.visualizers.find(item => item.mode === mode);
         if (row) row.status = status;
-        renderVisualizers(false);
+        delete state.visualizerDrafts[mode];
+        renderVisualizers(false, { preferredMode: mode, resetDraftModes: [mode] });
         refreshVisualizersRealtime({force: true});
       } catch (error) {
         updateVisualizerStatus(mode, `Launch failed: ${escapeHtml(error.message || error)}`);
@@ -2464,17 +2759,30 @@
       syncVisualizerPreview(mode);
       window.open(viewerUrlForBrowser(url), "_blank", "noopener,noreferrer");
     }
-    async function renderVisualizers(refresh = false) {
+    async function renderVisualizers(refresh = false, options = {}) {
+      const opts = typeof options === "string" ? { preferredMode: options } : (options || {});
+      const resetModes = new Set(opts.resetDraftModes || []);
+      captureVisualizerDrafts(resetModes);
+      resetModes.forEach(mode => delete state.visualizerDrafts[mode]);
       state.visualizers = refresh || !state.visualizers.length ? await api("/api/visualizers") : state.visualizers;
       state.visualizerLastSync = Date.now();
       setVisualizerLiveState(`Live sync ${new Date(state.visualizerLastSync).toLocaleTimeString()}`);
-      $("visualizerGrid").innerHTML = state.visualizers.map(v => {
-        return visualizerCard(v);
-      }).join("");
-      $("visualizerGrid").querySelectorAll("[data-launch-visualizer]").forEach(btn => btn.onclick = () => launchVisualizer(btn.dataset.launchVisualizer));
-      $("visualizerGrid").querySelectorAll("[data-open-visualizer]").forEach(btn => btn.onclick = () => openVisualizer(btn.dataset.openVisualizer));
-      $("visualizerGrid").querySelectorAll("[data-stop-visualizer]").forEach(btn => btn.onclick = () => stopVisualizer(btn.dataset.stopVisualizer));
-      syncVisualizerPreview(state.visualizerPreviewMode);
+      const grid = $("visualizerGrid");
+      grid.innerHTML = state.visualizers.map(v => visualizerCard(v)).join("");
+      grid.querySelectorAll("[data-visualizer-mode]").forEach(card => {
+        const mode = card.dataset.visualizerMode || "";
+        card.querySelectorAll("[data-visualizer-field]").forEach(el => {
+          el.oninput = () => {
+            const name = el.dataset.visualizerField;
+            if (!mode || !name) return;
+            state.visualizerDrafts[mode] = { ...(state.visualizerDrafts[mode] || {}), [name]: el.value };
+          };
+        });
+      });
+      grid.querySelectorAll("[data-launch-visualizer]").forEach(btn => btn.onclick = () => launchVisualizer(btn.dataset.launchVisualizer));
+      grid.querySelectorAll("[data-open-visualizer]").forEach(btn => btn.onclick = () => openVisualizer(btn.dataset.openVisualizer));
+      grid.querySelectorAll("[data-stop-visualizer]").forEach(btn => btn.onclick = () => stopVisualizer(btn.dataset.stopVisualizer));
+      syncVisualizerPreview(opts.preferredMode || state.visualizerPreviewMode);
     }
     async function refreshVisualizersRealtime(options = {}) {
       if (state.view !== "visualizers" && !options.force) return;
@@ -2531,7 +2839,12 @@
       return "";
     }
     async function initializeWorkspace() {
-      const required = await Promise.allSettled([loadSettings(), loadModels(), refreshJobs()]);
+      const settingsPromise = loadSettings();
+      const required = await Promise.allSettled([
+        settingsPromise,
+        settingsPromise.then(() => loadModels()),
+        refreshJobs()
+      ]);
       const failed = required.find(result => result.status === "rejected");
       if (failed) {
         throw failed.reason || new Error("Workspace failed to initialize.");
@@ -2639,26 +2952,27 @@
       state.activeJob = job.id;
       state.detailRenderKey = "";
       state.detailLogCount = 0;
+      state.detailLogTotal = 0;
       state.detailTab = "logs";
       $("createDialog").close();
       setView(jobType);
       await refreshJobs();
     }
     document.querySelectorAll(".navBtn").forEach(btn => btn.onclick = () => { setView(btn.dataset.view); if (btn.dataset.view === "gallery") renderGallery(); if (btn.dataset.view === "artifacts") renderArtifacts(); if (btn.dataset.view === "visualizers") renderVisualizers(true); });
-    $("openCreate").onclick = () => { updateCreateMode(); $("createDialog").showModal(); };
+    $("openCreate").onclick = () => { resetCreateJsonFields(); updateCreateMode(); $("createDialog").showModal(); };
     $("createJob").onclick = (event) => { event.preventDefault(); createJob().catch(err => alert(err.message)); };
     $("refreshJobs").onclick = () => refreshJobs();
     $("refreshVisualizers").onclick = () => refreshVisualizersRealtime({force: true});
     $("jobType").onchange = updateCreateMode;
     $("jobTypeFilter").onchange = renderJobs;
     $("statusFilter").onchange = renderJobs;
-    $("workloadType").onchange = populateModelSelect;
+    $("workloadType").onchange = () => { resetCreateJsonFields(); populateModelSelect(); };
     $("evalPreset").onchange = applyEvaluationPreset;
     $("evalMode").onchange = syncEvaluationMode;
     $("evalBenchmark").onchange = () => { syncEvaluationBenchmarkDefaults(); syncEvaluationMode(); };
-    $("modelSelect").onchange = () => { populateInferSpecControls(); applySelectedModelDefaults(); };
-    $("variantSelect").onchange = () => { renderInferDynamicFields(); renderInferSpecSummary(); applySelectedModelDefaults(); };
-    $("taskProfile").onchange = () => { renderInferDynamicFields(); renderInferSpecSummary(); updateCreateMode(); applyInferTaskDefaults(); };
+    $("modelSelect").onchange = () => { resetCreateJsonFields(); populateInferSpecControls(); applySelectedModelDefaults(); };
+    $("variantSelect").onchange = () => { resetCreateJsonFields(); renderInferDynamicFields(); renderInferSpecSummary(); applySelectedModelDefaults(); };
+    $("taskProfile").onchange = () => { resetCreateJsonFields(); renderInferDynamicFields(); renderInferSpecSummary(); updateCreateMode(); applyInferTaskDefaults(); };
     $("backend").onchange = updateCreateMode;
     $("catalogSearch").oninput = renderCatalog;
     $("catalogWorkload").onchange = renderCatalog;
