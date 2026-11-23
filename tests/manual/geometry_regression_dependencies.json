@@ -60,6 +60,7 @@
     "requirements*.txt",
     "scripts/inference/prepare_model_infer.sh",
     "scripts/setup/**",
+    "scripts/workspace/run_workspace.sh",
     "tests/manual/geometry_regression_dependencies.json",
     "tests/manual/geometry_regression.py",
     "tests/manual/geometry_regression_impact.py",
