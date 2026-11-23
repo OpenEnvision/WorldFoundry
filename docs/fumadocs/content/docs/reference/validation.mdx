@@ -572,6 +572,8 @@ source tree, matrix, dependency declarations and pinned reference index, that
 all affected cases executed, and that every numerical field is exact.
 It requires a `--base` commit-diff plan and recomputes the changed paths;
 manually listed or omitted paths cannot bypass the affected-case gate.
+The matrix and dependency definitions must match the committed files. The
+tracked Python sources used by the import graph must also match that commit.
 Preflight, stale commits, omitted cases, relaxed tolerances and failed runs
 cannot pass. Public CPU and tensor gates must pass separately.
 
