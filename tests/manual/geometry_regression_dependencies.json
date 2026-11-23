@@ -330,6 +330,7 @@
       "worldfoundry/synthesis/visual_generation/wonderworld/**",
       "worldfoundry/operators/wonderworld_operator.py",
       "worldfoundry/base_models/perception_core/segment/scene_segmentation.py",
+      "worldfoundry/base_models/perception_core/segment/sam_v1/modeling/transformer.py",
       "worldfoundry/base_models/diffusion_model/**"
     ],
     "helixworld": [
