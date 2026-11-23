@@ -99,12 +99,72 @@ def no_gpu(monkeypatch, *, failure=None):
     monkeypatch.setattr(
         suite.replay,
         "audit_matrix",
-        lambda matrix, *args: {
+        lambda matrix, *args, **kwargs: {
             "status": "passed",
             "cases": {name: {"status": "passed"} for name in json.loads(matrix.read_text())},
         },
     )
     return events, lease
+
+
+@pytest.mark.parametrize("layout", ["relocated", "ambiguous", "unindexed"])
+def test_replay_resolves_archived_exports_from_verified_inventory(
+    replay_host: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, layout: str
+) -> None:
+    reference = Path(replay_host["reference"])
+    accepted = reference / "a"
+    relative_export = Path("exports/depth.npy")
+    (accepted / relative_export).parent.mkdir()
+    np.save(accepted / relative_export, np.array([4.0, 5.0]))
+    manifest_path = accepted / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["exported_files"] = [str(tmp_path / "old-host" / relative_export)]
+    suite.write_json(manifest_path, manifest)
+    if layout == "ambiguous":
+        shutil.copyfile(accepted / relative_export, accepted / relative_export.name)
+    index_path = reference / "accepted-index.json"
+    index = json.loads(index_path.read_text())
+    files = index["cases"]["a"]["files"]
+    files["manifest.json"] = suite.replay.sha256(manifest_path)
+    if layout != "unindexed":
+        files[relative_export.as_posix()] = suite.replay.sha256(accepted / relative_export)
+    if layout == "ambiguous":
+        files[relative_export.name] = suite.replay.sha256(accepted / relative_export.name)
+    suite.write_json(index_path, index)
+    replay_host["reference_index_sha256"] = suite.replay.sha256(index_path)
+    original_manifest, original_index = manifest_path.read_bytes(), index_path.read_bytes()
+
+    def acquire(*args: object) -> SimpleNamespace:
+        assert layout == "relocated", "Invalid archived exports reached GPU acquisition"
+        return SimpleNamespace(release=lambda: None)
+
+    def run(command: list[str], env: dict, cwd: Path, log: Path, timeout: float, **options: object) -> int:
+        candidate = Path(command[command.index("--output-dir") + 1])
+        shutil.copytree(accepted, candidate)
+        source = "worldfoundry/a.py"
+        suite.write_json(
+            candidate / "manifest.json",
+            {
+                **manifest,
+                "exported_files": [str(candidate / relative_export)],
+                "source_hashes": {source: suite.replay.sha256(cwd / source)},
+            },
+        )
+        return 0
+
+    monkeypatch.setattr(suite, "acquire_gpu", acquire)
+    monkeypatch.setattr(suite, "probe_cuda", lambda *args, **kwargs: None)
+    monkeypatch.setattr(suite, "run_child", run)
+    report = suite.run_suite(replay_host, case_ids=["a"])
+    if layout == "relocated":
+        assert report["status"] == "passed", report
+        assert report["cases"]["a"]["outputs"]["export.exports/depth.npy"]["exact"]
+    else:
+        assert report["status"] == "failed"
+        expected = "one root" if layout == "ambiguous" else "file inventory changed"
+        assert expected in report["error"]
+    assert manifest_path.read_bytes() == original_manifest
+    assert index_path.read_bytes() == original_index
 
 
 def test_snapshot_is_committed_and_helpers_ignore_import_cache(replay_host, tmp_path):

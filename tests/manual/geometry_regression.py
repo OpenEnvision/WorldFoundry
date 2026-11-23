@@ -569,7 +569,35 @@ def run_case(case_file: Path, source_root: Path, output_dir: Path, case_id: str 
     return manifest
 
 
-def compare_runs(reference: Path, candidate: Path, *, atol: float = 0, rtol: float = 0) -> dict:
+def accepted_export_paths(root: Path, exports: list[str], verified_files: set[str]) -> list[str]:
+    """Locate immutable exports in an already verified reference inventory."""
+    if not exports:
+        return []
+    paths = [Path(path) for path in exports]
+    possible_roots: set[Path] | None = None
+    for path in paths:
+        if not path.is_absolute() or ".." in path.parts:
+            raise ValueError(f"Invalid accepted export path: {path}")
+        ancestors = (root,) if path.is_relative_to(root) else path.parents
+        matching = {parent for parent in ancestors if path.relative_to(parent).as_posix() in verified_files}
+        possible_roots = matching if possible_roots is None else possible_roots & matching
+    if not possible_roots or len(possible_roots) != 1:
+        raise ValueError("Accepted exports do not identify one root in the verified reference inventory")
+    original_root = next(iter(possible_roots))
+    resolved = [str(root / path.relative_to(original_root)) for path in paths]
+    if len(set(resolved)) != len(resolved):
+        raise ValueError("Accepted export paths contain duplicates")
+    return resolved
+
+
+def compare_runs(
+    reference: Path,
+    candidate: Path,
+    *,
+    atol: float = 0,
+    rtol: float = 0,
+    verified_reference_exports: list[str] | None = None,
+) -> dict:
     reference, candidate = reference.resolve(), candidate.resolve()
     if not np.isfinite([atol, rtol]).all() or atol < 0 or rtol < 0:
         raise ValueError("Tolerances must be finite and nonnegative")
@@ -583,7 +611,7 @@ def compare_runs(reference: Path, candidate: Path, *, atol: float = 0, rtol: flo
     for key in ("case", "assets", "runtime"):
         if meta_a[key] != meta_b[key]:
             raise ValueError(f"Replay conditions differ: {key}")
-    exports_a = meta_a.get("exported_files", [])
+    exports_a = meta_a.get("exported_files", []) if verified_reference_exports is None else verified_reference_exports
     exports_b = meta_b.get("exported_files", [])
     if sorted(Path(p).relative_to(reference).as_posix() for p in exports_a) != sorted(
         Path(p).relative_to(candidate).as_posix() for p in exports_b
@@ -638,7 +666,15 @@ def compare_runs(reference: Path, candidate: Path, *, atol: float = 0, rtol: flo
     return report
 
 
-def audit_matrix(matrix: Path, reference: Path, candidate: Path, source_root: Path, case_ids: list[str]) -> dict:
+def audit_matrix(
+    matrix: Path,
+    reference: Path,
+    candidate: Path,
+    source_root: Path,
+    case_ids: list[str],
+    *,
+    verified_reference_exports: dict[str, list[str]] | None = None,
+) -> dict:
     cases = json.loads(matrix.read_text())
     selected = case_ids or list(cases)
     report = {"status": "passed", "cases": {}}
@@ -660,7 +696,8 @@ def audit_matrix(matrix: Path, reference: Path, candidate: Path, source_root: Pa
                     hashes[path] = sha256(source_root / path)
                 if hashes[path] != expected:
                     raise ValueError(f"Inference evidence is stale: {path}")
-            result = compare_runs(reference / name, candidate / name)
+            exports = verified_reference_exports[name] if verified_reference_exports is not None else None
+            result = compare_runs(reference / name, candidate / name, verified_reference_exports=exports)
         except (ValueError, OSError, KeyError, ImportError) as exc:
             result = {"status": "failed", "error": str(exc)}
         report["cases"][name] = result

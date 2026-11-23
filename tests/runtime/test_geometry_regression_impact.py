@@ -189,6 +189,10 @@ DECLARED_REPLAY_OWNERS = {
         ("worldfoundry/pipelines/uniworld_view/upstream_entry.py",),
         {"uniworld-view-single-view-short"},
     ),
+    "wonderworld-repvit": (
+        ("worldfoundry/base_models/perception_core/segment/sam_v1/modeling/transformer.py",),
+        {"wonderworld-scene-short"},
+    ),
     "spatia-mapanything": (
         (
             "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/models/mapanything/model.py",
