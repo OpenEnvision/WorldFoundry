@@ -31,24 +31,26 @@ from diffusers.models.modeling_utils import ModelMixin
 from diffusers.models.normalization import FP32LayerNorm
 from diffusers.utils import logging
 
+from worldfoundry.base_models.diffusion_model.models.networks.helios.components import (
+    HeliosAttention as CanonicalHeliosAttention,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.helios.components import (
+    HeliosOutputNorm as HeliosOutputNorm,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.helios.components import (
+    HeliosTimeTextEmbedding as HeliosTimeTextEmbedding,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.helios.components import (
+    _get_qkv_projections as _get_qkv_projections,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.helios.components import (
+    apply_rotary_emb_transposed as apply_rotary_emb_transposed,
+)
 from worldfoundry.base_models.diffusion_model.models.networks.helios.history import (
     pool_history_visible_mask as pool_history_visible_mask,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.helios.history import (
     resolve_history_keep_mask as resolve_history_keep_mask,
-)
-from worldfoundry.base_models.diffusion_model.models.networks.helios.model import (
-    HeliosAttention as CanonicalHeliosAttention,
-)
-from worldfoundry.base_models.diffusion_model.models.networks.helios.model import HeliosOutputNorm as HeliosOutputNorm
-from worldfoundry.base_models.diffusion_model.models.networks.helios.model import (
-    HeliosTimeTextEmbedding as HeliosTimeTextEmbedding,
-)
-from worldfoundry.base_models.diffusion_model.models.networks.helios.model import (
-    _get_qkv_projections as _get_qkv_projections,
-)
-from worldfoundry.base_models.diffusion_model.models.networks.helios.model import (
-    apply_rotary_emb_transposed as apply_rotary_emb_transposed,
 )
 from worldfoundry.core.nn.blocks.volume import center_down_sample_3d as center_down_sample_3d
 from worldfoundry.core.nn.blocks.volume import pad_for_3d_conv as pad_for_3d_conv

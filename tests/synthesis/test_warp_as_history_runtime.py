@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,17 @@ import pytest
 from worldfoundry.synthesis.visual_generation.warp_as_history.worldfoundry_runtime import WarpAsHistoryRuntime
 
 pytestmark = pytest.mark.unit
+
+
+def test_warp_as_history_imports_without_native_helios_transformer() -> None:
+    code = """
+import sys
+
+sys.modules['worldfoundry.base_models.diffusion_model.models.networks.helios.model'] = None
+from worldfoundry.synthesis.visual_generation.warp_as_history.warp_as_history_runtime.warp_as_history import infer
+assert callable(infer.infer_plan_kwargs)
+"""
+    subprocess.run([sys.executable, "-c", code], check=True, capture_output=True, text=True)
 
 
 @pytest.mark.parametrize("tokenizers_parallelism", [None, "true"])
