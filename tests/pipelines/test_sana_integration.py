@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -40,13 +41,14 @@ class _NativePipeline:
     def __call__(self, request: Any) -> SimpleNamespace:
         self.requests.append(request)
         if self.sample is None:
-            pytest.fail("invalid inputs must fail before native generation")
+            raise AssertionError("invalid inputs must fail before native generation")
         return SimpleNamespace(sample=self.sample, latents=None, artifacts={}, metadata={"backend": "native"})
 
 
 @pytest.mark.parametrize("model_id", sorted(SANA_VARIANTS))
 def test_catalog_binding_resolves_current_sana_pipeline(model_id: str) -> None:
     entry = load_model_zoo_registry().get(model_id)
+    assert entry.pipeline_target is not None
     module_name, class_name = entry.pipeline_target.split(":", 1)
     pipeline_type = getattr(importlib.import_module(module_name), class_name)
 
@@ -143,3 +145,42 @@ def test_prompt_only_pipeline_rejects_image_before_generation() -> None:
     pipeline = Sana1600M1024pxBf16Pipeline(native_pipeline=native, device="cpu")
     with pytest.raises(ValueError, match="does not accept image inputs"):
         pipeline(prompt="a cube", images=object())
+
+
+def test_sana_dc_ae_keeps_codec_resident_with_block_offload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import torch
+    from safetensors.torch import save_file
+
+    from worldfoundry.base_models.diffusion_model.components import ComponentBuildContext, ComponentKey, ComponentKind
+    from worldfoundry.base_models.diffusion_model.loaders import CheckpointSpec
+    from worldfoundry.base_models.diffusion_model.models.autoencoders.sana import component
+    from worldfoundry.base_models.diffusion_model.models.autoencoders.sana.dc_ae.efficientvit.dc_ae import (
+        DCAEConfig,
+        DecoderConfig,
+        EncoderConfig,
+    )
+    from worldfoundry.base_models.diffusion_model.optimizations import OffloadMode, OffloadPolicy, RuntimePolicy
+
+    config = DCAEConfig(
+        encoder=EncoderConfig(in_channels=3, latent_channels=32, width_list=(32,), depth_list=(1,)),
+        decoder=DecoderConfig(in_channels=3, latent_channels=32, width_list=(32,), depth_list=(1,)),
+    )
+    monkeypatch.setattr(component, "dc_ae_f32c32", lambda *_: config)
+    checkpoint = tmp_path / "model.safetensors"
+    original = component.DCAE(config)
+    save_file(original.state_dict(), checkpoint)
+    policy = RuntimePolicy(device="cpu", offload=OffloadPolicy(mode=OffloadMode.BLOCK))
+    codec = component.build_sana_dc_autoencoder(
+        ComponentBuildContext(
+            model_id="sana",
+            key=ComponentKey(ComponentKind.LATENT_ENCODER, "codec"),
+            policy=policy,
+            checkpoints={"weights": CheckpointSpec(source=str(checkpoint))},
+        )
+    )
+
+    for name, parameter in codec.model.named_parameters():
+        torch.testing.assert_close(parameter, original.state_dict()[name], rtol=0, atol=0)
+    report = vars(codec.model)["_worldfoundry_applied_optimizations"]
+    assert report.requested["offload"] == "block"
+    assert report.effective["offload"] == "resident"

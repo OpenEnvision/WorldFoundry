@@ -9,11 +9,14 @@ decode.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import torch
 
 from ....components import ComponentBuildContext
 from ....contracts import DiffusionRequest
 from ....loaders import ModuleLoadSpec, NativeModuleLoader
+from ....optimizations import OffloadMode, OffloadPolicy
 from .dc_ae import DCAE, dc_ae_f32c32
 
 
@@ -110,14 +113,25 @@ class SanaDCAutoencoder:
 def build_sana_dc_autoencoder(context: ComponentBuildContext) -> SanaDCAutoencoder:
     """Load the original DC-AE graph through the shared module loader."""
 
+    policy = context.policy
+    block_offload = policy.offload.mode is OffloadMode.BLOCK
+    if block_offload:
+        policy = replace(policy, offload=OffloadPolicy())
     config = dc_ae_f32c32("dc-ae-f32c32-sana-1.1", None)
     model = NativeModuleLoader().load(
         ModuleLoadSpec(module_class=DCAE, config={"cfg": config}),
         context.require_checkpoint("weights"),
-        context.policy,
+        policy,
     )
     if not isinstance(model, DCAE):
         raise TypeError(f"expected DCAE, got {type(model).__name__}")
+    if block_offload:
+        applied = vars(model)["_worldfoundry_applied_optimizations"]
+        applied.record_offload(
+            requested_mode=OffloadMode.BLOCK.value,
+            effective="resident",
+            reason="Sana DC-AE has separate encoder and decoder stages",
+        )
     return SanaDCAutoencoder(
         model,
         scaling_factor=config.scaling_factor or 0.41407,
