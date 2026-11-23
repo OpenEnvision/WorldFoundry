@@ -640,10 +640,21 @@ def run_suite(
             recipes = {}
             index = reference_index(profile)
             verified_exports = {}
+            asset_preflight_failures = {}
             for name in selected:
-                verified_exports[name] = verify_reference(Path(profile["reference"]) / name, name, index)
-                recipes[name] = materialize_case(
-                    cases[name], Path(profile["reference"]) / name, child_environment(configurations[name])
+                try:
+                    if name not in index["cases"]:
+                        raise ValueError(f"Missing accepted reference for {name}")
+                    reference = Path(profile["reference"]) / name
+                    verified_exports[name] = verify_reference(reference, name, index)
+                    recipes[name] = materialize_case(cases[name], reference, child_environment(configurations[name]))
+                except (KeyError, OSError, ValueError) as exc:
+                    asset_preflight_failures[name] = f"{type(exc).__name__}: {exc}"
+            if asset_preflight_failures:
+                report["asset_preflight_failures"] = asset_preflight_failures
+                first = next(iter(asset_preflight_failures.values()))
+                raise ValueError(
+                    f"Reference or asset checks failed for {len(asset_preflight_failures)} of {len(selected)} cases. {first}"
                 )
             write_json(root / "recipes.json", recipes)
             helpers = process_helpers(source)

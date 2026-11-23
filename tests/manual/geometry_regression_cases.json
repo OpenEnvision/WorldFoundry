@@ -8384,9 +8384,20 @@
       "return_dict": true
     },
     "assets": {
+      "base/text_encoder/config.json": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/stable-diffusion-v1-5/text_encoder/config.json",
+      "base/text_encoder/model.safetensors": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/stable-diffusion-v1-5/text_encoder/model.safetensors",
+      "base/tokenizer/merges.txt": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/stable-diffusion-v1-5/tokenizer/merges.txt",
+      "base/tokenizer/special_tokens_map.json": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/stable-diffusion-v1-5/tokenizer/special_tokens_map.json",
+      "base/tokenizer/tokenizer_config.json": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/stable-diffusion-v1-5/tokenizer/tokenizer_config.json",
+      "base/tokenizer/vocab.json": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/stable-diffusion-v1-5/tokenizer/vocab.json",
+      "base/unet/config.json": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/stable-diffusion-v1-5/unet/config.json",
+      "base/unet/diffusion_pytorch_model.safetensors": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/stable-diffusion-v1-5/unet/diffusion_pytorch_model.safetensors",
+      "base/vae/config.json": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/stable-diffusion-v1-5/vae/config.json",
+      "base/vae/diffusion_pytorch_model.safetensors": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/stable-diffusion-v1-5/vae/diffusion_pytorch_model.safetensors",
+      "dreambooth": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/guoyww--animatediff_t2i_backups/realisticVisionV60B1_v51VAE.safetensors",
       "motion_module": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/guoyww--animatediff/v3_sd15_mm.ckpt",
-      "base": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/stable-diffusion-v1-5",
-      "dreambooth": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/guoyww--animatediff_t2i_backups/realisticVisionV60B1_v51VAE.safetensors"
+      "clip/config.json": "${WORLDFOUNDRY_CKPT_DIR}/openai--clip-vit-large-patch14/config.json",
+      "clip/model.safetensors": "${WORLDFOUNDRY_CKPT_DIR}/openai--clip-vit-large-patch14/model.safetensors"
     },
     "required_outputs": [
       "artifact.video.mp4.frames",
@@ -8398,7 +8409,23 @@
     "scope": "Public v3 AnimateDiff motion module with the pinned SD1.5 and RealisticVision base, source 16-frame request; decoded RGB/FPS.",
     "output_arrays": [
       "video.mp4"
-    ]
+    ],
+    "asset_sha256": {
+      "base/text_encoder/config.json": "845df614cb9327ae7bbea027316246fae917827407da6df13572e41b5f93b4cc",
+      "base/text_encoder/model.safetensors": "d008943c017f0092921106440254dbbe00b6a285f7883ec8ba160c3faad88334",
+      "base/tokenizer/merges.txt": "9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a",
+      "base/tokenizer/special_tokens_map.json": "c4864a9376a8401918425bed71fc14fc0e81f9b59ec45c1cf96cccb2df508eac",
+      "base/tokenizer/tokenizer_config.json": "00439066fcba73de57644cf41e4e3b9f2dbb09d7f3fc2005898ba52399045882",
+      "base/tokenizer/vocab.json": "e089ad92ba36837a0d31433e555c8f45fe601ab5c221d4f607ded32d9f7a4349",
+      "base/unet/config.json": "78f474de6bab3d893868f37be97b636ae65c0df3073ed3256ca458ff599b5f96",
+      "base/unet/diffusion_pytorch_model.safetensors": "19da7aaa4b880e59d56843f1fcb4dd9b599c28a1d9d9af7c1143057c8ffae9f1",
+      "base/vae/config.json": "786a7d21647ddea6a04b9675c03d3cb45e90a2f3c6da5fbda2c54ade040036de",
+      "base/vae/diffusion_pytorch_model.safetensors": "a2b5134f4dbc140d9c11f11cba3233099e00af40f262f136c691fb7d38d2194c",
+      "dreambooth": "15012c538f503ce2ebfc2c8547b268c75ccdaff7a281db55399940ff1d70e21d",
+      "motion_module": "2412711886f61091846f53204aabc38aa6e09356d62a9808abe4daa802168343",
+      "clip/config.json": "8a09b467700c58138c29d53c605b34ebc69beaadd13274a8a2af8ad2c2f4032a",
+      "clip/model.safetensors": "a2bf730a0c7debf160f7a6b50b3aaf3703e7e88ac73de7a314903141db026dcb"
+    }
   },
   "cameractrl-realestate-short": {
     "id": "cameractrl-realestate-short",

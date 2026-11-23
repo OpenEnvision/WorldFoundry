@@ -21,7 +21,7 @@ import sys
 import time
 import traceback
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -74,28 +74,61 @@ def verify_asset_inventory(actual: dict, expected: dict) -> None:
         raise ValueError(f"Replay asset inventory differs from accepted reference (missing={missing}, extra={extra})")
 
 
-def hash_assets(assets: dict, expected: dict[str, str] | None = None) -> dict[str, str]:
+def asset_identity(path: Path) -> tuple[int, int, int, int, int]:
+    stat = path.stat()
+    return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
+
+
+class PinnedAsset(NamedTuple):
+    path: Path
+    identity: tuple[int, int, int, int, int]
+    digest: str
+
+    def checked_digest(self, path: Path) -> str:
+        if path != self.path or asset_identity(path) != self.identity:
+            raise ValueError(f"Pinned asset changed during replay validation: {path}")
+        return self.digest
+
+
+def hash_assets(
+    assets: dict, expected: dict[str, str] | None = None, *, pinned: dict[str, PinnedAsset] | None = None
+) -> dict[str, str]:
     files = asset_files(assets)
     if expected is not None:
         verify_asset_inventory(files, expected)
+    pinned = pinned or {}
+    if not pinned.keys() <= files.keys():
+        raise ValueError("Pinned asset files changed during replay validation")
+    pins_by_path = {pin.path: pin for pin in pinned.values()}
     hashes = {}
     for name, path in files.items():
-        actual = sha256(path)
+        resolved = path.resolve() if pinned else path
+        pin = pinned.get(name) or pins_by_path.get(resolved)
+        actual = pin.checked_digest(resolved) if pin is not None else sha256(path)
         if expected is not None and actual != expected[name]:
             raise ValueError(f"Replay asset SHA256 differs from accepted reference: {name}")
         hashes[name] = actual
     return hashes
 
 
-def verify_asset_pins(case: dict) -> None:
+def verify_asset_pins(case: dict) -> dict[str, PinnedAsset]:
     """Check operator-pinned input files before checkpoint hashing or model loading."""
+    pinned = {}
+    pins_by_path = {}
     for name, expected in case.get("asset_sha256", {}).items():
         if name not in case["assets"]:
             raise ValueError(f"SHA256 pin needs a declared asset: {name}")
         if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
             raise ValueError(f"Asset needs a SHA256 pin: {name}")
-        if sha256(Path(case["assets"][name]).expanduser()) != expected:
+        path = Path(case["assets"][name]).expanduser().resolve()
+        pin = pins_by_path.get(path)
+        if pin is None:
+            pin = PinnedAsset(path, asset_identity(path), sha256(path))
+            pins_by_path[path] = pin
+        if pin.checked_digest(path) != expected:
             raise ValueError(f"Asset SHA256 differs: {name}")
+        pinned[name] = pin
+    return pinned
 
 
 def relocate_observation_paths(value: Any, original: Path, local: Path, declared: set[Path]) -> Any:
@@ -499,13 +532,13 @@ def run_case(
         if requires_gpu and not torch.cuda.is_available():
             raise RuntimeError("This replay case requires CUDA")
         resolved = expand(case, output_dir)
-        verify_asset_pins(resolved)
+        pinned = verify_asset_pins(resolved)
         if resolved.get("input_json"):
             if "sequence" in resolved:
                 raise ValueError("JSON inputs require a single explicit call")
             resolved["call"] = materialize_input_json(resolved, output_dir)
         accepted_assets = None if accepted_manifest is None else json.loads(accepted_manifest.read_text())["assets"]
-        manifest["assets"] = hash_assets(resolved["assets"], accepted_assets)
+        manifest["assets"] = hash_assets(resolved["assets"], accepted_assets, pinned=pinned)
         module_name, class_name = resolved["target"].split(":")
         module = importlib.import_module(module_name)
         if module.__file__ is None or not Path(module.__file__).resolve().is_relative_to(source_root):
