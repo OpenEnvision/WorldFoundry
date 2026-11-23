@@ -293,6 +293,8 @@ wf zoo model-download \
   --json
 ```
 
+如果 checkpoint 声明了 commit SHA，本地检查会使用 Hugging Face 缓存中对应的快照。缓存里的 `main` ref 可以指向其他提交。
+
 备选：
 
 ```bash

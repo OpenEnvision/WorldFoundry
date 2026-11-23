@@ -59,6 +59,7 @@
     "constraints/**",
     "requirements*.txt",
     "scripts/inference/prepare_model_infer.sh",
+    "scripts/model_zoo/download_checkpoints.py",
     "scripts/setup/**",
     "scripts/workspace/run_workspace.sh",
     "tests/manual/geometry_regression_dependencies.json",
