@@ -1,12 +1,12 @@
 {
-  "total": 261,
+  "total": 266,
   "categories": [
     {
       "id": "video",
       "label": "Video",
       "label_zh": "视频",
       "description": "Video, image, and audio-visual generation or editing runtimes.",
-      "count": 64
+      "count": 66
     },
     {
       "id": "multimodal",
@@ -20,14 +20,14 @@
       "label": "World models",
       "label_zh": "世界模型",
       "description": "Interactive worlds, prediction, navigation, and simulator-shaped systems.",
-      "count": 104
+      "count": 106
     },
     {
       "id": "three_d_four_d",
       "label": "3D & 4D",
       "label_zh": "3D 与 4D",
       "description": "Reconstruction, geometry, point clouds, scenes, and dynamic representations.",
-      "count": 29
+      "count": 30
     },
     {
       "id": "vla_va_wam",
@@ -9878,6 +9878,408 @@
         "run": "wf run \\\n  giga-brain-0-3.5b-base \\\n  --pipeline.task-profile interactive-video \\\n  --json"
       },
       "catalogPath": "worldfoundry/data/models/catalog/vla_va_wam/giga-brain-0.yaml"
+    },
+    {
+      "id": "h3-world",
+      "name": "H3-World",
+      "category": "world_models",
+      "categoryLabel": "World models",
+      "categoryLabelZh": "世界模型",
+      "provider": "Tencent / NUS / PolyU",
+      "summary": "Interactive action-conditioned world model built on MiniMax-H3. Translates keyboard states into per-latent English instructions bound to each video latent via directed attention routing and a rank-32 LoRA adapter.",
+      "aliases": [
+        "h3_world",
+        "minimax-h3-world"
+      ],
+      "tasks": [
+        "image-to-world-video",
+        "action-conditioned-video",
+        "interactive-world-model",
+        "audio-video-generation"
+      ],
+      "status": {
+        "group": "verified",
+        "label": "Runner verified",
+        "integration": "integrated",
+        "runner": "verified",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "h3-world",
+        "bindingId": "h3-world",
+        "runnerTarget": "worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.h3_world.pipeline_h3_world:H3WorldPipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "shared_base_model_runtime",
+        "runtimeStatus": "verified_real_checkpoint_gpu",
+        "environmentId": "h3-world",
+        "environmentName": "worldfoundry-unified-cu128",
+        "environmentKind": "unified",
+        "python": "3.11",
+        "cudaProfile": "cu128",
+        "cudaLabel": "CUDA 12.8",
+        "driverStatus": null,
+        "condaPackages": [
+          "python=3.11",
+          "pip",
+          "ffmpeg"
+        ],
+        "pipPackages": [
+          "torch",
+          "torchvision",
+          "torchaudio",
+          "transformers",
+          "accelerate",
+          "safetensors",
+          "numpy",
+          "av",
+          "pillow",
+          "pyyaml"
+        ],
+        "packageVersions": {
+          "torch": "torch",
+          "torchvision": "torchvision",
+          "torchaudio": "torchaudio",
+          "transformers": "transformers",
+          "accelerate": "accelerate"
+        },
+        "validationImports": [
+          "torch",
+          "transformers",
+          "safetensors",
+          "numpy",
+          "av",
+          "PIL",
+          "worldfoundry.pipelines.h3_world"
+        ],
+        "notes": [
+          "H3-World reuses WorldFoundry's canonical MiniMax-H3 transformer, Qwen3-VL encoder, codecs, packed sequence builder, denoise loop, and MP4 writer.",
+          "The rank-32 LoRA checkpoint (step-10000.safetensors) is converted from grouped per-head QKV into WorldFoundry's split QKV layout and merged at load time.",
+          "Per-latent English action clauses are encoded independently, placed at mirrored RoPE offsets, isolated in the token refiner, and routed to their matching video latent via directed attention.",
+          "Verified on H200 with real MiniMax-H3 FL2VA + H3-World step-10000.safetensors weights (832x480, 124 frames, 50 steps, 32 kHz stereo AAC) on forward and pan-right-fast presets.",
+          "H3-World runs in-tree over WorldFoundry's canonical MiniMax-H3 components inside the unified environment.",
+          "MiniMax-H3 FL2VA base weights and the H3-World LoRA checkpoint stay outside Git and are injected via the runtime profile."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "project",
+          "label": "Project",
+          "url": "https://danzer1xxxxchan.github.io/H3-World"
+        },
+        {
+          "kind": "paper",
+          "label": "Paper",
+          "url": "https://arxiv.org/abs/2609.01560"
+        },
+        {
+          "kind": "source",
+          "label": "GitHub",
+          "url": "https://github.com/Danzer1xxxxChan/H3-World",
+          "revision": "f0c7be2acbbde8256b2473f6e7b088f58272acae"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/DANNY621/H3-World",
+          "revision": "cb1a1fe209415bd3c744a74b1058bb8bfd507268"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/MiniMaxAI/MiniMax-H3",
+          "revision": "42ed227ee7df40d41602854ae760620d6eb651fe"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/Danzer1xxxxChan/H3-World#readme",
+          "revision": "f0c7be2acbbde8256b2473f6e7b088f58272acae"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "DANNY621/H3-World",
+          "revision": "cb1a1fe209415bd3c744a74b1058bb8bfd507268",
+          "license": "minimax-h3-community",
+          "role": "h3_world_lora_adapter"
+        },
+        {
+          "id": "MiniMaxAI/MiniMax-H3",
+          "revision": "42ed227ee7df40d41602854ae760620d6eb651fe",
+          "license": "minimax-h3-community",
+          "role": "shared_h3_base"
+        }
+      ],
+      "variants": [],
+      "inferenceTasks": [
+        {
+          "id": "action-video",
+          "label": "Action Video",
+          "description": "Run H3-World through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "default": "A man in a yellow floral shirt stands in a dim, multi-level concrete parking garage.",
+              "choices": [],
+              "description": "Scene prompt used as the input for direct H3-World inference."
+            },
+            {
+              "field": "images",
+              "option": "--pipeline.images",
+              "detail": "Required",
+              "kind": "path",
+              "target": "call",
+              "required": true,
+              "default": null,
+              "choices": [],
+              "description": "First frame passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "action-preset",
+              "option": "--pipeline.action-preset",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": "forward",
+              "choices": [
+                "back",
+                "forward",
+                "pan-left",
+                "pan-left-fast",
+                "pan-right",
+                "pan-right-fast",
+                "still",
+                "strafe-left",
+                "strafe-right",
+                "tilt-down",
+                "tilt-up"
+              ],
+              "description": "Action preset passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "interactions",
+              "option": "--pipeline.interactions",
+              "detail": "Optional",
+              "kind": "json",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Action schedule / keys passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "action-script",
+              "option": "--pipeline.action-script",
+              "detail": "Optional",
+              "kind": "json",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Per-latent action clauses passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "num-frames",
+              "option": "--pipeline.num-frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 124,
+              "choices": [],
+              "description": "Frames (17k+5) passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 480,
+              "choices": [],
+              "description": "Height passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 832,
+              "choices": [],
+              "description": "Width passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "num-inference-steps",
+              "option": "--pipeline.num-inference-steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 50,
+              "choices": [],
+              "description": "Steps passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "cfg-scale",
+              "option": "--pipeline.cfg-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": 1.0,
+              "choices": [],
+              "description": "CFG scale passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 2,
+              "choices": [],
+              "description": "Seed passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "h3-world.mp4"
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "prompt",
+          "detail": "Required"
+        },
+        {
+          "field": "image",
+          "detail": "Required"
+        },
+        {
+          "field": "video",
+          "detail": "Optional"
+        },
+        {
+          "field": "actions",
+          "detail": "action_preset, interactions, action_script, num_frames, height, width, num_inference_steps, cfg_scale, seed"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "generated_video",
+          "filename": ""
+        },
+        {
+          "kind": "generated_video",
+          "filename": "h3-world.mp4"
+        }
+      ],
+      "notes": [
+        "Reuses the canonical MiniMax-H3 DiT, Qwen3-VL encoder, video/audio VAEs, packed sequence builder, denoise loop, and MP4 writer.",
+        "Adapts the rank-32 LoRA onto WorldFoundry's fused QKV layout with per-latent mirrored RoPE offsets, segmented token refiner, and directed attention routing.",
+        "Verified on H200 with real MiniMax-H3 FL2VA and H3-World step-10000.safetensors weights (832x480, 124 frames at 24 fps, 50 steps, 32 kHz stereo AAC) for forward and pan-right-fast presets.",
+        "H3-World reuses WorldFoundry's canonical MiniMax-H3 transformer, Qwen3-VL encoder, codecs, packed sequence builder, denoise loop, and MP4 writer.",
+        "The rank-32 LoRA checkpoint (step-10000.safetensors) is converted from grouped per-head QKV into WorldFoundry's split QKV layout and merged at load time.",
+        "Per-latent English action clauses are encoded independently, placed at mirrored RoPE offsets, isolated in the token refiner, and routed to their matching video latent via directed attention.",
+        "Verified on H200 with real MiniMax-H3 FL2VA + H3-World step-10000.safetensors weights (832x480, 124 frames, 50 steps, 32 kHz stereo AAC) on forward and pan-right-fast presets."
+      ],
+      "docs": {
+        "curated": true,
+        "publisher": {
+          "name": "Tencent / NUS / PolyU",
+          "nameZh": "Tencent / NUS / PolyU",
+          "kind": null
+        },
+        "overview": [
+          "Interactive action-conditioned world model built on MiniMax-H3. Translates keyboard states into per-latent English instructions bound to each video latent via directed attention routing and a rank-32 LoRA adapter."
+        ],
+        "overviewZh": [
+          "基于 MiniMax-H3 的交互式动作条件世界模型，将键盘状态转换为逐 latent 英文指令，并通过定向注意力路由与 rank-32 LoRA 适配器绑定到对应视频 latent。"
+        ],
+        "architecture": [
+          "Reuses WorldFoundry's canonical MiniMax-H3 33B DiT, Qwen3-VL multimodal encoder, video/audio VAEs, and rectified-flow loop. Adds rank-32 attention LoRA loading with grouped-to-split QKV reordering, mirrored per-latent RoPE offsets, segmented token refinement, and directed FlexAttention/SDPA masking."
+        ],
+        "architectureZh": [
+          "复用 WorldFoundry 规范化的 MiniMax-H3 33B DiT、Qwen3-VL 多模态编码器、音视频 VAE 与 rectified-flow 采样循环，并扩展 rank-32 注意力 LoRA（含分组到拆分 QKV 重排）、镜像逐 latent RoPE 偏移、分段 token refiner 与定向 FlexAttention/SDPA 掩码。"
+        ],
+        "usageNotes": [
+          "Stage the MiniMax-H3 FL2VA base weights alongside DANNY621/H3-World (step-10000.safetensors). Supply a starting frame, a scene description, and either action_preset (e.g. forward, pan-right-fast), interactions, or explicit per-latent action_script clauses."
+        ],
+        "usageNotesZh": [
+          "运行前准备 MiniMax-H3 的 FL2VA 基础权重以及 DANNY621/H3-World（step-10000.safetensors）。提供起始帧图像、场景描述以及 action_preset（如 forward、pan-right-fast）、interactions 或显式逐 latent 的 action_script。"
+        ],
+        "highlights": [
+          "Image To World Video",
+          "Action Conditioned Video",
+          "Interactive World Model",
+          "Unified env · Python 3.11 · CUDA 12.8",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "image-to-world-video",
+          "动作条件视频生成",
+          "交互式世界模型",
+          "统一环境 · Python 3.11 · CUDA 12.8",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [
+            "image"
+          ],
+          "outputs": [
+            "world state",
+            "video"
+          ]
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": 80,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [],
+        "limitations": [
+          "Native resolution is 832x480 at 24 fps with 17k+5 frame counts (124, 243, 481) and 32 kHz stereo audio.",
+          "Checkpoints are subject to the MiniMax H3 Community License Agreement."
+        ],
+        "limitationsZh": [
+          "原生分辨率为 832x480、24 fps，帧数需满足 17k+5（124、243、481），并附带 32 kHz 立体声音频。",
+          "模型权重受 MiniMax H3 Community License Agreement 约束。"
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh h3-world",
+        "install": "bash scripts/setup/model_env_install.sh --model h3-world",
+        "inspect": "wf zoo model-show --model-id h3-world --include-manifest --json",
+        "check": "wf zoo model-download --model-id h3-world --check-local --json",
+        "run": "wf run \\\n  h3-world \\\n  --pipeline.task-profile action-video \\\n  --pipeline.images /path/to/input \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/world_models/h3-world.yaml"
     },
     {
       "id": "hunyuanworld-mirror",
@@ -25303,6 +25705,7 @@
           "peft==0.17.1",
           "huggingface-hub==0.36.2",
           "safetensors==0.5.3",
+          "ftfy==6.3.1",
           "imageio[ffmpeg]>=2.34.0",
           "numpy>=1.26.0,<2.0",
           "opencv-python>=4.8.0",
@@ -25320,6 +25723,7 @@
           "torch",
           "diffusers",
           "transformers",
+          "ftfy",
           "imageio",
           "worldfoundry.synthesis.visual_generation.warp_as_history.warp_as_history_runtime.warp_as_history"
         ],
@@ -49289,6 +49693,391 @@
       "catalogPath": "worldfoundry/data/models/catalog/world_models/evoke.yaml"
     },
     {
+      "id": "fastframes",
+      "name": "FastFrames",
+      "category": "world_models",
+      "categoryLabel": "World models",
+      "categoryLabelZh": "世界模型",
+      "provider": "Apple ML Research / Cornell University",
+      "summary": "FastFrames generates 480p video autoregressively at interactive latency by combining a two-step causal Wan2.1 DiT with a lightweight KV refinement network (eliminating the clean-context DiT pass) and a causal ConvNeXt pixel decoder (replac…",
+      "aliases": [
+        "FastFrames",
+        "fastframes-s",
+        "fastframes-l",
+        "ff-s",
+        "ff-l",
+        "fastframes_s",
+        "fastframes_l"
+      ],
+      "tasks": [
+        "text-to-video",
+        "autoregressive-video-generation",
+        "real-time-video-generation"
+      ],
+      "status": {
+        "group": "integrated",
+        "label": "Integrated",
+        "integration": "integrated",
+        "runner": "selected_checkpoint_gpu_validated",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "fastframes",
+        "bindingId": "fastframes",
+        "runnerTarget": "worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.fastframes.pipeline_fastframes:FastFramesPipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "native_diffusion",
+        "runtimeStatus": "selected_checkpoint_gpu_validated",
+        "environmentId": "fastframes",
+        "environmentName": "worldfoundry-unified-cu128",
+        "environmentKind": "unified",
+        "python": "3.11",
+        "cudaProfile": "cu128",
+        "cudaLabel": "CUDA 12.8",
+        "driverStatus": "compatible",
+        "condaPackages": [
+          "python",
+          "pip",
+          "ffmpeg"
+        ],
+        "pipPackages": [
+          "torch>=2.7",
+          "torchvision",
+          "transformers>=4.49.0",
+          "tokenizers>=0.20.3",
+          "safetensors>=0.4",
+          "numpy",
+          "ftfy",
+          "regex",
+          "sentencepiece",
+          "imageio",
+          "imageio-ffmpeg",
+          "av"
+        ],
+        "packageVersions": {
+          "torch": "torch>=2.7",
+          "torchvision": "torchvision",
+          "transformers": "transformers>=4.49.0"
+        },
+        "validationImports": [
+          "torch",
+          "safetensors",
+          "transformers",
+          "ftfy"
+        ],
+        "notes": [
+          "FastFramesPipeline loads FastFrames-S (1.3B) by default; pass variant=\"fastframes-l\" (or \"ff-l\") for FastFrames-L (14B).",
+          "Reuses WorldFoundry's canonical Wan2.1 norms, RoPE, sinusoidal timestep embeddings, UMT5-XXL encoder, and H.264 MP4 export.",
+          "Verified on H200 with real FastFrames-S checkpoints (832x480, 81 frames, 16 fps, context=\"refiner\"); FastFrames-L (14B) real-checkpoint GPU replay remains pending.",
+          "FastFrames runs natively in the unified WorldFoundry CUDA 12.8 environment without requiring flash-attn; attention prefers PyTorch cuDNN SDPA on CUDA BF16 and falls back to standard PyTorch SDPA otherwise.",
+          "FastFrames-S (1.3B) runs on a single GPU; FastFrames-L (14B) uses BF16 weights and bridged pixel decoding."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "project",
+          "label": "Project",
+          "url": "https://apple-aiml-research.github.io/ml-fastframes/"
+        },
+        {
+          "kind": "paper",
+          "label": "Paper",
+          "url": "https://arxiv.org/abs/2611.23226"
+        },
+        {
+          "kind": "source",
+          "label": "GitHub",
+          "url": "https://github.com/apple-aiml-research/ml-fastframes",
+          "revision": "a65c59240e01cf1de86197fa771ca09b38cf592a"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/apple/FastFrames-S",
+          "revision": "aa099efcedf1b65447106bf9004cde75821f7387"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/apple/FastFrames-L",
+          "revision": "d18ec5f054bb03f6b8e561a63d52af3142b5b81d"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/apple-aiml-research/ml-fastframes#readme",
+          "revision": "a65c59240e01cf1de86197fa771ca09b38cf592a"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "apple/FastFrames-S",
+          "revision": "aa099efcedf1b65447106bf9004cde75821f7387",
+          "role": "fastframes_s_kv_refiner"
+        },
+        {
+          "id": "zhuhz22/Causal-Forcing",
+          "role": "fastframes_s_dit"
+        },
+        {
+          "id": "apple/FastFrames-L",
+          "revision": "d18ec5f054bb03f6b8e561a63d52af3142b5b81d",
+          "role": "fastframes_l_dit"
+        },
+        {
+          "id": "Wan-AI/Wan2.1-T2V-1.3B",
+          "role": "wan2_1_t2v_1_3b"
+        },
+        {
+          "id": "Wan-AI/Wan2.1-T2V-14B",
+          "role": "wan2_1_t2v_14b"
+        }
+      ],
+      "variants": [],
+      "inferenceTasks": [
+        {
+          "id": "text-to-video",
+          "label": "Text To Video",
+          "description": "Run FastFrames through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "default": "A corgi surfing a wave at sunset",
+              "choices": [],
+              "description": "Prompt used as the input for direct FastFrames inference."
+            },
+            {
+              "field": "context",
+              "option": "--pipeline.context",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": "refiner",
+              "choices": [
+                "refiner",
+                "dit"
+              ],
+              "description": "'refiner' uses the KV refinement network; 'dit' runs a clean t=0 DiT pass per frame."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 0,
+              "choices": [],
+              "description": "Seed passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "num-frames",
+              "option": "--pipeline.num-frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 81,
+              "choices": [],
+              "description": "Output pixel frames (4k+1; default 81 from 21 latent frames)."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 480,
+              "choices": [],
+              "description": "Height passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 832,
+              "choices": [],
+              "description": "Width passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 16,
+              "choices": [],
+              "description": "FPS passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "noise",
+              "option": "--pipeline.noise",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [
+                "sequential",
+                "pregenerated",
+                "reseeded"
+              ],
+              "description": "Optional override for transition noise sampling order."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "fastframes.mp4"
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "prompt",
+          "detail": "Required"
+        },
+        {
+          "field": "image",
+          "detail": "Optional"
+        },
+        {
+          "field": "video",
+          "detail": "Optional"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "generated_video",
+          "filename": ""
+        },
+        {
+          "kind": "generated_video",
+          "filename": "fastframes.mp4"
+        }
+      ],
+      "notes": [
+        "FastFramesPipeline runs FastFrames-S (1.3B) and FastFrames-L (14B) natively in WorldFoundry, reusing canonical Wan2.1 normalization, RoPE, sinusoidal embeddings, UMT5-XXL prompt encoding, and MP4 export primitives.",
+        "Each latent frame runs a two-step causal Wan2.1 DiT (four steps on frame 0), replaces the clean-context DiT pass with KVRefinementNetwork, and replaces the Wan2.1 VAE decoder with a causal ConvNeXt PixelDecoder (or BridgedPixelDecoder for 14B).",
+        "Select FastFrames-S (default) via variant=\"fastframes-s\" / \"ff-s\" or FastFrames-L via variant=\"fastframes-l\" / \"ff-l\".",
+        "Component-level numerical parity against apple-aiml-research/ml-fastframes (a65c5924) is verified in unit tests for FastFramesCausalWanModel (standard and FastOps), KVRefinementNetwork, PixelDecoder, BridgedPixelDecoder, FastFramesFlowMatchScheduler, and CUDA BF16 cuDNN SDPA rollout equivalence.",
+        "Verified on H200 with real FastFrames-S checkpoints (zhuhz22/Causal-Forcing framewise-2step.pt + apple/FastFrames-S + Wan2.1-T2V-1.3B UMT5-XXL, 832x480, 81 frames at 16 fps, context=\"refiner\"); FastFrames-L (14B) real-checkpoint GPU replay remains pending.",
+        "FastFramesPipeline loads FastFrames-S (1.3B) by default; pass variant=\"fastframes-l\" (or \"ff-l\") for FastFrames-L (14B).",
+        "Reuses WorldFoundry's canonical Wan2.1 norms, RoPE, sinusoidal timestep embeddings, UMT5-XXL encoder, and H.264 MP4 export.",
+        "Verified on H200 with real FastFrames-S checkpoints (832x480, 81 frames, 16 fps, context=\"refiner\"); FastFrames-L (14B) real-checkpoint GPU replay remains pending."
+      ],
+      "docs": {
+        "curated": true,
+        "publisher": {
+          "name": "Apple ML Research / Cornell University",
+          "nameZh": "Apple ML Research / 康奈尔大学",
+          "kind": "company"
+        },
+        "overview": [
+          "FastFrames generates 480p video autoregressively at interactive latency by combining a two-step causal Wan2.1 DiT with a lightweight KV refinement network (eliminating the clean-context DiT pass) and a causal ConvNeXt pixel decoder (replacing the Wan2.1 VAE decoder). WorldFoundry integrates both FastFrames-S (1.3B) and FastFrames-L (14B)."
+        ],
+        "overviewZh": [
+          "FastFrames 将两步因果 Wan2.1 DiT、轻量级 KV 细化网络（替代每帧的干净上下文 DiT 前向）与因果 ConvNeXt 像素解码器（替代 Wan2.1 VAE 解码器）结合，实现交互级延迟的 480p 自回归视频生成。WorldFoundry 集成了 FastFrames-S（1.3B）与 FastFrames-L（14B）。"
+        ],
+        "architecture": [
+          "Per arXiv:2611.23226, frame 0 is denoised in four steps followed by a clean t=0 pass; subsequent latent frames run two denoising steps on a shift-5 rectified-flow schedule, repair their KV cache entries via a shared spatial stem plus batched per-layer GroupGEMM heads, and decode pre-head DiT hidden states directly into 4 RGB frames per latent frame (with a bias-free 5120->1536 bridge for FastFrames-L)."
+        ],
+        "architectureZh": [
+          "按论文 arXiv:2611.23226，第 0 潜帧使用 4 步去噪并执行一次 t=0 干净前向；后续每个潜帧在 shift=5 的 rectified-flow 时间表上执行 2 步去噪，通过共享空间 stem 与分层批量 GroupGEMM 头部修复 KV 缓存，并直接将 pre-head DiT 隐状态解码为每潜帧 4 帧 RGB 像素（FastFrames-L 通过无偏置 5120->1536 bridge 衔接像素解码器）。"
+        ],
+        "usageNotes": [
+          "Defaults match the official CLI (832x480, 81 frames from 21 latent frames, 16 fps, context=\"refiner\"). FastFrames-S uses the frozen Causal Forcing++ 2-step generator with apple/FastFrames-S add-on weights and Wan2.1-T2V-1.3B UMT5-XXL; FastFrames-L uses apple/FastFrames-L weights and Wan2.1-T2V-14B UMT5-XXL."
+        ],
+        "usageNotesZh": [
+          "默认参数与官方 CLI 一致（832x480、由 21 个潜帧对齐得到的 81 帧、16 fps、context=\"refiner\"）。FastFrames-S 组合冻结的 Causal Forcing++ 两步生成器、apple/FastFrames-S 附加权重与 Wan2.1-T2V-1.3B 的 UMT5-XXL；FastFrames-L 使用 apple/FastFrames-L 权重与 Wan2.1-T2V-14B 的 UMT5-XXL。"
+        ],
+        "highlights": [
+          "Text To Video",
+          "Autoregressive Video Generation",
+          "Real Time Video Generation",
+          "Unified env · Python 3.11 · CUDA 12.8",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "文生视频",
+          "自回归视频生成",
+          "real-time-video-generation",
+          "统一环境 · Python 3.11 · CUDA 12.8",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [
+            "text"
+          ],
+          "outputs": [
+            "video"
+          ]
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": null,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [
+          {
+            "id": "vbench",
+            "name": "VBench",
+            "category": "Video Generation",
+            "categoryZh": "视频生成",
+            "summary": "In-tree official runtime scores generated videos per prompt",
+            "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
+            "href": "/docs/evaluation/benchmark-hub/vbench",
+            "source": "docs",
+            "reason": "Primary multi-dimension text-to-video quality benchmark reported in the FastFrames paper.",
+            "reasonZh": "FastFrames 论文采用的主要多维文生视频质量评测基准。"
+          }
+        ],
+        "limitations": [
+          "Released FastFrames-S and FastFrames-L T2V routes are text-to-video only.",
+          "FastFrames code and weights are governed by the Apple Sample Code License / Apple AMLR terms.",
+          "H200 real-checkpoint replay is verified on FastFrames-S (1.3B); FastFrames-L (14B) real-checkpoint GPU replay remains pending."
+        ],
+        "limitationsZh": [
+          "已发布的 FastFrames-S 与 FastFrames-L 路由仅支持文生视频。",
+          "FastFrames 代码与权重受 Apple Sample Code License / Apple AMLR 条款约束。",
+          "已在 H200 上完成 FastFrames-S（1.3B）真实权重验证；FastFrames-L（14B）真实权重回放仍待验证。"
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh fastframes",
+        "install": "bash scripts/setup/model_env_install.sh --model fastframes",
+        "inspect": "wf zoo model-show --model-id fastframes --include-manifest --json",
+        "check": "wf zoo model-download --model-id fastframes --check-local --json",
+        "run": "wf run \\\n  fastframes \\\n  --pipeline.task-profile text-to-video \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/world_models/fastframes.yaml"
+    },
+    {
       "id": "fastvideo-causal-wan2.2",
       "name": "FastVideo CausalWan2.2",
       "category": "video",
@@ -52652,6 +53441,863 @@
         "run": "wf run \\\n  giga-world-policy-0.5 \\\n  --pipeline.task-profile default \\\n  --json"
       },
       "catalogPath": "worldfoundry/data/models/catalog/vla_va_wam/giga-world-policy-0.5.yaml"
+    },
+    {
+      "id": "h3-tiny",
+      "name": "H3-Tiny",
+      "category": "video",
+      "categoryLabel": "Video",
+      "categoryLabelZh": "视频",
+      "provider": "H3-Tiny",
+      "summary": "Structured-pruned 17B/14B MiniMax-H3 checkpoints with rank-8 AdaLN and optional MeanFlow few-step distillation for joint video and stereo audio generation.",
+      "aliases": [
+        "minimax-h3-tiny",
+        "h3-tiny-17b-fewstep",
+        "h3-tiny-17b-pruned",
+        "h3-tiny-17b-fl2va",
+        "h3-tiny-14b-okd"
+      ],
+      "tasks": [
+        "text-to-video",
+        "image-to-video",
+        "reference-to-video",
+        "audio-video-generation"
+      ],
+      "status": {
+        "group": "integrated",
+        "label": "Integrated",
+        "integration": "integrated",
+        "runner": "selected_checkpoint_gpu_validated",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "h3-tiny",
+        "bindingId": "h3-tiny",
+        "runnerTarget": "worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.h3_tiny.pipeline_h3_tiny:H3TinyPipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "shared_base_model_runtime",
+        "runtimeStatus": "selected_checkpoint_gpu_validated",
+        "environmentId": "h3-tiny",
+        "environmentName": "worldfoundry-unified-cu128",
+        "environmentKind": "unified",
+        "python": "3.11",
+        "cudaProfile": "cu128",
+        "cudaLabel": "CUDA 12.8",
+        "driverStatus": null,
+        "condaPackages": [
+          "python=3.11",
+          "pip",
+          "ffmpeg"
+        ],
+        "pipPackages": [
+          "torch",
+          "torchvision",
+          "torchaudio",
+          "transformers",
+          "diffusers",
+          "accelerate",
+          "safetensors",
+          "av",
+          "pillow",
+          "pyyaml"
+        ],
+        "packageVersions": {
+          "torch": "torch",
+          "torchvision": "torchvision",
+          "torchaudio": "torchaudio",
+          "transformers": "transformers",
+          "diffusers": "diffusers",
+          "accelerate": "accelerate"
+        },
+        "validationImports": [
+          "torch",
+          "transformers",
+          "diffusers",
+          "safetensors",
+          "av",
+          "PIL"
+        ],
+        "notes": [
+          "H3-Tiny reuses the canonical WorldFoundry MiniMax-H3 DiT blocks, token refiner, Qwen3-VL encoder, video/audio VAEs, and MP4 muxer.",
+          "Supports 42-layer pruned 17B and narrowed-FFN (9792 vs 14336 refiner) 14B checkpoints with rank-8 AdaLN and optional MeanFlow r_time_embedder.",
+          "MeanFlow checkpoints default to 6 inference steps (>=4); pruned and OKD checkpoints default to 50 steps.",
+          "Use a Ref2VA checkpoint for ref2va and 17b-pruned-fl2va for t2va/i2va/l2va/fl2va.",
+          "Code is Apache-2.0; model weights use the MiniMax H3 Community License. Verified on H200 with real 17b-fewstep-ref2va weights (1376x768, 124 frames, 6 steps, 32 kHz stereo AAC); pruned/OKD variants remain pending.",
+          "H3-Tiny runs in-tree on the canonical MiniMax-H3 components in the unified CUDA 12.8 environment.",
+          "H3-Tiny transformer checkpoints and the shared MiniMax-H3 base snapshot stay outside Git and are injected via runtime configuration."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "source",
+          "label": "GitHub",
+          "url": "https://github.com/fuyi25/H3-Tiny",
+          "revision": "a3f17f0ef85e9af5d07b2007c4b2dbd6d035e69c"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/H3-Tiny/MiniMax-H3-Tiny-17B-FewStep-Ref2VA-v0.1"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/H3-Tiny/MiniMax-H3-Tiny-17B-Pruned-Ref2VA"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/H3-Tiny/MiniMax-H3-Tiny-17B-Pruned-FL2VA"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/H3-Tiny/MiniMax-H3-Tiny-14B-OKD-Ref2VA-v0.1"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/H3-Tiny/MiniMax-H3-Tiny-ComfyUI"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/fuyi25/H3-Tiny#readme",
+          "revision": "a3f17f0ef85e9af5d07b2007c4b2dbd6d035e69c"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "H3-Tiny/MiniMax-H3-Tiny-17B-FewStep-Ref2VA-v0.1",
+          "revision": "83aa8091053aeed77de0b94fe1a6450d112de512",
+          "role": "transformer_17b_fewstep_ref2va"
+        },
+        {
+          "id": "H3-Tiny/MiniMax-H3-Tiny-17B-Pruned-Ref2VA",
+          "revision": "e0ce7d0de6becc72e2de98f4cafe29c4b1e1c445",
+          "role": "transformer_17b_pruned_ref2va"
+        },
+        {
+          "id": "H3-Tiny/MiniMax-H3-Tiny-17B-Pruned-FL2VA",
+          "revision": "e026f495b8816b87b8441dee82f718867e9f5d42",
+          "role": "transformer_17b_pruned_fl2va"
+        },
+        {
+          "id": "H3-Tiny/MiniMax-H3-Tiny-14B-OKD-Ref2VA-v0.1",
+          "revision": "30b4ca94a49929602ba665d21ff50169fd815826",
+          "role": "transformer_14b_okd_ref2va"
+        },
+        {
+          "id": "H3-Tiny/MiniMax-H3-Tiny-ComfyUI",
+          "revision": "dce9a7901140ea19a935bf303ddab60e870c67e2",
+          "role": "comfyui_single_file_weights"
+        },
+        {
+          "id": "MiniMaxAI/MiniMax-H3",
+          "revision": "42ed227ee7df40d41602854ae760620d6eb651fe",
+          "role": "shared_h3_base"
+        }
+      ],
+      "variants": [],
+      "inferenceTasks": [
+        {
+          "id": "ref2va",
+          "label": "Ref2Va",
+          "description": "Run H3-Tiny through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "default": "A slow exploratory camera move through a believable scene with stable geometry and lighting.",
+              "choices": [],
+              "description": "Prompt used as the input for direct H3-Tiny inference."
+            },
+            {
+              "field": "num-frames",
+              "option": "--pipeline.num-frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 124,
+              "choices": [],
+              "description": "Aligned to 17n+5 frames at 24 fps (124 ≈ 5.2 s, 243 ≈ 10.1 s)."
+            },
+            {
+              "field": "num-inference-steps",
+              "option": "--pipeline.num-inference-steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 6,
+              "choices": [],
+              "description": "Defaults to 6 for MeanFlow few-step checkpoints (>=4) and 50 for pruned/OKD checkpoints."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Optional positive multiple of 32."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Optional positive multiple of 32."
+            },
+            {
+              "field": "short-edge",
+              "option": "--pipeline.short-edge",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 768,
+              "choices": [],
+              "description": "Short edge passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "aspect-ratio",
+              "option": "--pipeline.aspect-ratio",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": "16:9",
+              "choices": [],
+              "description": "Aspect ratio passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 1234,
+              "choices": [],
+              "description": "Seed passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "references",
+              "option": "--pipeline.references",
+              "detail": "Required",
+              "kind": "json",
+              "target": "call",
+              "required": true,
+              "default": null,
+              "choices": [],
+              "description": "Ordered image references passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "h3-tiny.mp4"
+            }
+          ]
+        },
+        {
+          "id": "t2va",
+          "label": "T2Va",
+          "description": "Run H3-Tiny through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "default": "A slow exploratory camera move through a believable scene with stable geometry and lighting.",
+              "choices": [],
+              "description": "Prompt used as the input for direct H3-Tiny inference."
+            },
+            {
+              "field": "num-frames",
+              "option": "--pipeline.num-frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 124,
+              "choices": [],
+              "description": "Aligned to 17n+5 frames at 24 fps (124 ≈ 5.2 s, 243 ≈ 10.1 s)."
+            },
+            {
+              "field": "num-inference-steps",
+              "option": "--pipeline.num-inference-steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 6,
+              "choices": [],
+              "description": "Defaults to 6 for MeanFlow few-step checkpoints (>=4) and 50 for pruned/OKD checkpoints."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Optional positive multiple of 32."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Optional positive multiple of 32."
+            },
+            {
+              "field": "short-edge",
+              "option": "--pipeline.short-edge",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 768,
+              "choices": [],
+              "description": "Short edge passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "aspect-ratio",
+              "option": "--pipeline.aspect-ratio",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": "16:9",
+              "choices": [],
+              "description": "Aspect ratio passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 1234,
+              "choices": [],
+              "description": "Seed passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "h3-tiny.mp4"
+            }
+          ]
+        },
+        {
+          "id": "i2va",
+          "label": "I2Va",
+          "description": "Run H3-Tiny through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "default": "A slow exploratory camera move through a believable scene with stable geometry and lighting.",
+              "choices": [],
+              "description": "Prompt used as the input for direct H3-Tiny inference."
+            },
+            {
+              "field": "num-frames",
+              "option": "--pipeline.num-frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 124,
+              "choices": [],
+              "description": "Aligned to 17n+5 frames at 24 fps (124 ≈ 5.2 s, 243 ≈ 10.1 s)."
+            },
+            {
+              "field": "num-inference-steps",
+              "option": "--pipeline.num-inference-steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 6,
+              "choices": [],
+              "description": "Defaults to 6 for MeanFlow few-step checkpoints (>=4) and 50 for pruned/OKD checkpoints."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Optional positive multiple of 32."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Optional positive multiple of 32."
+            },
+            {
+              "field": "short-edge",
+              "option": "--pipeline.short-edge",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 768,
+              "choices": [],
+              "description": "Short edge passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "aspect-ratio",
+              "option": "--pipeline.aspect-ratio",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": "16:9",
+              "choices": [],
+              "description": "Aspect ratio passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 1234,
+              "choices": [],
+              "description": "Seed passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "images",
+              "option": "--pipeline.images",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "First image passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "h3-tiny.mp4"
+            }
+          ]
+        },
+        {
+          "id": "l2va",
+          "label": "L2Va",
+          "description": "Run H3-Tiny through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "default": "A slow exploratory camera move through a believable scene with stable geometry and lighting.",
+              "choices": [],
+              "description": "Prompt used as the input for direct H3-Tiny inference."
+            },
+            {
+              "field": "num-frames",
+              "option": "--pipeline.num-frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 124,
+              "choices": [],
+              "description": "Aligned to 17n+5 frames at 24 fps (124 ≈ 5.2 s, 243 ≈ 10.1 s)."
+            },
+            {
+              "field": "num-inference-steps",
+              "option": "--pipeline.num-inference-steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 6,
+              "choices": [],
+              "description": "Defaults to 6 for MeanFlow few-step checkpoints (>=4) and 50 for pruned/OKD checkpoints."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Optional positive multiple of 32."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Optional positive multiple of 32."
+            },
+            {
+              "field": "short-edge",
+              "option": "--pipeline.short-edge",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 768,
+              "choices": [],
+              "description": "Short edge passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "aspect-ratio",
+              "option": "--pipeline.aspect-ratio",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": "16:9",
+              "choices": [],
+              "description": "Aspect ratio passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 1234,
+              "choices": [],
+              "description": "Seed passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "images",
+              "option": "--pipeline.images",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Last image passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "h3-tiny.mp4"
+            }
+          ]
+        },
+        {
+          "id": "fl2va",
+          "label": "Fl2Va",
+          "description": "Run H3-Tiny through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "default": "A slow exploratory camera move through a believable scene with stable geometry and lighting.",
+              "choices": [],
+              "description": "Prompt used as the input for direct H3-Tiny inference."
+            },
+            {
+              "field": "num-frames",
+              "option": "--pipeline.num-frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 124,
+              "choices": [],
+              "description": "Aligned to 17n+5 frames at 24 fps (124 ≈ 5.2 s, 243 ≈ 10.1 s)."
+            },
+            {
+              "field": "num-inference-steps",
+              "option": "--pipeline.num-inference-steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 6,
+              "choices": [],
+              "description": "Defaults to 6 for MeanFlow few-step checkpoints (>=4) and 50 for pruned/OKD checkpoints."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Optional positive multiple of 32."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Optional positive multiple of 32."
+            },
+            {
+              "field": "short-edge",
+              "option": "--pipeline.short-edge",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 768,
+              "choices": [],
+              "description": "Short edge passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "aspect-ratio",
+              "option": "--pipeline.aspect-ratio",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": "16:9",
+              "choices": [],
+              "description": "Aspect ratio passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 1234,
+              "choices": [],
+              "description": "Seed passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "images",
+              "option": "--pipeline.images",
+              "detail": "Optional",
+              "kind": "json",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Endpoint images passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "h3-tiny.mp4"
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "prompt",
+          "detail": "Required"
+        },
+        {
+          "field": "image",
+          "detail": "optional"
+        },
+        {
+          "field": "video",
+          "detail": "Optional"
+        },
+        {
+          "field": "actions",
+          "detail": "task, workflow, references, aspect_ratio, short_edge, height, width, num_frames, num_inference_steps, seed, variant"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "generated_video",
+          "filename": ""
+        },
+        {
+          "kind": "generated_video",
+          "filename": "h3-tiny.mp4"
+        }
+      ],
+      "notes": [
+        "Reuses the canonical MiniMax-H3 DiT blocks, token refiner, Qwen3-VL encoder, video/audio VAEs, and MP4 muxer.",
+        "Supports pruned 42-layer depth, narrowed 9792 block FFN vs 14336 refiner FFN, rank-8 AdaLN, and MeanFlow interval conditioning (6-step default, >=4 steps).",
+        "Diffusers-to-WorldFoundry key mapping is bijective across all 630 (FewStep) and 626 (Pruned) tensors; tiny FP32/BF16 numerical parity matches upstream modeling and schedule math.",
+        "Verified on H200 with real H3-Tiny/MiniMax-H3-Tiny-17B-FewStep-Ref2VA-v0.1 + MiniMaxAI/MiniMax-H3 weights (1376x768, 124 frames at 24 fps, 6 MeanFlow steps, image Ref2VA, 32 kHz stereo AAC).",
+        "Remaining variants (17b-pruned-ref2va, 17b-pruned-fl2va, 14b-okd-ref2va), video/audio references, and multi-GPU execution remain pending GPU validation.",
+        "H3-Tiny reuses the canonical WorldFoundry MiniMax-H3 DiT blocks, token refiner, Qwen3-VL encoder, video/audio VAEs, and MP4 muxer.",
+        "Supports 42-layer pruned 17B and narrowed-FFN (9792 vs 14336 refiner) 14B checkpoints with rank-8 AdaLN and optional MeanFlow r_time_embedder.",
+        "MeanFlow checkpoints default to 6 inference steps (>=4); pruned and OKD checkpoints default to 50 steps.",
+        "Use a Ref2VA checkpoint for ref2va and 17b-pruned-fl2va for t2va/i2va/l2va/fl2va.",
+        "Code is Apache-2.0; model weights use the MiniMax H3 Community License. Verified on H200 with real 17b-fewstep-ref2va weights (1376x768, 124 frames, 6 steps, 32 kHz stereo AAC); pruned/OKD variants remain pending."
+      ],
+      "docs": {
+        "curated": true,
+        "publisher": {
+          "name": "H3-Tiny",
+          "nameZh": "H3-Tiny",
+          "kind": null
+        },
+        "overview": [
+          "Structured-pruned 17B/14B MiniMax-H3 checkpoints with rank-8 AdaLN and optional MeanFlow few-step distillation for joint video and stereo audio generation."
+        ],
+        "overviewZh": [
+          "结构化剪枝的 17B/14B MiniMax-H3 模型，采用 8 秩 AdaLN 与可选 MeanFlow 少步蒸馏，支持联合音视频生成。"
+        ],
+        "architecture": [],
+        "architectureZh": [],
+        "usageNotes": [
+          "Stage an H3-Tiny transformer checkpoint alongside the shared MiniMax-H3 base snapshot (text encoder, processor, video/audio VAEs). Use a Ref2VA variant for reference conditioning and 17b-pruned-fl2va for T2VA/FL2VA; MeanFlow checkpoints default to 6 steps (>=4) and pruned/OKD checkpoints default to 50 steps."
+        ],
+        "usageNotesZh": [
+          "将 H3-Tiny Transformer 权重与共享 MiniMax-H3 基础快照（文本编码器、处理器、视频/音频 VAE）一同准备。参考图生成使用 Ref2VA 变体，T2VA/FL2VA 使用 17b-pruned-fl2va；MeanFlow 权重默认 6 步（>=4），剪枝/OKD 权重默认 50 步。"
+        ],
+        "highlights": [
+          "Text To Video",
+          "Image To Video",
+          "Reference To Video",
+          "Unified env · Python 3.11 · CUDA 12.8",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "文生视频",
+          "图生视频",
+          "参考图生成视频",
+          "统一环境 · Python 3.11 · CUDA 12.8",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [
+            "text",
+            "image"
+          ],
+          "outputs": [
+            "video"
+          ]
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": null,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [],
+        "limitations": [
+          "Outputs are 24 fps video with 32 kHz stereo audio; frame counts align upward to 17n+5.",
+          "In-tree reference conditioning currently accepts image references only; video and standalone-audio references are not yet wired.",
+          "Code is Apache-2.0; model weights are distributed under the MiniMax H3 Community License.",
+          "H200 real-checkpoint replay is verified on 17b-fewstep-ref2va (6-step Ref2VA); pruned/OKD variants and multi-GPU execution remain pending GPU validation."
+        ],
+        "limitationsZh": [
+          "原生输出为 24 fps 视频与 32 kHz 立体声音频，帧数向上对齐至 17n+5。",
+          "当前树内参考条件仅支持图像参考，暂未接入视频与独立音频参考。",
+          "代码采用 Apache-2.0，模型权重采用 MiniMax H3 Community License。",
+          "已在 H200 上完成 17b-fewstep-ref2va（6 步 Ref2VA）真实权重验证；剪枝/OKD 变体与多卡执行仍待验证。"
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh h3-tiny",
+        "install": "bash scripts/setup/model_env_install.sh --model h3-tiny",
+        "inspect": "wf zoo model-show --model-id h3-tiny --include-manifest --json",
+        "check": "wf zoo model-download --model-id h3-tiny --check-local --json",
+        "run": "wf run \\\n  h3-tiny \\\n  --pipeline.task-profile ref2va \\\n  --pipeline.references '{}' \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/video/h3-tiny.yaml"
     },
     {
       "id": "hailuo-2p3",
@@ -90164,6 +91810,580 @@
         "run": "wf run \\\n  pi0-base \\\n  --pipeline.task-profile interactive-video \\\n  --json"
       },
       "catalogPath": "worldfoundry/data/models/catalog/vla_va_wam/openpi.yaml"
+    },
+    {
+      "id": "pi-h3",
+      "name": "pi-H3",
+      "category": "video",
+      "categoryLabel": "Video",
+      "categoryLabelZh": "视频",
+      "provider": "LakonLab",
+      "summary": "Two- and four-step MiniMax-H3 acceleration with optional Decoding Without a Decoder (Sol-H3 DWD) for direct joint video and stereo audio generation.",
+      "aliases": [
+        "pi_h3",
+        "pih3",
+        "pi-h3-dwd",
+        "pi-h3-2step-dwd",
+        "pi-h3-4step-dwd",
+        "pi-h3-2step",
+        "pi-h3-4step",
+        "minimax-h3-pi"
+      ],
+      "tasks": [
+        "text-to-video",
+        "image-to-video",
+        "audio-video-generation"
+      ],
+      "status": {
+        "group": "integrated",
+        "label": "Integrated",
+        "integration": "integrated",
+        "runner": "selected_checkpoint_gpu_validated",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "pi-h3",
+        "bindingId": "pi-h3",
+        "runnerTarget": "worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.pi_h3.pipeline_pi_h3:PiH3Pipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "shared_base_model_runtime",
+        "runtimeStatus": "selected_checkpoint_gpu_validated",
+        "environmentId": "pi-h3",
+        "environmentName": "worldfoundry-unified-cu128",
+        "environmentKind": "unified",
+        "python": "3.11",
+        "cudaProfile": "cu128",
+        "cudaLabel": "CUDA 12.8",
+        "driverStatus": null,
+        "condaPackages": [
+          "python=3.11",
+          "pip",
+          "ffmpeg"
+        ],
+        "pipPackages": [
+          "torch",
+          "torchvision",
+          "torchaudio",
+          "transformers",
+          "diffusers",
+          "accelerate",
+          "safetensors",
+          "av",
+          "pillow",
+          "numpy",
+          "pyyaml"
+        ],
+        "packageVersions": {
+          "torch": "torch",
+          "torchvision": "torchvision",
+          "torchaudio": "torchaudio",
+          "transformers": "transformers",
+          "diffusers": "diffusers",
+          "accelerate": "accelerate"
+        },
+        "validationImports": [
+          "torch",
+          "transformers",
+          "safetensors",
+          "av",
+          "PIL",
+          "worldfoundry.pipelines.pi_h3.pipeline_pi_h3"
+        ],
+        "notes": [
+          "pi-H3 reuses canonical WorldFoundry MiniMax-H3 blocks, refiner, RoPE, Qwen3-VL encoder, codecs, and MP4 muxer.",
+          "Pruned rank-8 AdaLN table interpolation, strict LoRA + full-override fusion, FlowEulerODE scheduling, and pure-PyTorch SolH3DWDHead run without mmcv or lakonlab runtime dependencies.",
+          "DWD variants (2step-dwd, 4step-dwd) decode RGB frames directly from final-step transformer features and skip video VAE decode.",
+          "Non-DWD variants (2step, 4step) decode final video latents with the canonical MiniMax-H3 video VAE; all variants decode 32 kHz stereo audio with the canonical audio VAE.",
+          "Verified on H200 with real MiniMax-H3-Pruned + pi_h3_4step_dwd_adapter weights (1376x768, 124 frames, 4 steps, DWD without video VAE, 32 kHz stereo AAC). Remaining variants, FP8 quantization, and Sol sparse kernels remain pending.",
+          "pi-H3 runs in-tree over canonical MiniMax-H3 components and pure-PyTorch SolH3DWDHead; neither mmcv nor lakonlab is required.",
+          "Checkpoints (multimodalart/MiniMax-H3-Pruned and Lakonik/pi-H3 adapters) stay outside Git and are supplied via the runtime profile."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "source",
+          "label": "GitHub",
+          "url": "https://github.com/Lakonik/LakonLab",
+          "revision": "2ee2b334374ec91b7cee371a85a524bf4ba644d3"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/Lakonik/pi-H3"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/multimodalart/MiniMax-H3-Pruned"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/Lakonik/LakonLab#readme",
+          "revision": "2ee2b334374ec91b7cee371a85a524bf4ba644d3"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "Lakonik/pi-H3",
+          "revision": "4a864589b0fac3d14768f932c930c4dcf1a17b56",
+          "role": "4step_dwd_adapter"
+        },
+        {
+          "id": "multimodalart/MiniMax-H3-Pruned",
+          "revision": "1a0ef5e65b639e84af81d883817968532180e9c7",
+          "role": "pruned_h3_base"
+        }
+      ],
+      "variants": [],
+      "inferenceTasks": [
+        {
+          "id": "t2va",
+          "label": "T2Va",
+          "description": "Run pi-H3 through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "default": "A slow exploratory camera move through a believable scene with stable geometry and lighting.",
+              "choices": [],
+              "description": "Prompt used as the input for direct pi-H3 inference."
+            },
+            {
+              "field": "num-frames",
+              "option": "--pipeline.num-frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 124,
+              "choices": [],
+              "description": "Frames passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "short-edge",
+              "option": "--pipeline.short-edge",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 768,
+              "choices": [],
+              "description": "Short edge passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "aspect-ratio",
+              "option": "--pipeline.aspect-ratio",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": "16:9",
+              "choices": [],
+              "description": "Aspect ratio passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 42,
+              "choices": [],
+              "description": "Seed passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "pi-h3.mp4"
+            }
+          ]
+        },
+        {
+          "id": "i2va",
+          "label": "I2Va",
+          "description": "Run pi-H3 through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "default": "A slow exploratory camera move through a believable scene with stable geometry and lighting.",
+              "choices": [],
+              "description": "Prompt used as the input for direct pi-H3 inference."
+            },
+            {
+              "field": "num-frames",
+              "option": "--pipeline.num-frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 124,
+              "choices": [],
+              "description": "Frames passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "short-edge",
+              "option": "--pipeline.short-edge",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 768,
+              "choices": [],
+              "description": "Short edge passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "aspect-ratio",
+              "option": "--pipeline.aspect-ratio",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": "16:9",
+              "choices": [],
+              "description": "Aspect ratio passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 42,
+              "choices": [],
+              "description": "Seed passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "images",
+              "option": "--pipeline.images",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "First image passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "pi-h3.mp4"
+            }
+          ]
+        },
+        {
+          "id": "l2va",
+          "label": "L2Va",
+          "description": "Run pi-H3 through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "default": "A slow exploratory camera move through a believable scene with stable geometry and lighting.",
+              "choices": [],
+              "description": "Prompt used as the input for direct pi-H3 inference."
+            },
+            {
+              "field": "num-frames",
+              "option": "--pipeline.num-frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 124,
+              "choices": [],
+              "description": "Frames passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "short-edge",
+              "option": "--pipeline.short-edge",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 768,
+              "choices": [],
+              "description": "Short edge passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "aspect-ratio",
+              "option": "--pipeline.aspect-ratio",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": "16:9",
+              "choices": [],
+              "description": "Aspect ratio passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 42,
+              "choices": [],
+              "description": "Seed passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "images",
+              "option": "--pipeline.images",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Last image passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "pi-h3.mp4"
+            }
+          ]
+        },
+        {
+          "id": "fl2va",
+          "label": "Fl2Va",
+          "description": "Run pi-H3 through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "default": "A slow exploratory camera move through a believable scene with stable geometry and lighting.",
+              "choices": [],
+              "description": "Prompt used as the input for direct pi-H3 inference."
+            },
+            {
+              "field": "num-frames",
+              "option": "--pipeline.num-frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 124,
+              "choices": [],
+              "description": "Frames passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "short-edge",
+              "option": "--pipeline.short-edge",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 768,
+              "choices": [],
+              "description": "Short edge passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "aspect-ratio",
+              "option": "--pipeline.aspect-ratio",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": "16:9",
+              "choices": [],
+              "description": "Aspect ratio passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 42,
+              "choices": [],
+              "description": "Seed passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "images",
+              "option": "--pipeline.images",
+              "detail": "Optional",
+              "kind": "json",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Endpoint images passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "pi-h3.mp4"
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "prompt",
+          "detail": "Required"
+        },
+        {
+          "field": "image",
+          "detail": "optional"
+        },
+        {
+          "field": "video",
+          "detail": "Optional"
+        },
+        {
+          "field": "actions",
+          "detail": "task, variant, aspect_ratio, short_edge, height, width, num_frames, duration_seconds, num_inference_steps, seed"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "generated_video",
+          "filename": ""
+        },
+        {
+          "kind": "generated_video",
+          "filename": "pi-h3.mp4"
+        }
+      ],
+      "notes": [
+        "In-tree pi-H3 reuses canonical MiniMax-H3 attention, MLP, refiner, RoPE, Qwen3-VL conditioner, packed sequence layout, audio/video VAEs, and MP4 muxer.",
+        "Pruned AdaLN table interpolation, FlowEulerODE schedule, LoRA + override loading, and pure-PyTorch SolH3DWDHead decoding are verified in weight-free unit tests.",
+        "Verified on H200 with real multimodalart/MiniMax-H3-Pruned + Lakonik/pi-H3/pi_h3_4step_dwd_adapter weights (1376x768, 124 frames at 24 fps, 4 steps, DWD pixel decoding with video_vae=None, 32 kHz stereo AAC).",
+        "Remaining adapter variants (2step-dwd, 4step, 2step), FP8 quantization, and Sol sparse attention kernels remain pending.",
+        "pi-H3 reuses canonical WorldFoundry MiniMax-H3 blocks, refiner, RoPE, Qwen3-VL encoder, codecs, and MP4 muxer.",
+        "Pruned rank-8 AdaLN table interpolation, strict LoRA + full-override fusion, FlowEulerODE scheduling, and pure-PyTorch SolH3DWDHead run without mmcv or lakonlab runtime dependencies.",
+        "DWD variants (2step-dwd, 4step-dwd) decode RGB frames directly from final-step transformer features and skip video VAE decode.",
+        "Non-DWD variants (2step, 4step) decode final video latents with the canonical MiniMax-H3 video VAE; all variants decode 32 kHz stereo audio with the canonical audio VAE.",
+        "Verified on H200 with real MiniMax-H3-Pruned + pi_h3_4step_dwd_adapter weights (1376x768, 124 frames, 4 steps, DWD without video VAE, 32 kHz stereo AAC). Remaining variants, FP8 quantization, and Sol sparse kernels remain pending."
+      ],
+      "docs": {
+        "curated": true,
+        "publisher": {
+          "name": "LakonLab",
+          "nameZh": "LakonLab",
+          "kind": null
+        },
+        "overview": [
+          "Two- and four-step MiniMax-H3 acceleration with optional Decoding Without a Decoder (Sol-H3 DWD) for direct joint video and stereo audio generation."
+        ],
+        "overviewZh": [
+          "基于 MiniMax-H3 的 2 步与 4 步加速模型，支持可选的 Sol-H3 无解码器直出像素（DWD）联合音视频生成。"
+        ],
+        "architecture": [],
+        "architectureZh": [],
+        "usageNotes": [
+          "Stage multimodalart/MiniMax-H3-Pruned together with one Lakonik/pi-H3 adapter subfolder (pi_h3_4step_dwd_adapter, pi_h3_2step_dwd_adapter, pi_h3_4step_adapter, or pi_h3_2step_adapter). Select variant=2step-dwd, 4step-dwd, 2step, or 4step at load time."
+        ],
+        "usageNotesZh": [
+          "准备 multimodalart/MiniMax-H3-Pruned 基础快照及对应的 Lakonik/pi-H3 适配器子目录 （pi_h3_4step_dwd_adapter、pi_h3_2step_dwd_adapter、pi_h3_4step_adapter 或 pi_h3_2step_adapter）， 并在加载时通过 variant=2step-dwd、4step-dwd、2step 或 4step 选择变体。"
+        ],
+        "highlights": [
+          "Text To Video",
+          "Image To Video",
+          "Audio Video Generation",
+          "Unified env · Python 3.11 · CUDA 12.8",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "文生视频",
+          "图生视频",
+          "音视频联合生成",
+          "统一环境 · Python 3.11 · CUDA 12.8",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [
+            "text",
+            "image"
+          ],
+          "outputs": [
+            "video"
+          ]
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": null,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [],
+        "limitations": [
+          "Native output is 24 fps video with synchronized 32 kHz stereo audio in 2 or 4 FlowEulerODE steps.",
+          "DWD variants skip video VAE decoding during generation; keyframe tasks (i2va, l2va, fl2va) still require the video VAE encoder to encode conditioning images.",
+          "H200 real-checkpoint replay is verified on 4step-dwd (T2VA); 2step/non-DWD variants, FP8 W8A8 linear quantization, and Sol sparse attention kernels are not yet validated.",
+          "Code is Apache-2.0; checkpoints are distributed under the MiniMax H3 Community License."
+        ],
+        "limitationsZh": [
+          "原生输出为 24 fps 视频与同步 32 kHz 立体声音频，执行 2 步或 4 步 FlowEulerODE 采样。",
+          "DWD 变体在生成阶段跳过视频 VAE 解码，但关键帧任务（i2va、l2va、fl2va）仍需视频 VAE 编码器编码条件图像。",
+          "已在 H200 上完成 4step-dwd（T2VA）真实权重验证；其余变体、FP8 W8A8 量化及 Sol 稀疏注意力内核尚未验证。",
+          "源码采用 Apache-2.0 许可，模型权重遵循 MiniMax H3 Community License。"
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh pi-h3",
+        "install": "bash scripts/setup/model_env_install.sh --model pi-h3",
+        "inspect": "wf zoo model-show --model-id pi-h3 --include-manifest --json",
+        "check": "wf zoo model-download --model-id pi-h3 --check-local --json",
+        "run": "wf run \\\n  pi-h3 \\\n  --pipeline.task-profile t2va \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/video/pi-h3.yaml"
     },
     {
       "id": "pika-h3-flex",
@@ -130841,6 +133061,391 @@
         "run": "wf run \\\n  pi3 \\\n  --pipeline.task-profile interactive-video \\\n  --json"
       },
       "catalogPath": "worldfoundry/data/models/catalog/three_d_four_d/pi3.yaml"
+    },
+    {
+      "id": "pi4",
+      "name": "Pi4",
+      "category": "three_d_four_d",
+      "categoryLabel": "3D & 4D",
+      "categoryLabelZh": "3D 与 4D",
+      "provider": "Physical Intelligence Team, Shanghai Artificial Intelligence Laboratory",
+      "summary": "Pi4 (π⁴) is a 0.5B-parameter feed-forward foundation model that jointly predicts metric 3D scene geometry, camera-to-world poses, dense 2D/3D point tracks, and sequence-level moving-object masks in a single forward pass without camera cali…",
+      "aliases": [
+        "pi-4",
+        "yyfz233/Pi4",
+        "yyfz/Pi4"
+      ],
+      "tasks": [
+        "4d-reconstruction",
+        "3d-reconstruction",
+        "point-cloud",
+        "dense-tracking",
+        "motion-segmentation"
+      ],
+      "status": {
+        "group": "runtime_ported",
+        "label": "Runtime ported",
+        "integration": "runtime_ported",
+        "runner": "checkpoint_gpu_validated",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "pi4",
+        "bindingId": "pi4",
+        "runnerTarget": "worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.pi4.pipeline_pi4:Pi4Pipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "in_tree_runtime",
+        "runtimeStatus": "in_tree_runtime_checkpoint_gpu_validated",
+        "environmentId": "pi4",
+        "environmentName": "worldfoundry-unified-cu128",
+        "environmentKind": "unified",
+        "python": "3.11",
+        "cudaProfile": "cu128",
+        "cudaLabel": "CUDA 12.8",
+        "driverStatus": "compatible",
+        "condaPackages": [
+          "python",
+          "pip",
+          "ffmpeg"
+        ],
+        "pipPackages": [
+          "torch",
+          "torchvision",
+          "numpy",
+          "pillow",
+          "opencv-python",
+          "plyfile",
+          "safetensors",
+          "huggingface-hub"
+        ],
+        "packageVersions": {
+          "torch": "torch",
+          "torchvision": "torchvision"
+        },
+        "validationImports": [
+          "torch",
+          "torchvision",
+          "numpy",
+          "PIL",
+          "cv2",
+          "plyfile",
+          "safetensors",
+          "huggingface_hub"
+        ],
+        "notes": [
+          "WorldFoundry ports the official Pi4 4D geometry and dense motion runtime under worldfoundry/base_models/three_dimensions/point_clouds/pi4_inference.",
+          "Checkpoints stay external from yyfz233/Pi4 (single-file model.safetensors, 1,319 tensors, CC BY-NC 4.0 non-commercial license).",
+          "DepthRefiner uses flex_gemm.nn on CUDA when installed and transparently falls back to a checkpoint-identical pure-PyTorch sparse 3D implementation on both CPU and CUDA.",
+          "Verified end-to-end on H200 with yyfz233/Pi4 (model.safetensors) on kart.mp4 (512x288, 8 frames, 4D geometry + dense tracking + moving-object masks).",
+          "Runs in the shared WorldFoundry unified CUDA 12.8 environment using the checkpoint-identical pure-PyTorch sparse 3D DepthRefiner fallback when flex_gemm is not installed.",
+          "For maximum throughput on long high-resolution video sequences on CUDA, optionally install JeffreyXiang/FlexGEMM pinned at revision b2fadb29d41846c7981ade6801ffc689fae119cf (requires Triton and a C compiler); Pi4 automatically delegates sparse 3D layers to flex_gemm.nn on CUDA when present.",
+          "Pi4 code and weights (yyfz233/Pi4) are licensed under CC BY-NC 4.0 (non-commercial use only)."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "project",
+          "label": "Project",
+          "url": "https://yyfz.github.io/pi4"
+        },
+        {
+          "kind": "paper",
+          "label": "Paper",
+          "url": "https://arxiv.org/abs/2611.23144"
+        },
+        {
+          "kind": "source",
+          "label": "GitHub",
+          "url": "https://github.com/yyfz/Pi4",
+          "revision": "32dfbea9ce6268ea17446208a804710df9475c32"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/yyfz233/Pi4"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/yyfz/Pi4#readme",
+          "revision": "32dfbea9ce6268ea17446208a804710df9475c32"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "yyfz233/Pi4",
+          "revision": "59f307317fb630c9c5a5aa635038d98ed106aaf5",
+          "license": "cc-by-nc-4.0"
+        },
+        {
+          "id": "yyfz233/Pi4",
+          "license": "cc-by-nc-4.0"
+        }
+      ],
+      "variants": [],
+      "inferenceTasks": [
+        {
+          "id": "reconstruction",
+          "label": "Reconstruction",
+          "description": "Run Pi4 through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "input-path",
+              "option": "--pipeline.input-path",
+              "detail": "Required",
+              "kind": "path",
+              "target": "input",
+              "required": true,
+              "default": "/workspace/WorldFoundry/worldfoundry/data/test_cases/studio_demo/00/image.jpg",
+              "choices": [],
+              "description": "Image file, image directory, or video file."
+            },
+            {
+              "field": "stride",
+              "option": "--pipeline.stride",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 1,
+              "choices": [],
+              "description": "Frame Stride passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "max-frames",
+              "option": "--pipeline.max-frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Max Frames passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "max-size",
+              "option": "--pipeline.max-size",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 512,
+              "choices": [],
+              "description": "Max Image Size passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "conf-threshold",
+              "option": "--pipeline.conf-threshold",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": 0.05,
+              "choices": [],
+              "description": "Confidence Threshold passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_4d_scene",
+              "filename": "meta.json"
+            }
+          ]
+        },
+        {
+          "id": "4d-tracking",
+          "label": "4D Tracking",
+          "description": "Run Pi4 through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "input-path",
+              "option": "--pipeline.input-path",
+              "detail": "Required",
+              "kind": "path",
+              "target": "input",
+              "required": true,
+              "default": null,
+              "choices": [],
+              "description": "Multi-frame image directory or video file (requires at least 2 frames)."
+            },
+            {
+              "field": "query-frame",
+              "option": "--pipeline.query-frame",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 0,
+              "choices": [],
+              "description": "Query Frame Index passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "stride",
+              "option": "--pipeline.stride",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 1,
+              "choices": [],
+              "description": "Frame Stride passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "max-frames",
+              "option": "--pipeline.max-frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 150,
+              "choices": [],
+              "description": "Max Frames passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "max-size",
+              "option": "--pipeline.max-size",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": 512,
+              "choices": [],
+              "description": "Max Image Size passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "conf-threshold",
+              "option": "--pipeline.conf-threshold",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": 0.05,
+              "choices": [],
+              "description": "Confidence Threshold passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_4d_scene",
+              "filename": "meta.json"
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "prompt",
+          "detail": "Optional"
+        },
+        {
+          "field": "image",
+          "detail": "Required"
+        },
+        {
+          "field": "video",
+          "detail": "Required"
+        },
+        {
+          "field": "actions",
+          "detail": "reconstruction, tracking, camera_view"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "generated_4d_scene",
+          "filename": "meta.json"
+        }
+      ],
+      "notes": [
+        "In-tree Pi4 4D geometry and dense motion pipeline is ported from yyfz/Pi4 revision 32dfbea9ce6268ea17446208a804710df9475c32.",
+        "Strict 1,319-tensor checkpoint loading supports single-file yyfz233/Pi4/model.safetensors with optional flex_gemm CUDA sparse kernels and a checkpoint-identical pure-PyTorch sparse 3D fallback.",
+        "Upstream Pi4 code and weights are licensed under CC BY-NC 4.0 (non-commercial use only); CoWTracker-derived tracking components remain subject to the FAIR Noncommercial Research License.",
+        "Component-level state_dict schema (1,319 keys), sparse 3D conv/pool/upsample math, and upstream module parity are verified in weight-free unit tests.",
+        "Verified end-to-end on H200 with real yyfz233/Pi4 (model.safetensors, 1,319 tensors) on kart.mp4 (8 frames at 512x288, metric scale 6.3243, 653,241 valid metric 3D points, dense 2D/3D tracking, and moving-object masks via pure-PyTorch sparse 3D DepthRefiner).",
+        "WorldFoundry ports the official Pi4 4D geometry and dense motion runtime under worldfoundry/base_models/three_dimensions/point_clouds/pi4_inference.",
+        "Checkpoints stay external from yyfz233/Pi4 (single-file model.safetensors, 1,319 tensors, CC BY-NC 4.0 non-commercial license).",
+        "DepthRefiner uses flex_gemm.nn on CUDA when installed and transparently falls back to a checkpoint-identical pure-PyTorch sparse 3D implementation on both CPU and CUDA.",
+        "Verified end-to-end on H200 with yyfz233/Pi4 (model.safetensors) on kart.mp4 (512x288, 8 frames, 4D geometry + dense tracking + moving-object masks)."
+      ],
+      "docs": {
+        "curated": true,
+        "publisher": {
+          "name": "Physical Intelligence Team, Shanghai Artificial Intelligence Laboratory",
+          "nameZh": "上海人工智能实验室 Physical Intelligence 团队",
+          "kind": "lab"
+        },
+        "overview": [
+          "Pi4 (π⁴) is a 0.5B-parameter feed-forward foundation model that jointly predicts metric 3D scene geometry, camera-to-world poses, dense 2D/3D point tracks, and sequence-level moving-object masks in a single forward pass without camera calibration. WorldFoundry provides an in-tree pipeline supporting both geometry-only reconstruction and full 4D dense tracking."
+        ],
+        "overviewZh": [
+          "Pi4（π⁴）是约 0.5B 参数的前馈基础模型，无需相机标定即可在单次前向中联合预测米制 3D 场景几何、相机到世界位姿、稠密 2D/3D 点轨迹以及序列级运动物体掩码。WorldFoundry 提供树内 pipeline，同时支持纯几何重建与完整 4D 稠密追踪。"
+        ],
+        "architecture": [
+          "Per arXiv 2611.23144, Pi4 combines a patch-16 DINOv3-style axial-RoPE image encoder, a 16-step looped alternating frame/global geometry decoder with a 5-level sparse 3D U-Net depth refiner, camera and metric-scale heads, and an 8-step geometry-conditioned motion decoder driving iterative dense tracking and Hiera-small moving-object segmentation. Code and weights are CC BY-NC 4.0 (non-commercial)."
+        ],
+        "architectureZh": [
+          "按论文（arXiv 2611.23144），Pi4 结合了 patch-16 轴向 RoPE 图像编码器、16 步交替帧内/全局循环几何解码器与 5 级稀疏 3D U-Net 深度细化器、相机与米制尺度头，以及驱动迭代稠密追踪与 Hiera-small 运动分割的 8 步几何条件运动解码器。代码与权重采用 CC BY-NC 4.0（仅限非商用）。"
+        ],
+        "usageNotes": [
+          "Stage the non-gated `yyfz233/Pi4` (`model.safetensors`, CC BY-NC 4.0) checkpoint before running inference. Omit `query_frame` for geometry-only reconstruction or pass an integer `query_frame` on sequences of >=2 frames for 4D dense tracking. Install optional `flex_gemm` on CUDA for accelerated sparse depth refinement, or use the built-in checkpoint-identical pure-PyTorch fallback."
+        ],
+        "usageNotesZh": [
+          "运行推理前请就位公开权重 `yyfz233/Pi4`（`model.safetensors`，CC BY-NC 4.0）。省略 `query_frame` 可执行纯几何重建；在不少于 2 帧的序列上指定整数 `query_frame` 可启用 4D 稠密追踪。在 CUDA 上可按需安装 `flex_gemm` 加速稀疏深度细化，未安装时自动回退至与权重完全一致的纯 PyTorch 稀疏实现。"
+        ],
+        "highlights": [
+          "4D Reconstruction",
+          "3D Reconstruction",
+          "Point Cloud",
+          "Unified env · Python 3.11 · CUDA 12.8",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "4d-reconstruction",
+          "3D 重建",
+          "点云",
+          "统一环境 · Python 3.11 · CUDA 12.8",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [],
+          "outputs": [
+            "point cloud"
+          ]
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": null,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [],
+        "limitations": [
+          "CC BY-NC 4.0 code and weights: non-commercial terms apply downstream (CoWTracker-derived components also carry the FAIR Noncommercial Research License).",
+          "Pure-PyTorch sparse 3D refinement runs without `flex_gemm` on CPU and CUDA (verified on H200 with `yyfz233/Pi4`), but is slower than Triton/FlexGEMM kernels on long high-resolution sequences."
+        ],
+        "limitationsZh": [
+          "代码与权重均为 CC BY-NC 4.0：下游须遵守非商用许可条款（CoWTracker 衍生组件同时适用 FAIR Noncommercial Research License）。",
+          "纯 PyTorch 稀疏 3D 细化无需 `flex_gemm` 即可在 CPU 与 CUDA 上运行（已在 H200 上通过 `yyfz233/Pi4` 真实权重验证），但在长高分辨率序列上速度慢于 Triton/FlexGEMM 核函数。"
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh pi4",
+        "install": "bash scripts/setup/model_env_install.sh --model pi4",
+        "inspect": "wf zoo model-show --model-id pi4 --include-manifest --json",
+        "check": "wf zoo model-download --model-id pi4 --check-local --json",
+        "run": "wf run \\\n  pi4 \\\n  --pipeline.task-profile reconstruction \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/three_d_four_d/pi4.yaml"
     },
     {
       "id": "pointworld",

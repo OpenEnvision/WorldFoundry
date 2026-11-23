@@ -1,12 +1,12 @@
 {
-  "modelsListed": 255,
+  "modelsListed": 260,
   "benchmarksTotal": 75,
   "modelFamilies": [
     {
       "id": "video",
       "label": "Video",
       "blurb": "Text-, image-, and video-conditioned generation, editing, and audio-video systems.",
-      "count": 63,
+      "count": 65,
       "entries": [
         {
           "id": "allegro",
@@ -91,6 +91,14 @@
           "status": "integrated",
           "aliases": [
             "framepack"
+          ]
+        },
+        {
+          "id": "h3-tiny",
+          "name": "H 3-Tiny",
+          "status": "integrated",
+          "aliases": [
+            "h3-tiny"
           ]
         },
         {
@@ -334,6 +342,14 @@
           ]
         },
         {
+          "id": "pi-h3",
+          "name": "pi-H 3",
+          "status": "integrated",
+          "aliases": [
+            "pi-h3"
+          ]
+        },
+        {
           "id": "pika-h3-flex",
           "name": "Pika H 3 Flex",
           "status": "integrated",
@@ -524,7 +540,7 @@
       "id": "world_models",
       "label": "World models",
       "blurb": "Interactive worlds, camera/action conditioning, navigation, and simulator-shaped systems.",
-      "count": 101,
+      "count": 103,
       "entries": [
         {
           "id": "abot-world-0-5b-lf",
@@ -740,6 +756,14 @@
           ]
         },
         {
+          "id": "fastframes",
+          "name": "FastFrames",
+          "status": "integrated",
+          "aliases": [
+            "fastframes"
+          ]
+        },
+        {
           "id": "gamma-world",
           "name": "Gamma-World",
           "status": "integrated",
@@ -769,6 +793,14 @@
           "status": "runtime_ported",
           "aliases": [
             "giga-world-0"
+          ]
+        },
+        {
+          "id": "h3-world",
+          "name": "H 3-World",
+          "status": "integrated",
+          "aliases": [
+            "h3-world"
           ]
         },
         {
@@ -1370,7 +1402,7 @@
       "id": "three_d_four_d",
       "label": "3D / 4D",
       "blurb": "Reconstruction, depth, point clouds, scene representations, and dynamic geometry.",
-      "count": 28,
+      "count": 29,
       "entries": [
         {
           "id": "cut3r",
@@ -1511,6 +1543,14 @@
           "status": "runtime_ported",
           "aliases": [
             "pi3"
+          ]
+        },
+        {
+          "id": "pi4",
+          "name": "Pi 4",
+          "status": "runtime_ported",
+          "aliases": [
+            "pi4"
           ]
         },
         {
