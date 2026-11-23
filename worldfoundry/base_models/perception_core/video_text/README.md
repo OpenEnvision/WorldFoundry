@@ -8,6 +8,7 @@ Video–text alignment models: how well a generated video matches its prompt.
 | [`vqa_score/`](vqa_score/README.md) | t2v_metrics VQAScore / ITMScore / CLIPScore model zoo (CLIP-FlanT5, BLIP-2, InternVideo2, UMT, LLaVA, Qwen2-VL, PerceptionLM backends) | GenAI-Bench → VQAScore (`clip-flant5-xxl`); CameraBench → BLIP-2 ITM; PhyGenBench → VQAScore; reached through `worldfoundry/evals/tasks/execution/runners/_scorers/` |
 | `blip2_feature_extractor.py` | BLIP-2 feature extractor (LAVIS) | VBench++ trustworthiness → gender bias |
 | [`fetv_blip/`](fetv_blip/README.md) | FETV BLIP retrieval model | FETV → BLIP-based text–video alignment |
+| [`opens2v_nexus/`](opens2v_nexus/README.md) | OpenS2V-Nexus subject-to-video scorers | `tasks/metrics/scorer/opens2v` (`nexus_score`, `natural_score`, `gme_score`), `tasks/metrics/scorer/facesim_cur` (`facesim_cur`) |
 
 ## Usage
 

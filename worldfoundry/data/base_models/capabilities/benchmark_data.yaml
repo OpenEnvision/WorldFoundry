@@ -303,14 +303,14 @@ t2v_metrics_source_assets:
 
 jedi_source_assets:
   family: benchmark_data_asset
-  canonical_path: worldfoundry/evals/tasks/metrics/jedi
+  canonical_path: worldfoundry/evals/tasks/metrics/distribution/jedi
   gpu_required: false
   assets:
     - id: jedi_in_tree_source
       kind: dir
       role: benchmark_source
       env: [WORLDFOUNDRY_JEDI_ROOT]
-      local_path: ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evals/tasks/metrics/jedi
+      local_path: ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evals/tasks/metrics/distribution/jedi
       min_file_count: 4
       required_files: [JEDi.py, V_JEPA.py, mmd_polynomial.py, utils.py]
       note: In-tree VideoJEDi metric package vendored from oooolga/JEDi. WORLDFOUNDRY_JEDI_ROOT is only an optional

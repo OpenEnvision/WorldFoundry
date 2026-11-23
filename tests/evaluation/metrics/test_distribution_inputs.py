@@ -28,8 +28,8 @@ class PixelFeatures(FeatureExtractorBase):
     def get_provided_features_list():
         return ("2048", "logits_unbiased")
 
-    def forward(self, images):
-        features = images.float().mean((2, 3))[:, :2] / 255
+    def forward(self, input):
+        features = input.float().mean((2, 3))[:, :2] / 255
         return tuple(features for _ in self.features_list)
 
 
@@ -74,7 +74,7 @@ class DistributionInputTests(unittest.TestCase):
                     self.assertEqual(actual, expected)
 
     def test_swav_lists_match_directory_statistics(self):
-        from worldfoundry.evals.tasks.metrics.fid.swav import _swav_fid_module
+        from worldfoundry.evals.tasks.metrics.distribution.fid.swav import _swav_fid_module
 
         module = _swav_fid_module()
         native_statistics = module.calculate_activation_statistics

@@ -2,9 +2,9 @@
 
 Provenance: the Fréchet/covariance math, uint8-video preprocessing, the I3D
 backbone, and the checkpoint resolution that used to be vendored in this file
-are single-sourced in ``worldfoundry.evals.tasks.metrics.fvd`` (that code
+are single-sourced in ``worldfoundry.evals.tasks.metrics.distribution.fvd`` (that code
 was originally adapted from this MiraBench copy). The polynomial-kernel MMD
-behind KVD is single-sourced in ``worldfoundry.evals.tasks.metrics.kid``.
+behind KVD is single-sourced in ``worldfoundry.evals.tasks.metrics.distribution.kid``.
 This module keeps only the MiraBench-specific protocol: the numbered
 ``frames_<n>.png`` directory layout, 100-frame uniform subsampling, and the
 batch-1 video loader.
@@ -18,12 +18,12 @@ import torch.nn.functional as F
 from PIL import Image
 from tqdm import tqdm
 
-from worldfoundry.evals.tasks.metrics.fvd.fvd_core import (
+from worldfoundry.evals.tasks.metrics.distribution.fvd.fvd_core import (
     frechet_distance,
     load_fvd_i3d,
     resolve_i3d_checkpoint,
 )
-from worldfoundry.evals.tasks.metrics.kid import polynomial_mmd
+from worldfoundry.evals.tasks.metrics.distribution.kid import polynomial_mmd
 
 TARGET_RESOLUTION = (224, 224)
 

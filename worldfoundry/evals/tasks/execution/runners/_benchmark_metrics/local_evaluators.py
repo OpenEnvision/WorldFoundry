@@ -611,7 +611,7 @@ def _success_rate_metric(request: Any, entry: Any) -> MetricResult:
 
 def _jedi_mmd_metric(request: Any, entry: Any) -> MetricResult:
     """Evaluate VideoJEDi score from precomputed train/test feature arrays."""
-    from worldfoundry.evals.tasks.metrics.jedi.jedi_runtime import score_from_feature_payload
+    from worldfoundry.evals.tasks.metrics.distribution.jedi.jedi_runtime import score_from_feature_payload
 
     payload = _metric_payload(request)
     if not isinstance(payload, Mapping) and isinstance(request.reference, Mapping):

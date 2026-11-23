@@ -230,7 +230,7 @@ t2v_metrics_internvideo2_itm:
 
 jedi_vjepa_vith16:
   family: video_metric_model
-  canonical_path: worldfoundry/evals/tasks/metrics/jedi
+  canonical_path: worldfoundry/evals/tasks/metrics/distribution/jedi
   package_imports: [torch, vjepa, numpy, yaml]
   install_packages: [torch, vjepa, numpy, pyyaml]
   assets:
@@ -248,7 +248,7 @@ jedi_vjepa_vith16:
 
 jedi_vjepa_ssv2_probe:
   family: video_metric_model
-  canonical_path: worldfoundry/evals/tasks/metrics/jedi
+  canonical_path: worldfoundry/evals/tasks/metrics/distribution/jedi
   package_imports: [torch, vjepa, numpy, yaml]
   install_packages: [torch, vjepa, numpy, pyyaml]
   assets:

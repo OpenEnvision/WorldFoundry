@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 class JEDiIntegrationSmokeTests(unittest.TestCase):
     def test_jedi_wrapper_compute_from_features(self) -> None:
-        from worldfoundry.evals.tasks.metrics.jedi import compute_jedi_from_features, compute_mock_jedi
+        from worldfoundry.evals.tasks.metrics.distribution.jedi import compute_jedi_from_features, compute_mock_jedi
 
         score = compute_mock_jedi(num_samples=128, feature_dim=64)
         self.assertGreaterEqual(score, 0.0)
@@ -24,7 +24,7 @@ class JEDiIntegrationSmokeTests(unittest.TestCase):
 
     def test_bundled_jedi_assets_resolve_without_env(self) -> None:
         from worldfoundry.evals.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
-        from worldfoundry.evals.tasks.metrics.jedi import bundled_config_path, resolve_config_path
+        from worldfoundry.evals.tasks.metrics.distribution.jedi import bundled_config_path, resolve_config_path
 
         metadata = json.loads(bundled_benchmark_asset("jedi", "metadata.json").read_text(encoding="utf-8"))
         self.assertEqual(metadata["metric_id"], "jedi_score")
@@ -33,7 +33,7 @@ class JEDiIntegrationSmokeTests(unittest.TestCase):
         self.assertEqual(Path(config_path), bundled_config_path())
 
     def test_mock_runtime_writes_score(self) -> None:
-        from worldfoundry.evals.tasks.metrics.jedi.jedi_runtime import JEDiScorerConfig, run_jedi_scorer
+        from worldfoundry.evals.tasks.metrics.distribution.jedi.jedi_runtime import JEDiScorerConfig, run_jedi_scorer
 
         with tempfile.TemporaryDirectory() as tmp:
             summary = run_jedi_scorer(
@@ -47,7 +47,7 @@ class JEDiIntegrationSmokeTests(unittest.TestCase):
 
     def test_local_jedi_evaluator_from_payload(self) -> None:
         from worldfoundry.evals.tasks.execution.runners._benchmark_metrics import evaluate_external_metric
-        from worldfoundry.evals.tasks.metrics.jedi.jedi_runtime import mock_feature_payload
+        from worldfoundry.evals.tasks.metrics.distribution.jedi.jedi_runtime import mock_feature_payload
 
         payload = mock_feature_payload(
             train_seed="train-fixture",
@@ -61,6 +61,8 @@ class JEDiIntegrationSmokeTests(unittest.TestCase):
             generated_artifact_manifest=payload,
         )
         self.assertTrue(result.valid)
+        self.assertIsNotNone(result.normalized_value)
+        assert result.normalized_value is not None
         self.assertGreaterEqual(float(result.normalized_value), 0.0)
 
 

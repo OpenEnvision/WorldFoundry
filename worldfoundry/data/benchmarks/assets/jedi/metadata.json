@@ -8,5 +8,5 @@
   "pixel_range": [0, 1],
   "default_num_samples": 5000,
   "default_feature_dim": 1280,
-  "metric_package": "worldfoundry/evals/tasks/metrics/jedi"
+  "metric_package": "worldfoundry/evals/tasks/metrics/distribution/jedi"
 }

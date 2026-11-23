@@ -9,7 +9,7 @@ import pytest
 import torch
 from torch import nn
 
-from worldfoundry.evals.tasks.metrics.fvd.pytorch_i3d import InceptionI3d
+from worldfoundry.evals.tasks.metrics.distribution.fvd.pytorch_i3d import InceptionI3d
 
 pytestmark = pytest.mark.unit
 

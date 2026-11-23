@@ -41,7 +41,7 @@ ALLOWLIST = {
 
 FIRST_ROUND_CLEAN = (
     "worldfoundry/base_models/diffusion_model/models/networks/wan/media_geometry.py",
-    "worldfoundry/evals/tasks/metrics/jedi/V_JEPA.py",
+    "worldfoundry/evals/tasks/metrics/distribution/jedi/V_JEPA.py",
     "worldfoundry/evals/tasks/execution/runners/memobench/runtime/memobench/evaluation/run_eval.py",
 )
 

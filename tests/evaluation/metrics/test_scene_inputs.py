@@ -12,7 +12,7 @@ from unittest.mock import patch
 from PIL import Image
 
 from worldfoundry.evals.tasks.metrics._shared.bbox import bbox_iou
-from worldfoundry.evals.tasks.metrics.fid.scene import compute_scene_fid, extract_object_crops
+from worldfoundry.evals.tasks.metrics.distribution.fid.scene import compute_scene_fid, extract_object_crops
 
 
 class SceneInputTests(unittest.TestCase):
@@ -42,7 +42,7 @@ class SceneInputTests(unittest.TestCase):
                         self.assertEqual(gen.getpixel((0, 0)), (0, 0, 255))
                     return 3.0
 
-                with patch("worldfoundry.evals.tasks.metrics.fid.scene.compute_fid", side_effect=verify):
+                with patch("worldfoundry.evals.tasks.metrics.distribution.fid.scene.compute_fid", side_effect=verify):
                     self.assertEqual(
                         compute_scene_fid(self.reference, self.generated, reference_bboxes_json=self.boxes, cuda=False),
                         3.0,
@@ -74,7 +74,7 @@ class SceneInputTests(unittest.TestCase):
                 self.assertEqual(gen.getpixel((0, 0)), (0, 0, 255))
             return 3.0
 
-        with patch("worldfoundry.evals.tasks.metrics.fid.scene.compute_fid", side_effect=verify):
+        with patch("worldfoundry.evals.tasks.metrics.distribution.fid.scene.compute_fid", side_effect=verify):
             self.assertEqual(
                 compute_scene_fid(
                     self.reference,
@@ -91,7 +91,7 @@ class SceneInputTests(unittest.TestCase):
         self.boxes.write_text(json.dumps({str(self.reference / "nested/image.png"): [[0, 0, 64, 64]]}))
         with (
             self.assertRaises(FileNotFoundError),
-            patch("worldfoundry.evals.tasks.metrics.fid.scene.compute_fid") as fid,
+            patch("worldfoundry.evals.tasks.metrics.distribution.fid.scene.compute_fid") as fid,
         ):
             compute_scene_fid(self.reference, self.generated, reference_bboxes_json=self.boxes, cuda=False)
         fid.assert_not_called()

@@ -1,8 +1,8 @@
 """MiraBench official FID/KID protocol adapter.
 
 Provenance: the torchmetrics FID/KID update loops previously vendored here are
-single-sourced in ``worldfoundry.evals.tasks.metrics.fid`` /
-``worldfoundry.evals.tasks.metrics.kid``; the unused Inception-v3 FID
+single-sourced in ``worldfoundry.evals.tasks.metrics.distribution.fid`` /
+``worldfoundry.evals.tasks.metrics.distribution.kid``; the unused Inception-v3 FID
 network copy (``evaluation/inception.py``) was deleted as a dead duplicate of
 the in-tree FID backbone. This module keeps only the MiraBench-specific
 protocol: 100-frame uniform subsampling per video directory and the official
@@ -15,7 +15,7 @@ import numpy as np
 import torchvision.transforms as TF
 from PIL import Image
 
-from worldfoundry.evals.tasks.metrics.fid import compute_paired_fid_kid
+from worldfoundry.evals.tasks.metrics.distribution.fid import compute_paired_fid_kid
 
 
 def load_frame_path_from_dir(datadir, select_frame=100):

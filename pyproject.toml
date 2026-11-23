@@ -519,7 +519,7 @@ exclude = [
     "worldfoundry/synthesis/**",
     "worldfoundry/evals/tasks/execution/runners/*/runtime/**",
     "worldfoundry/evals/tasks/execution/runners/*/official/**",
-    "worldfoundry/evals/tasks/metrics/*/vendor/**",
+    "worldfoundry/evals/tasks/metrics/**/vendor/**",
 ]
 
 [tool.ty.analysis]

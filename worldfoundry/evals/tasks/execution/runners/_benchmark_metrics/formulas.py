@@ -1109,7 +1109,7 @@ def jedi_mmd_score(
     test_features: Any,
 ) -> float:
     """Compute the VideoJEDi polynomial-kernel MMD score from feature arrays."""
-    from worldfoundry.evals.tasks.metrics.jedi.wrapper import compute_jedi_from_features
+    from worldfoundry.evals.tasks.metrics.distribution.jedi.wrapper import compute_jedi_from_features
 
     return compute_jedi_from_features(train_features, test_features)
 
