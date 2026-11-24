@@ -325,7 +325,10 @@ def flash_attention(
             softmax_scale=softmax_scale,
             causal=causal,
             deterministic=deterministic,
-        )[0].unflatten(0, (b, lq))
+        )
+        if isinstance(x, tuple):
+            x = x[0]
+        x = x.unflatten(0, (b, lq))
     elif not FLASH_ATTN_2_AVAILABLE:
         # CUDA stacks. Fall back to PyTorch SDPA so small demos can still run.
         q_offset = 0

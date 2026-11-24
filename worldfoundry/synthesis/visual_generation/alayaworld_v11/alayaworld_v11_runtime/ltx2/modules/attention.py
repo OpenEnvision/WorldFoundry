@@ -122,7 +122,10 @@ def flash_attention(
             softmax_scale=softmax_scale,
             causal=causal,
             deterministic=deterministic,
-        )[0].unflatten(0, (b, lq))
+        )
+        if isinstance(x, tuple):
+            x = x[0]
+        x = x.unflatten(0, (b, lq))
     elif _FLASH_ATTN_2_AVAILABLE:
         x = _flash_attn_mod.flash_attn_varlen_func(
             q=q,
