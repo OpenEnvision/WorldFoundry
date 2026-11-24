@@ -44,3 +44,33 @@ def test_cameractrl_catalog_supplies_the_required_v3_adapter(tmp_path, monkeypat
 
     assert load_kwargs["motion_adapter_ckpt"] == str(adapter)
     assert load_kwargs["unet_subfolder"] == "unet"
+
+
+def test_attn_processor_handles_plain_linear_without_peft(monkeypatch) -> None:
+    from types import SimpleNamespace
+    from typing import Any, cast
+
+    from worldfoundry.synthesis.visual_generation.cameractrl.cameractrl_runtime.models import (
+        attention_processor,
+    )
+
+    monkeypatch.setattr(attention_processor, "USE_PEFT_BACKEND", False)
+    attn = SimpleNamespace(
+        spatial_norm=None,
+        group_norm=None,
+        norm_cross=False,
+        residual_connection=False,
+        rescale_output_factor=1.0,
+        prepare_attention_mask=lambda mask, seq_len, batch: mask,
+        to_q=torch.nn.Linear(4, 4),
+        to_k=torch.nn.Linear(4, 4),
+        to_v=torch.nn.Linear(4, 4),
+        to_out=torch.nn.ModuleList([torch.nn.Linear(4, 4), torch.nn.Identity()]),
+        head_to_batch_dim=lambda x: x,
+        get_attention_scores=lambda q, k, mask: torch.bmm(q, k.transpose(-1, -2)),
+        batch_to_head_dim=lambda x: x,
+    )
+
+    out = attention_processor.AttnProcessor()(cast(Any, attn), cast(Any, torch.randn(1, 3, 4)), scale=0.5)
+
+    assert out.shape == (1, 3, 4)

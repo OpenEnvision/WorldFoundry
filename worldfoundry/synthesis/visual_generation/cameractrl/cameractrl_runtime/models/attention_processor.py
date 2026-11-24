@@ -28,7 +28,7 @@ class AttnProcessor:
     ) -> torch.Tensor:
         residual = hidden_states
 
-        args = () if USE_PEFT_BACKEND else (scale,)
+        args = () if USE_PEFT_BACKEND or not hasattr(attn.to_q, "lora_layer") else (scale,)
 
         if attn.spatial_norm is not None:
             hidden_states = attn.spatial_norm(hidden_states, temb)
