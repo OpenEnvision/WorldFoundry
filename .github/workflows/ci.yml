@@ -169,7 +169,7 @@ jobs:
             "transformers>=4.57,<4.58" ftfy regex opencv-python-headless "aiohttp>=3.10,<4" scikit-image accelerate \
             av imageio imageio-ffmpeg easydict loguru matplotlib dm-tree "timm>=0.9,<2" "aiortc>=1.9,<2" "diffusers>=0.39,<0.40" \
             beautifulsoup4 decord "einops-exts==0.0.4" gdown hydra-core kornia lightning-utilities msgspec \
-            open-clip-torch "pytorch-lightning==2.6.1" trimesh
+            open-clip-torch plyfile "pytorch-lightning==2.6.1" rich sentencepiece trimesh
       - name: Set up Node for realtime client contracts
         uses: actions/setup-node@v6
         with:

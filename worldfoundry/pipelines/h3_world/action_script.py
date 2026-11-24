@@ -7,9 +7,17 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import numpy as np
+if TYPE_CHECKING:
+    import numpy as np
+
+
+def _np() -> Any:
+    import numpy as np
+
+    return np
+
 
 H3_WORLD_KEYS9: tuple[str, ...] = ("W", "A", "S", "D", "I", "J", "K", "L", "F")
 _KEY_TO_INDEX: dict[str, int] = {key: index for index, key in enumerate(H3_WORLD_KEYS9)}
@@ -71,7 +79,7 @@ def _camera_clause(on: dict[str, bool], *, moving: bool) -> str:
 
 def annotate_from_keys9(keys9: np.ndarray) -> list[str]:
     """Convert a ``[latent_t, 9]`` binary key array into per-latent H3-World clauses."""
-
+    np = _np()
     array = np.asarray(keys9)
     if array.ndim != 2 or array.shape[1] != len(H3_WORLD_KEYS9):
         raise ValueError(f"expected keys9 shape [latent_t, {len(H3_WORLD_KEYS9)}], got {list(array.shape)}")
@@ -93,6 +101,7 @@ def null_action_script(latent_t: int) -> list[str]:
 
 
 def _keys_to_row(keys: Sequence[str]) -> np.ndarray:
+    np = _np()
     row = np.zeros(len(H3_WORLD_KEYS9), dtype=np.int64)
     for raw in keys:
         token = str(raw).strip()
@@ -121,7 +130,7 @@ def _preset_to_row(preset: str) -> np.ndarray:
 
 def _interactions_to_script(interactions: Any, *, latent_t: int) -> list[str]:
     """Normalize presets, key combos, scheduled segments, or [T, 9] arrays into sentences."""
-
+    np = _np()
     if isinstance(interactions, str):
         token = interactions.strip()
         if token.lower() in H3_WORLD_ACTION_PRESETS:
@@ -212,7 +221,7 @@ def resolve_action_script(
     default_preset: str = "forward",
 ) -> list[str]:
     """Resolve user-supplied preset, interactions, or explicit sentences into ``latent_t`` clauses."""
-
+    np = _np()
     provided = sum(value is not None for value in (action_preset, action_script, interactions))
     if provided > 1:
         raise ValueError("Specify at most one of action_preset, action_script, or interactions")

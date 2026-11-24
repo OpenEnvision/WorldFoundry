@@ -3,7 +3,11 @@ from copy import deepcopy
 
 import numpy as np
 import torch
-from rich import print
+
+try:
+    from rich import print as _rich_print
+except ModuleNotFoundError:
+    _rich_print = print
 
 from worldfoundry.core.configuration.factory import (
     get_obj_from_str as get_obj_from_str,
@@ -14,7 +18,7 @@ from worldfoundry.core.configuration.factory import (
 
 
 def print0(*args, **kwargs):
-    print(*args, **kwargs)  # python -m rich.color
+    _rich_print(*args, **kwargs)  # python -m rich.color
 
 
 def tensor_to_uint8(tensor):
