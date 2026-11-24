@@ -241,6 +241,13 @@ INFERENCE_GUIDE_PATHS = (
     "worldfoundry/base_models/three_dimensions/README.md",
 )
 
+EVALUATOR_CPU_PATHS = (
+    "worldfoundry/base_models/perception_core/frame_interpolation/amt/motion_smoothness.py",
+    "worldfoundry/base_models/perception_core/frame_interpolation/amt/networks/AMT-S.py",
+    "worldfoundry/base_models/perception_core/frame_interpolation/amt/networks/blocks/feat_enc.py",
+    "worldfoundry/base_models/perception_core/optical_flow/flowformerplusplus/core/FlowFormer/PerCostFormer3/cnn.py",
+)
+
 UNREPRESENTED_REPLAY_PATHS = (
     "worldfoundry/base_models/three_dimensions/point_clouds/pi3_source.py",
     "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/prior_dinov2.py",
@@ -260,7 +267,7 @@ def declared_replay_ownership_plan() -> dict:
         TOOLS / "geometry_regression_cases.json",
         TOOLS / "geometry_regression_dependencies.json",
         TOOLS.parents[1],
-        [*paths, *INFERENCE_GUIDE_PATHS, *UNREPRESENTED_REPLAY_PATHS],
+        [*paths, *INFERENCE_GUIDE_PATHS, *UNREPRESENTED_REPLAY_PATHS, *EVALUATOR_CPU_PATHS],
     )
 
 
@@ -291,6 +298,18 @@ def test_inference_guides_are_documentation_not_replay_dependencies(declared_rep
     assert all(
         reason.get("path") not in INFERENCE_GUIDE_PATHS for reasons in plan["reasons"].values() for reason in reasons
     )
+
+
+@pytest.mark.unit
+def test_exact_evaluator_changes_require_cpu_contracts(declared_replay_ownership_plan: dict) -> None:
+    plan = declared_replay_ownership_plan
+    assert set(EVALUATOR_CPU_PATHS).isdisjoint(plan["uncovered_paths"])
+    proofs = {item["path"]: item["required_cpu_contracts"] for item in plan["cpu_only_changes"]}
+    for path in EVALUATOR_CPU_PATHS:
+        assert set(proofs[path]) == {
+            "tests/base_models/perception_core/optical_flow/test_raft_features.py",
+            "tests/evaluation/execution/test_vbench_sampling.py",
+        }
 
 
 @pytest.mark.unit

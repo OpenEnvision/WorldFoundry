@@ -12,6 +12,7 @@ from unittest.mock import Mock
 
 import numpy as np
 import pytest
+from PIL import Image
 
 pytestmark = pytest.mark.unit
 
@@ -70,3 +71,25 @@ def test_deterministic_frame_selection(
     sampling: ModuleType, options: dict[str, str | int], expected: list[int]
 ) -> None:
     assert sampling.get_frame_indices(4, 40, **options) == expected
+
+
+@pytest.mark.parametrize("prefix", ["", "frames_"])
+def test_amt_motion_smoothness_reads_numbered_rgb_frames(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prefix: str
+) -> None:
+    from worldfoundry.base_models.perception_core.frame_interpolation.amt import motion_smoothness
+
+    first = (25, 40, 70)
+    last = (110, 160, 210)
+    Image.new("RGB", (3, 2), last).save(tmp_path / f"{prefix}10.png")
+    Image.new("RGB", (3, 2), first).save(tmp_path / f"{prefix}2.png")
+    Image.new("RGB", (3, 2)).save(tmp_path / "preview.png")
+
+    def read_bgr(filename: str, mode: int) -> np.ndarray:
+        assert mode == motion_smoothness.cv2.IMREAD_COLOR
+        with Image.open(filename) as image:
+            return np.array(image.convert("RGB"))[:, :, ::-1].copy()
+
+    monkeypatch.setattr(motion_smoothness.cv2, "imread", read_bgr)
+    frames = motion_smoothness.FrameProcess().get_frames_from_img_folder(tmp_path)
+    np.testing.assert_array_equal(frames, np.broadcast_to(np.array([first, last])[:, None, None], (2, 2, 3, 3)))

@@ -1618,6 +1618,19 @@
   "cpu_only_components": [
     {
       "paths": [
+        "worldfoundry/base_models/perception_core/frame_interpolation/amt/motion_smoothness.py",
+        "worldfoundry/base_models/perception_core/frame_interpolation/amt/networks/AMT-S.py",
+        "worldfoundry/base_models/perception_core/frame_interpolation/amt/networks/blocks/feat_enc.py",
+        "worldfoundry/base_models/perception_core/optical_flow/flowformerplusplus/core/FlowFormer/PerCostFormer3/cnn.py"
+      ],
+      "reason": "Benchmark motion-smoothness and optical-flow scoring. CPU contracts exercise numbered RGB frame selection and the AMT and FlowFormer feature encoders.",
+      "required_cpu_contracts": [
+        "tests/base_models/perception_core/optical_flow/test_raft_features.py",
+        "tests/evaluation/execution/test_vbench_sampling.py"
+      ]
+    },
+    {
+      "paths": [
         "benchmarks/__init__.py",
         "benchmarks/harness.py",
         "benchmarks/inference/__init__.py",
