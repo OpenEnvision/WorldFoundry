@@ -248,6 +248,14 @@ EVALUATOR_CPU_PATHS = (
     "worldfoundry/base_models/perception_core/optical_flow/flowformerplusplus/core/FlowFormer/PerCostFormer3/cnn.py",
 )
 
+TRACKING_SCORER_PATHS = (
+    "worldfoundry/base_models/perception_core/tracking/cotracker/models/core/cotracker/blocks.py",
+    "worldfoundry/base_models/perception_core/tracking/dot/models/shelf/"
+    "cotracker2_utils/models/core/cotracker/blocks.py",
+    "worldfoundry/base_models/perception_core/tracking/dot/models/shelf/"
+    "cotracker3_utils/models/core/cotracker/blocks.py",
+)
+
 UNREPRESENTED_REPLAY_PATHS = (
     "worldfoundry/base_models/three_dimensions/point_clouds/pi3_source.py",
     "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/prior_dinov2.py",
@@ -267,7 +275,7 @@ def declared_replay_ownership_plan() -> dict:
         TOOLS / "geometry_regression_cases.json",
         TOOLS / "geometry_regression_dependencies.json",
         TOOLS.parents[1],
-        [*paths, *INFERENCE_GUIDE_PATHS, *UNREPRESENTED_REPLAY_PATHS, *EVALUATOR_CPU_PATHS],
+        [*paths, *INFERENCE_GUIDE_PATHS, *UNREPRESENTED_REPLAY_PATHS, *EVALUATOR_CPU_PATHS, *TRACKING_SCORER_PATHS],
     )
 
 
@@ -310,6 +318,15 @@ def test_exact_evaluator_changes_require_cpu_contracts(declared_replay_ownership
             "tests/base_models/perception_core/optical_flow/test_raft_features.py",
             "tests/evaluation/execution/test_vbench_sampling.py",
         }
+
+
+@pytest.mark.unit
+def test_tracking_scorer_changes_require_cpu_contracts(declared_replay_ownership_plan: dict) -> None:
+    plan = declared_replay_ownership_plan
+    assert set(TRACKING_SCORER_PATHS).isdisjoint(plan["uncovered_paths"])
+    proofs = {item["path"]: item["required_cpu_contracts"] for item in plan["cpu_only_changes"]}
+    for path in TRACKING_SCORER_PATHS:
+        assert proofs[path] == ["tests/evaluation/execution/test_vbench_sampling.py"]
 
 
 @pytest.mark.unit

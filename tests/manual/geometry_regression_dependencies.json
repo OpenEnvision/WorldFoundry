@@ -1671,6 +1671,17 @@
   "cpu_only_components": [
     {
       "paths": [
+        "worldfoundry/base_models/perception_core/tracking/cotracker/models/core/cotracker/blocks.py",
+        "worldfoundry/base_models/perception_core/tracking/dot/models/shelf/cotracker2_utils/models/core/cotracker/blocks.py",
+        "worldfoundry/base_models/perception_core/tracking/dot/models/shelf/cotracker3_utils/models/core/cotracker/blocks.py"
+      ],
+      "reason": "CoTracker and DOT feature blocks used by benchmark scoring. CPU contracts exercise scalar and paired option bindings, checkpoint key layout and MLP outputs.",
+      "required_cpu_contracts": [
+        "tests/evaluation/execution/test_vbench_sampling.py"
+      ]
+    },
+    {
+      "paths": [
         "worldfoundry/base_models/perception_core/frame_interpolation/amt/motion_smoothness.py",
         "worldfoundry/base_models/perception_core/frame_interpolation/amt/networks/AMT-S.py",
         "worldfoundry/base_models/perception_core/frame_interpolation/amt/networks/blocks/feat_enc.py",

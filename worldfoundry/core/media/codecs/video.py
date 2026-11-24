@@ -1004,7 +1004,16 @@ def write_video_torchvision(
     import cv2
     import numpy as np
 
-    frames = video_array.detach().cpu().numpy() if hasattr(video_array, "detach") else np.asarray(video_array)
+    if hasattr(video_array, "detach"):
+        import torch
+
+        tensor = video_array.detach().cpu()
+        # NumPy cannot represent BF16. Keep the float values for clipping.
+        if tensor.dtype == torch.bfloat16:
+            tensor = tensor.float()
+        frames = tensor.numpy()
+    else:
+        frames = np.asarray(video_array)
     if frames.ndim != 4 or frames.shape[-1] != 3:
         raise ValueError("write_video_torchvision expects frames shaped [T, H, W, C]")
     if frames.dtype != np.uint8:
