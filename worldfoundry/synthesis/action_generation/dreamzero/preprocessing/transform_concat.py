@@ -86,7 +86,7 @@ class ConcatTransform(InvertibleModalityTransform):
 
     def apply(self, data: dict[str, Any]) -> dict[str, Any]:
         grouped_keys = {}
-        for key in data:
+        for key in data.keys():  # noqa: SIM118 - tianshou.data.Batch.__iter__ yields Batch slices, not keys.
             try:
                 modality, _ = key.split(".")
             except:  # noqa: E722 - Also catches BaseException, as upstream.

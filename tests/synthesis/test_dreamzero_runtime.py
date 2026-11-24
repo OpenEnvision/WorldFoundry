@@ -42,3 +42,26 @@ def test_server_command_preserves_distributed_cache_and_chunk_settings(
     if chunk_size is not None:
         expected.extend(["--max-chunk-size", str(chunk_size)])
     assert command[8:] == expected
+
+
+def test_concat_transform_iterates_keys_view_for_batch_mapping() -> None:
+    import numpy as np
+
+    from worldfoundry.synthesis.action_generation.dreamzero.preprocessing.transform_concat import ConcatTransform
+
+    class _SliceIterBatch(dict):
+        def __iter__(self):
+            # Mimic tianshou==0.5.1 Batch.__iter__, which yields item slices rather than key strings.
+            return iter([{"not_a_string": 1}])
+
+    batch = _SliceIterBatch(
+        {
+            "video.ego": np.zeros((2, 4, 4, 3), dtype=np.uint8),
+            "annotation.prompt": "pick up cup",
+        }
+    )
+    transform = ConcatTransform(video_concat_order=["video.ego"])
+
+    out = transform.apply(batch)
+
+    assert out["video"].shape == (2, 1, 4, 4, 3)
