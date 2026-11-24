@@ -100,10 +100,12 @@ class UMT5EncoderModel:
         self,
         text_len=512,
         dtype=torch.bfloat16,
-        device=torch.cuda.current_device(),  # noqa: B008 - Default evaluated once at definition, as upstream.
+        device=None,
         checkpoint_path="models_t5_umt5-xxl-enc-bf16.pth",
         tokenizer_path=None,
     ):
+        if device is None:
+            device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device("cpu")
         self.text_len = text_len
         self.dtype = dtype
         self.device = device

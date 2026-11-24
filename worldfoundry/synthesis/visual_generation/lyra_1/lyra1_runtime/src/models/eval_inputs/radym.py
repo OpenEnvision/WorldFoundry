@@ -22,11 +22,9 @@ from typing import Any
 
 import cv2
 import numpy as np
-import OpenEXR
 import torch
 import torch.utils.data
 from decord import VideoReader
-from lru import LRU
 
 from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.eval_inputs.base import BaseDataset
 from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.eval_inputs.datafield import DataField
@@ -106,6 +104,8 @@ class Radym(BaseDataset):
                     self.mp4_file_paths.append(mp4_file)
         self.mp4_file_paths = sorted(self.mp4_file_paths)
         # Process-dependent LRU cache for file handles of the tar files.
+        from lru import LRU
+
         self.worker_id = None
         self.zip_descriptors = LRU(self.MAX_ZIP_DESCRIPTORS, callback=self._evict_zip_handle)
         # self.mp4_readers = LRU(self.MAX_MP4_READERS, callback=self._evict_mp4_reader)
@@ -268,6 +268,8 @@ class Radym(BaseDataset):
                 output_dict[data_field] = intrinsics_torch
 
             elif data_field == DataField.METRIC_DEPTH:
+                import OpenEXR
+
                 depth_zip_handle = self._get_zip_handle(video_idx, self.depth_folder, view_idx, self.depth_path)
                 depth_np = []
                 for frame_idx in frame_indices:
@@ -307,6 +309,8 @@ class Radym(BaseDataset):
                 output_dict[data_field] = mask_torch
 
             elif data_field == DataField.BACKWARD_FLOW:
+                import OpenEXR
+
                 flow_zip_handle = self._get_zip_handle(video_idx, "flow", view_idx)
                 flow_np = []
                 for frame_idx in frame_indices:

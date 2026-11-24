@@ -17,7 +17,6 @@ import json
 import random
 from collections.abc import Callable
 
-import Imath
 import numpy as np
 import torch
 import torchvision.transforms as transforms
@@ -267,6 +266,8 @@ def weighted_sample(
 
 
 def read_exr_depth_to_numpy(exr_file) -> np.ndarray:
+    import Imath
+
     header = exr_file.header()
     dw = header["dataWindow"]
     h = dw.max.y - dw.min.y + 1

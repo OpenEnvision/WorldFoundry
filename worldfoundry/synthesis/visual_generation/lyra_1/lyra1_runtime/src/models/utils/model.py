@@ -24,7 +24,6 @@ from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.ut
 from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.utils.cosmos_1_tokenizer import (
     load_cosmos_1_tokenizer,
 )
-from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.utils.mamba2 import Mamba2Block
 
 
 def load_vae(vae_backbone, vae_path):
@@ -143,6 +142,8 @@ def get_model_blocks(
     index_transformer_block=8,
 ):
     if use_mamba:
+        from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.utils.mamba2 import Mamba2Block
+
         # Mix of mamba2 and transformer
         if llrm_7m1t:
             enc_blocks = []

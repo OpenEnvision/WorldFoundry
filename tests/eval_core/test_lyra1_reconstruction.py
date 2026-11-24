@@ -284,9 +284,6 @@ def test_lyra1_save_reconstruction_inputs_writes_weights_only_tensor_latent(tmp_
 def test_lyra1_radym_load_rgb_latents_accepts_numpy_and_tensor(tmp_path: Path) -> None:
     np = pytest.importorskip("numpy")
     torch = pytest.importorskip("torch")
-    pytest.importorskip("OpenEXR")
-    pytest.importorskip("Imath")
-    pytest.importorskip("lru")
     pytest.importorskip("decord")
     from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.eval_inputs.radym import (
         _load_rgb_latents,
@@ -307,9 +304,6 @@ def test_lyra1_radym_load_rgb_latents_accepts_numpy_and_tensor(tmp_path: Path) -
 
 
 def test_lyra1_provider_getitem_stops_immediately_on_eval_failure() -> None:
-    pytest.importorskip("OpenEXR")
-    pytest.importorskip("Imath")
-    pytest.importorskip("lru")
     pytest.importorskip("decord")
     from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.eval_inputs.provider import (
         Provider,

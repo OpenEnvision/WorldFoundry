@@ -132,6 +132,7 @@ _PENDING_DEMO_ALIASES = frozenset(
         # ``pending`` without triggering the unregistered-status warning.
         "checkpoint_environment_required",
         "checkpoint_required",
+        "component_verified",
         "component_verified_worldgen_pending",
         "configured",
         "implemented",

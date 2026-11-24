@@ -62,7 +62,7 @@ metrics:
   leaderboard_key: calibration_tvd_percent
   aggregator: mean
   output_unit: percent
-  normalizer: percent:0:100
+  normalizer: scale_max:100
 - id: coverage_percent
   name: PAW-Coverage
   description: Percentage of the official physical-outcome support observed across repeated generated rollouts.
@@ -70,7 +70,7 @@ metrics:
   leaderboard_key: coverage_percent
   aggregator: mean
   output_unit: percent
-  normalizer: percent:0:100
+  normalizer: scale_max:100
 runner:
   normalization:
     artifact_official_run: true
