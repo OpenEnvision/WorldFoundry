@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import codecs
 import json
 import os
 import zipfile
@@ -29,6 +30,37 @@ from lru import LRU
 
 from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.eval_inputs.base import BaseDataset
 from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.eval_inputs.datafield import DataField
+
+
+def _safe_numpy_latent_globals() -> list[Any]:
+    """Return inert NumPy/codecs globals needed to load legacy array latents with weights_only=True."""
+    safe_globals: list[Any] = [
+        np.ndarray,
+        np.dtype,
+        codecs.encode,
+        type(np.dtype(np.float32)),
+        type(np.dtype(np.float16)),
+        type(np.dtype(np.float64)),
+    ]
+    for module_name in ("core", "_core"):
+        submod = getattr(np, module_name, None)
+        multiarray = getattr(submod, "multiarray", None) if submod is not None else None
+        reconstruct = getattr(multiarray, "_reconstruct", None) if multiarray is not None else None
+        if reconstruct is not None:
+            safe_globals.append(reconstruct)
+    return safe_globals
+
+
+def _load_rgb_latents(rgb_latents_path: Path) -> torch.Tensor:
+    with torch.serialization.safe_globals(_safe_numpy_latent_globals()):
+        rgb_latents_data = torch.load(
+            rgb_latents_path,
+            map_location="cpu",
+            weights_only=True,
+        )
+    if isinstance(rgb_latents_data, np.ndarray):
+        rgb_latents_data = torch.from_numpy(rgb_latents_data)
+    return rgb_latents_data
 
 
 class Radym(BaseDataset):
@@ -213,13 +245,7 @@ class Radym(BaseDataset):
             elif data_field == DataField.LATENT_RGB:
                 # Load rgb latent
                 rgb_latents_path = data_base_path / "latent" / f"{data_key}.pkl"
-                rgb_latents_data = torch.load(
-                    rgb_latents_path,
-                    map_location="cpu",
-                    weights_only=True,
-                )
-                if isinstance(rgb_latents_data, np.ndarray):
-                    rgb_latents_data = torch.from_numpy(rgb_latents_data)
+                rgb_latents_data = _load_rgb_latents(rgb_latents_path)
                 # Remove batch index
                 rgb_latents_data = rgb_latents_data[0]
                 output_dict[data_field] = rgb_latents_data

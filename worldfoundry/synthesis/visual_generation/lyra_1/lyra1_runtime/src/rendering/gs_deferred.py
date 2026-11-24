@@ -14,15 +14,17 @@
 # limitations under the License.
 
 import einops
-import kiui
 import numpy as np
 import torch
 import torch.nn.functional as F
-from gsplat.rendering import rasterization
 
-from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.utils.render import downscale_intrinsics
+from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.utils.render import (
+    downscale_intrinsics,
+    inverse_sigmoid,
+)
 from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.rendering.gs_deferred_patch import (
     DeferredBPPatch,
+    rasterize_rgbd,
 )
 
 
@@ -43,7 +45,7 @@ class DeferredBP(torch.autograd.Function):
         backgrounds,
         raster_kwargs,
     ):
-        rgbd, alpha, _ = rasterization(
+        rgbd, alpha, _ = rasterize_rgbd(
             means=xyz,
             quats=rotation,
             scales=scale,
@@ -56,8 +58,7 @@ class DeferredBP(torch.autograd.Function):
             near_plane=near_plane,
             far_plane=far_plane,
             backgrounds=backgrounds,
-            render_mode="RGB+ED",
-            **raster_kwargs,
+            raster_kwargs=raster_kwargs,
         )  # (1, H, W, 3)
         image, depth = rgbd[..., :3], rgbd[..., 3:]
         return image, alpha, depth  # (1, H, W, 3)
@@ -382,7 +383,7 @@ class GaussianRendererDeferred:
         # loop of loop...
         images, alphas, depths = [], [], []
         for b in range(B):
-            rendered_image_all, rendered_alpha_all, _ = rasterization(
+            rendered_image_all, rendered_alpha_all, _ = rasterize_rgbd(
                 means=means3D[b],
                 quats=rotations[b],
                 scales=scales[b],
@@ -395,8 +396,7 @@ class GaussianRendererDeferred:
                 near_plane=near_plane,
                 far_plane=far_plane,
                 backgrounds=backgrounds[b],
-                render_mode="RGB+ED",
-                **self.raster_kwargs,
+                raster_kwargs=self.raster_kwargs,
             )
             for rendered_image, rendered_alpha in zip(rendered_image_all, rendered_alpha_all, strict=False):
                 depths.append(rendered_image[..., 3:].permute(2, 0, 1))
@@ -440,7 +440,7 @@ class GaussianRendererDeferred:
 
         # invert activation to make it compatible with the original ply format
         if compatible:
-            opacity = kiui.op.inverse_sigmoid(opacity)
+            opacity = inverse_sigmoid(opacity)
             scales = torch.log(scales + 1e-8)
             shs = (shs - 0.5) / 0.28209479177387814
 

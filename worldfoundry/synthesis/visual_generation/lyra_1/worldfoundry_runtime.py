@@ -169,7 +169,7 @@ class Lyra1Runtime:
                 latent_value = latent_value.permute(0, 2, 1, 3, 4).contiguous()
             latent_dir = output_root / "latent"
             latent_dir.mkdir(parents=True, exist_ok=True)
-            torch.save(latent_value.numpy(), latent_dir / f"{clip_name}.pkl")
+            torch.save(latent_value, latent_dir / f"{clip_name}.pkl")
 
     def _write_plan(
         self,

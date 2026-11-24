@@ -23,6 +23,38 @@ from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
 from ..pipeline_utils import PipelineABC
 from .checkpoints import prepare_lyra1_checkpoint_root
 
+_REPRESENTATION_OPTION_KEYS: frozenset[str] = frozenset(
+    {
+        "ckpt_path",
+        "demo_config_path",
+        "inference_config_path",
+        "dataset_name",
+        "model_config_paths",
+        "vae_path",
+        "static_view_indices_fixed",
+        "target_index_subsample",
+        "set_manual_time_idx",
+        "target_index_manual",
+        "target_index_manual_start_idx",
+        "target_index_manual_num_idx",
+        "target_index_manual_stride",
+        "num_test_images",
+        "do_eval",
+        "use_depth",
+        "out_fps",
+        "save_grid",
+        "num_grid_samples",
+        "save_gt_input",
+        "save_video_input",
+        "save_gt_depth",
+        "save_rgb_decoding",
+        "save_gaussians",
+        "save_gaussians_orig",
+        "skip_existing",
+        "ckpt_name",
+    }
+)
+
 
 class Lyra1Pipeline(PipelineABC):
     """Lyra-1 pipeline supporting static image or dynamic video reconstruction."""
@@ -184,7 +216,7 @@ class Lyra1Pipeline(PipelineABC):
             generated_root = scratch_directory(f"lyra1_{mode}_generated_")
             reconstruction_root = scratch_directory(f"lyra1_{mode}_recon_")
 
-        synthesis_kwargs = dict(kwargs)
+        synthesis_kwargs = {key: value for key, value in kwargs.items() if key not in _REPRESENTATION_OPTION_KEYS}
         multi_trajectory = bool(synthesis_kwargs.pop("multi_trajectory", reconstruct_3d))
         synthesis_result = self.synthesis_model.predict(
             visual_input=processed["visual_input"],

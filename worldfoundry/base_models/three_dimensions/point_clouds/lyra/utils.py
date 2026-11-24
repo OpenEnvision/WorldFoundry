@@ -126,8 +126,10 @@ def local_lyra1_checkpoint_candidates() -> list[Path]:
     hfd_root = hfd_root_path()
     return [
         hfd_root / "Lyra",
+        hfd_root / "lyra-1",
         hfd_root / "nvidia--Lyra",
         ckpt_root / "Lyra",
+        ckpt_root / "lyra-1",
         ckpt_root / "Lyra-1" / "checkpoints",
     ]
 
@@ -198,7 +200,11 @@ def _candidate_lyra1_weights_subdir(path_value: Path) -> Path | None:
     candidates = [
         path_value,
         path_value / "Lyra",
+        path_value / "lyra-1",
+        path_value / "Lyra-1",
+        path_value / "nvidia--Lyra",
         path_value / "checkpoints" / "Lyra",
+        path_value / "checkpoints" / "lyra-1",
     ]
     for candidate in candidates:
         if (candidate / "lyra_static.pt").is_file() and (candidate / "lyra_dynamic.pt").is_file():

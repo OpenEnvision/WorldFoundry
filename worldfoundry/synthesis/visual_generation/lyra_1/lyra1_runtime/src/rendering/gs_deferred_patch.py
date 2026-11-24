@@ -13,9 +13,86 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import torch
 from gsplat.rendering import rasterization
 from torch.utils.checkpoint import _get_autocast_kwargs
+
+
+def rasterize_rgbd(
+    *,
+    means: torch.Tensor,
+    quats: torch.Tensor,
+    scales: torch.Tensor,
+    opacities: torch.Tensor,
+    colors: torch.Tensor,
+    viewmats: torch.Tensor,
+    Ks: torch.Tensor,
+    width: int,
+    height: int,
+    near_plane: float,
+    far_plane: float,
+    backgrounds: torch.Tensor | None,
+    raster_kwargs: dict,
+) -> tuple[torch.Tensor, torch.Tensor, dict]:
+    """Rasterize RGB and expected depth, keeping 3-channel passes when with_eval3d=True."""
+    if not raster_kwargs.get("with_eval3d", False) or colors.shape[-1] != 3:
+        return rasterization(
+            means=means,
+            quats=quats,
+            scales=scales,
+            opacities=opacities,
+            colors=colors,
+            viewmats=viewmats,
+            Ks=Ks,
+            width=width,
+            height=height,
+            near_plane=near_plane,
+            far_plane=far_plane,
+            backgrounds=backgrounds,
+            render_mode="RGB+ED",
+            **raster_kwargs,
+        )
+
+    image, alpha, meta = rasterization(
+        means=means,
+        quats=quats,
+        scales=scales,
+        opacities=opacities,
+        colors=colors,
+        viewmats=viewmats,
+        Ks=Ks,
+        width=width,
+        height=height,
+        near_plane=near_plane,
+        far_plane=far_plane,
+        backgrounds=backgrounds,
+        render_mode="RGB",
+        **raster_kwargs,
+    )
+    depths = meta["depths"]
+    zeros = torch.zeros_like(depths)
+    depth_colors = torch.stack((depths, zeros, zeros), dim=-1).contiguous()
+    zero_bg = torch.zeros_like(backgrounds) if backgrounds is not None else None
+    depth_accum, _, _ = rasterization(
+        means=means,
+        quats=quats,
+        scales=scales,
+        opacities=opacities,
+        colors=depth_colors,
+        viewmats=viewmats,
+        Ks=Ks,
+        width=width,
+        height=height,
+        near_plane=near_plane,
+        far_plane=far_plane,
+        backgrounds=zero_bg,
+        render_mode="RGB",
+        **raster_kwargs,
+    )
+    expected_depth = depth_accum[..., :1] / alpha.clamp(min=1e-10)
+    return torch.cat((image, expected_depth), dim=-1), alpha, meta
 
 
 class DeferredBPPatch(torch.autograd.Function):
@@ -94,7 +171,7 @@ class DeferredBPPatch(torch.autograd.Function):
                                 device=device,
                             )
 
-                            rgbd, alpha, _ = rasterization(
+                            rgbd, alpha, _ = rasterize_rgbd(
                                 means=xyz[i],
                                 quats=rotation[i],
                                 scales=scaling[i],
@@ -107,8 +184,7 @@ class DeferredBPPatch(torch.autograd.Function):
                                 near_plane=ctx.near_plane,  # Use near_plane here
                                 far_plane=ctx.far_plane,  # Use far_plane here
                                 backgrounds=ctx.backgrounds[i, j][None],
-                                render_mode="RGB+ED",  # RGB + Depth (last channel)
-                                **raster_kwargs,
+                                raster_kwargs=raster_kwargs,
                             )
 
                             # Permute and clamp the rendered image and alpha
@@ -222,7 +298,7 @@ class DeferredBPPatch(torch.autograd.Function):
                                 device=device,
                             )
 
-                            rgbd, alpha, _ = rasterization(
+                            rgbd, alpha, _ = rasterize_rgbd(
                                 means=xyz_nosync[i],
                                 quats=rotation_nosync[i],
                                 scales=scaling_nosync[i],
@@ -235,8 +311,7 @@ class DeferredBPPatch(torch.autograd.Function):
                                 near_plane=ctx.near_plane,
                                 far_plane=ctx.far_plane,
                                 backgrounds=ctx.backgrounds[i, j][None],
-                                render_mode="RGB+ED",
-                                **raster_kwargs,
+                                raster_kwargs=raster_kwargs,
                             )
 
                             # Permute and clamp the rendered image and alpha

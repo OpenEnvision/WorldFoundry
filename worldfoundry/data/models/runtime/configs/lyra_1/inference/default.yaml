@@ -1,7 +1,16 @@
 config_path: outputs/training/cosmos3dgs/config.yaml
 out_dir_inference: outputs/inference
+ckpt_path: null
+ckpt_name: null
 dataset_name: lyra_static_template
+static_view_indices_fixed: null
 target_index_subsample: 1
+set_manual_time_idx: false
+target_index_manual: null
+target_index_manual_start_idx: null
+target_index_manual_num_idx: null
+target_index_manual_stride: 1
+num_test_images: null
 do_eval: false
 use_depth: false
 out_fps: 24
@@ -12,4 +21,5 @@ save_video_input: false
 save_gt_depth: true
 save_rgb_decoding: false
 save_gaussians: false
+save_gaussians_orig: false
 skip_existing: false

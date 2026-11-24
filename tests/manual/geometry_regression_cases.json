@@ -8291,7 +8291,8 @@
     "target": "worldfoundry.pipelines.lyra.pipeline_lyra1:Lyra1Pipeline",
     "load": {
       "device": "cuda",
-      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}"
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}",
+      "load_representation": true
     },
     "call": {
       "prompt": "A slow exploratory camera move through a believable scene with stable geometry and lighting.",
@@ -8301,6 +8302,8 @@
       "num_video_frames": 121,
       "seed": 1,
       "reconstruct_3d": true,
+      "execute": true,
+      "save_gaussians_orig": true,
       "output_dir": "${OUTPUT_DIR}/lyra1",
       "return_dict": true
     },

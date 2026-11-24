@@ -13,10 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import kiui
 import numpy as np
 import torch
 from gsplat.rendering import rasterization
+
+from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.utils.render import inverse_sigmoid
 
 
 class GaussianRenderer:
@@ -116,7 +117,7 @@ class GaussianRenderer:
 
         # invert activation to make it compatible with the original ply format
         if compatible:
-            opacity = kiui.op.inverse_sigmoid(opacity)
+            opacity = inverse_sigmoid(opacity)
             scales = torch.log(scales + 1e-8)
             shs = (shs - 0.5) / 0.28209479177387814
 

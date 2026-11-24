@@ -618,6 +618,7 @@ class Provider(Dataset):
         )
 
     def __getitem__(self, idx):
+        max_retries = 0 if (not self.training or len(self.dataset) <= 1) else 20
         count = 0
         while True:
             try:
@@ -625,7 +626,9 @@ class Provider(Dataset):
                 break
             except Exception as e:
                 count += 1
-                if count > 20:
+                if count > max_retries:
+                    raise
+                if count == max_retries:
                     print(f"data loader error count {count}: {e}")
                 idx = np.random.randint(0, len(self.dataset))
         return results

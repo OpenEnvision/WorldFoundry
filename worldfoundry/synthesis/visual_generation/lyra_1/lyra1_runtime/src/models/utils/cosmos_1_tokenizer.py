@@ -126,14 +126,12 @@ def denormalize_latents(
         unsqueeze = True
     else:
         unsqueeze = False
-    # Use same statistics across views
-    model_input = rearrange(model_input, "b (v t) c h w -> (b v) t c h w", v=num_input_multi_views)
+    # Use same statistics across views; latent_std/latent_mean have shape [1, C, T, 1, 1]
+    model_input = rearrange(model_input, "b (v t) c h w -> (b v) c t h w", v=num_input_multi_views)
     model_input = model_input / sigma_data
     model_input = model_input * latent_std + latent_mean
-    # Convert from generated internal cosmos (B T C H W) to cosmos-predict (B C T H W)
-    model_input = model_input.transpose(1, 2)
-    # Reshape frames and views again in one dimension
-    model_input = rearrange(model_input, "(b v) t c h w -> b (v t) c h w", v=num_input_multi_views)
+    # Reshape frames and views back to [B, V * T, C, H, W] for PatchEmbed3D
+    model_input = rearrange(model_input, "(b v) c t h w -> b (v t) c h w", v=num_input_multi_views)
     # Remove batch dimension
     if unsqueeze:
         model_input = model_input.squeeze(0)

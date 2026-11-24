@@ -14,8 +14,6 @@
 # limitations under the License.
 
 
-import kiui
-import kiui.op
 import numpy as np
 import torch
 from einops import rearrange
@@ -23,6 +21,12 @@ from plyfile import PlyData, PlyElement
 
 from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.utils.data import ray_condition
 from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.utils.token_pruning import process_tensors
+
+
+def inverse_sigmoid(x: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
+    """Invert sigmoid with clamping to avoid infinite logits."""
+    x = x.clamp(eps, 1 - eps)
+    return torch.log(x / (1 - x))
 
 
 def get_plucker_embedding_and_rays(
@@ -271,7 +275,7 @@ def save_ply_orig(gaussians, path, compatible=True, scale_factor=None, prune_fac
 
     # invert activation to make it compatible with the original ply format
     if compatible:
-        opacity = kiui.op.inverse_sigmoid(opacity)
+        opacity = inverse_sigmoid(opacity)
         scales = torch.log(scales + 1e-8)
         shs = (shs - 0.5) / 0.28209479177387814
 

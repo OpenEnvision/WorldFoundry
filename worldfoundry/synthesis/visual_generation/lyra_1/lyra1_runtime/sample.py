@@ -98,13 +98,16 @@ def load_model(ckpt_path, config, weight_dtype):
 
 def main(config, **kwargs):
     # For dynamic scenes, loop over all target times
-    target_index_manual = config.target_index_manual
-    if target_index_manual is None and config.target_index_manual_start_idx is not None:
+    target_index_manual = config.get("target_index_manual", None)
+    target_index_manual_start_idx = config.get("target_index_manual_start_idx", None)
+    if target_index_manual is None and target_index_manual_start_idx is not None:
+        target_index_manual_num_idx = config.get("target_index_manual_num_idx", 1)
+        target_index_manual_stride = config.get("target_index_manual_stride", 1)
         target_index_manual = list(
             range(
-                config.target_index_manual_start_idx,
-                config.target_index_manual_start_idx + config.target_index_manual_num_idx,
-                config.target_index_manual_stride,
+                target_index_manual_start_idx,
+                target_index_manual_start_idx + target_index_manual_num_idx,
+                target_index_manual_stride,
             )
         )
     if target_index_manual is not None and not isinstance(target_index_manual, int):
@@ -148,16 +151,17 @@ def main_single(
     # Get latest checkpoint if no checkpoint given (e.g., ckpt_name = 'checkpoint-15000')
     ckpt_name = None
     if ckpt_path is None:
-        if config.ckpt_path is None:
+        config_ckpt_path = config.get("ckpt_path", None)
+        if config_ckpt_path is None:
             ckpt_model_sub_path = "pytorch_model/mp_rank_00_model_states.pt"
             ckpts_path = main_config.output_dir
-            ckpt_name = config.ckpt_name
+            ckpt_name = config.get("ckpt_name", None)
             if ckpt_name is None:
                 ckpt_name = get_most_recent_checkpoint(ckpts_path)
             ckpt_path = os.path.join(ckpts_path, ckpt_name, ckpt_model_sub_path)
 
         else:
-            ckpt_path = config.ckpt_path
+            ckpt_path = config_ckpt_path
     if ckpt_name is None:
         has_ckpt_name = re.search(r"(checkpoint-\d+)", ckpt_path)
         if has_ckpt_name:
@@ -170,19 +174,22 @@ def main_single(
         raise ValueError(f"Could not find ckpt at path {ckpt_path}")
 
     # For dynamic scenes, render all camera viewpoints not only the one from the bullet time
-    if config.set_manual_time_idx:
-        main_config.set_manual_time_idx = config.set_manual_time_idx
+    set_manual_time_idx = bool(config.get("set_manual_time_idx", False))
+    if set_manual_time_idx:
+        main_config.set_manual_time_idx = set_manual_time_idx
 
     # Set view indices
-    if config.static_view_indices_fixed is not None:
-        main_config.static_view_indices_fixed = config.static_view_indices_fixed
-        outdir = os.path.join(outdir, f"static_view_indices_fixed_{'_'.join(config.static_view_indices_fixed)}")
+    static_view_indices_fixed = config.get("static_view_indices_fixed", None)
+    if static_view_indices_fixed is not None:
+        main_config.static_view_indices_fixed = static_view_indices_fixed
+        outdir = os.path.join(outdir, f"static_view_indices_fixed_{'_'.join(static_view_indices_fixed)}")
         main_config.static_view_indices_sampling = "fixed"
-        main_config.num_input_multi_views = len(config.static_view_indices_fixed)
+        main_config.num_input_multi_views = len(static_view_indices_fixed)
 
     # Subsample the output views
-    if config.target_index_subsample is not None:
-        main_config.target_index_subsample = config.target_index_subsample
+    target_index_subsample = config.get("target_index_subsample", None)
+    if target_index_subsample is not None:
+        main_config.target_index_subsample = target_index_subsample
     gaussians_scale_factor = None
 
     # Define wave visualization parameters
@@ -194,7 +201,7 @@ def main_single(
     wave_length = 0.4
 
     # Export only rgb results for evaluation
-    do_eval = config.do_eval
+    do_eval = bool(config.get("do_eval", False))
     if do_eval:
         config.save_grid = False
         config.save_gt_input = False
@@ -217,16 +224,18 @@ def main_single(
         outdir = os.path.join(outdir, config.dataset_name)
 
     # Set bullet time manually
-    main_config.target_index_manual = config.target_index_manual
-    if config.target_index_manual is not None:
-        outdir = os.path.join(outdir, str(config.target_index_manual))
+    target_index_manual = config.get("target_index_manual", None)
+    main_config.target_index_manual = target_index_manual
+    if target_index_manual is not None:
+        outdir = os.path.join(outdir, str(target_index_manual))
 
     # Set number of test scenes, else take as defined in training config
-    if config.num_test_images is not None:
-        main_config.num_test_images = config.num_test_images
+    num_test_images = config.get("num_test_images", None)
+    if num_test_images is not None:
+        main_config.num_test_images = num_test_images
 
     # Set depth (was only used for supervision)
-    main_config.use_depth = config.use_depth
+    main_config.use_depth = bool(config.get("use_depth", False))
 
     # Get data loader and model
     train_dataloader, test_dataloader = get_multi_dataloader(main_config)
@@ -352,14 +361,14 @@ def main_single(
             video = reconstructed_latents if video is None else torch.cat((reconstructed_latents, video), -1)
 
         # Gaussians export just exporting the tensor
-        if config.save_gaussians:
+        if config.get("save_gaussians", False):
             out_dir_gaussians = os.path.join(outdir, "gaussians")
             os.makedirs(out_dir_gaussians, exist_ok=True)
             path_gaussians = os.path.join(out_dir_gaussians, f"gaussians_{idx}.ply")
             save_ply(model_output["gaussians"], path_gaussians, scale_factor=gaussians_scale_factor)
 
         # Gaussians export following original ply format (used for USDZ with Isaac)
-        if config.save_gaussians_orig:
+        if config.get("save_gaussians_orig", False):
             out_dir_gaussians_orig = os.path.join(outdir, "gaussians_orig")
             os.makedirs(out_dir_gaussians_orig, exist_ok=True)
             path_gaussians_orig = os.path.join(out_dir_gaussians_orig, f"gaussians_{idx}.ply")
