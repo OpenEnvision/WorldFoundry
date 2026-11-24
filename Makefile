@@ -199,6 +199,7 @@ INFER_TENSOR_CONTRACTS = \
 	tests/base_models/test_hyperflow_components.py \
 	tests/synthesis/test_hyperflow_runtime.py \
 	tests/base_models/test_minimax_h3_dit.py \
+	tests/pipelines/test_pika_h3_flex.py \
 	tests/pipelines/test_h3_world.py \
 	tests/base_models/test_h3_tiny_components.py \
 	tests/pipelines/test_h3_tiny_pipeline.py \
