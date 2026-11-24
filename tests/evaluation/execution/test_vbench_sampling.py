@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 WorldFoundry contributors
 # SPDX-License-Identifier: Apache-2.0
 
-"""VBench frame selection retains the upstream sampling and NumPy RNG contract."""
+"""Frame selection and feature contracts for video benchmark scoring."""
 
 from __future__ import annotations
 
@@ -12,7 +12,9 @@ from unittest.mock import Mock
 
 import numpy as np
 import pytest
+import torch
 from PIL import Image
+from torch.nn import functional as F
 
 pytestmark = pytest.mark.unit
 
@@ -111,3 +113,30 @@ def test_amt_frame_decode_reports_a_bad_png_path(tmp_path: Path) -> None:
     (tmp_path / "0.png").write_bytes(b"invalid PNG")
     with pytest.raises(ValueError, match=r"Failed to decode image frame: .*0\.png"):
         FrameProcess().get_frames_from_img_folder(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    (
+        "worldfoundry.base_models.perception_core.tracking.cotracker.models.core.cotracker.blocks",
+        "worldfoundry.base_models.perception_core.tracking.dot.models.shelf."
+        "cotracker2_utils.models.core.cotracker.blocks",
+        "worldfoundry.base_models.perception_core.tracking.dot.models.shelf."
+        "cotracker3_utils.models.core.cotracker.blocks",
+    ),
+    ids=("cotracker", "dot-cotracker2", "dot-cotracker3"),
+)
+def test_tracking_mlp_preserves_scalar_and_paired_options(module_name: str) -> None:
+    mlp_type = importlib.import_module(module_name).Mlp
+    scalar = mlp_type(4, bias=False, drop=0.25).eval()
+    assert scalar.fc1.bias is scalar.fc2.bias is None
+    assert scalar.drop1.p == scalar.drop2.p == 0.25
+
+    paired = mlp_type(4, hidden_features=8, out_features=3, bias=(True, False), drop=[0.0, 0.5]).eval()
+    assert set(paired.state_dict()) == {"fc1.weight", "fc1.bias", "fc2.weight"}
+    assert (paired.drop1.p, paired.drop2.p) == (0.0, 0.5)
+    features = torch.linspace(-2.0, 2.0, 40).reshape(2, 5, 4)
+    with torch.inference_mode():
+        expected = paired.fc2(F.gelu(paired.fc1(features)))
+        actual = paired(features)
+    torch.testing.assert_close(actual, expected, atol=0, rtol=0)
