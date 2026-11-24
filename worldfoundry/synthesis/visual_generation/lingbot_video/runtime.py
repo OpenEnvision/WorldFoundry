@@ -261,6 +261,8 @@ class LingBotVideoRuntime:
             "refiner_sample_fps": "--refiner_sample_fps",
             "refiner_max_video_frames": "--refiner_max_video_frames",
             "refiner_vae_dtype": "--refiner_vae_dtype",
+            "sol_profile": "--sol_profile",
+            "refiner_sol_profile": "--refiner_sol_profile",
         }
         normalized_request = dict(request)
         if normalized_request.get("steps") is None:

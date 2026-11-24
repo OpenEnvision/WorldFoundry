@@ -1035,6 +1035,16 @@ def main() -> None:
     parser.add_argument("--refiner_batch_cfg", action="store_true")
     parser.add_argument("--refiner_no_null_cond_clone_zero", action="store_true")
     parser.add_argument("--refiner_offload_vae_during_denoise", action="store_true")
+    parser.add_argument(
+        "--sol_profile",
+        default=None,
+        help="Optional WorldFoundry SOL-Engine acceleration profile (exact, pisa, sol_high_fidelity, sol_balanced, refiner_sol).",
+    )
+    parser.add_argument(
+        "--refiner_sol_profile",
+        default=None,
+        help="Optional WorldFoundry SOL-Engine acceleration profile for the refiner (defaults to --sol_profile).",
+    )
     args = parser.parse_args()
     if args.quiet_progress:
         os.environ["LINGBOT_QUIET_PROGRESS"] = "1"
@@ -1131,6 +1141,11 @@ def main() -> None:
             args.cfg_parallel_degree == 1,
         )
     base_fsdp_info = _apply_fsdp_inference_if_requested(pipe, args.enable_fsdp_inference, fsdp_mesh)
+    if args.sol_profile:
+        inner_pipe = _inner_diffusers_pipe(pipe)
+        if hasattr(inner_pipe, "apply_sol_engine"):
+            sol_receipt = inner_pipe.apply_sol_engine(args.sol_profile)
+            _log_progress(f"applied SOL-Engine profile={args.sol_profile}: {sol_receipt}")
 
     refiner_state = _maybe_preload_refiner(
         args,
@@ -1149,6 +1164,12 @@ def main() -> None:
             args.enable_fsdp_inference,
             fsdp_mesh,
         )
+        refiner_sol_profile = args.refiner_sol_profile or args.sol_profile
+        if refiner_sol_profile:
+            inner_refiner = _inner_diffusers_pipe(refiner_state["pipe"])
+            if hasattr(inner_refiner, "apply_sol_engine"):
+                refiner_sol_receipt = inner_refiner.apply_sol_engine(refiner_sol_profile)
+                _log_progress(f"applied refiner SOL-Engine profile={refiner_sol_profile}: {refiner_sol_receipt}")
     if rank == 0 and refiner_state["refiner_requested"] and not refiner_state["refiner_available"]:
         print(
             "WARNING: refiner requested but unavailable; "

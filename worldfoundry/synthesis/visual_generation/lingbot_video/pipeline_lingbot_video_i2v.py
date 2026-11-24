@@ -231,6 +231,10 @@ class LingBotVideoImageToVideoPipeline(LingBotVideoPipeline):
         transformer_dtype = _module_dtype(self.transformer)
         cfg_latent_src = _group_global_rank(cfg_parallel_group, 0)
         cfg_uncond_src = _group_global_rank(cfg_parallel_group, 1)
+        reset_sol = getattr(self.transformer, "reset_sol_caches", None)
+        if callable(reset_sol):
+            reset_sol()
+        total_steps = len(self.scheduler.timesteps)
 
         for _i, timestep in enumerate(self.progress_bar(self.scheduler.timesteps)):
             if cfg_parallel:
@@ -241,9 +245,11 @@ class LingBotVideoImageToVideoPipeline(LingBotVideoPipeline):
                 if cfg_parallel_rank == 0:
                     branch_embeds = prompt_embeds
                     branch_mask = prompt_mask
+                    branch_name = "positive"
                 else:
                     branch_embeds = negative_embeds
                     branch_mask = negative_mask
+                    branch_name = "negative"
                 branch_model_input = branch_embeds.to(transformer_dtype)
                 with _transformer_autocast(device, transformer_dtype):
                     branch_noise_pred = self.transformer(
@@ -252,6 +258,9 @@ class LingBotVideoImageToVideoPipeline(LingBotVideoPipeline):
                         branch_model_input,
                         encoder_attention_mask=branch_mask,
                         return_dict=False,
+                        step_index=_i,
+                        total_steps=total_steps,
+                        cache_branch=branch_name,
                     )[0].float()
                 if cfg_parallel_rank == 0:
                     noise_pred = branch_noise_pred
@@ -282,6 +291,9 @@ class LingBotVideoImageToVideoPipeline(LingBotVideoPipeline):
                             cfg_embeds,
                             encoder_attention_mask=cfg_mask,
                             return_dict=False,
+                            step_index=_i,
+                            total_steps=total_steps,
+                            cache_branch="batched_cfg",
                         )[0].float()
                     noise_pred, noise_pred_uncond = noise_batched.chunk(2, dim=0)
                     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred - noise_pred_uncond)
@@ -293,6 +305,9 @@ class LingBotVideoImageToVideoPipeline(LingBotVideoPipeline):
                             prompt_model_input,
                             encoder_attention_mask=prompt_mask,
                             return_dict=False,
+                            step_index=_i,
+                            total_steps=total_steps,
+                            cache_branch="positive",
                         )[0].float()
 
                     if do_cfg:
@@ -304,6 +319,9 @@ class LingBotVideoImageToVideoPipeline(LingBotVideoPipeline):
                                 negative_model_input,
                                 encoder_attention_mask=negative_mask,
                                 return_dict=False,
+                                step_index=_i,
+                                total_steps=total_steps,
+                                cache_branch="negative",
                             )[0].float()
                         noise_pred = noise_pred_uncond + guidance_scale * (noise_pred - noise_pred_uncond)
 

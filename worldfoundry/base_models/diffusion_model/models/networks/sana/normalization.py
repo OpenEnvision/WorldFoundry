@@ -214,6 +214,7 @@ class RMSNorm(torch.nn.Module):
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(dim) * scale_factor)
         self.norm_dim = norm_dim
+        self._use_fused_rms_norm = False
 
     def _norm(self, x):
         """
@@ -239,6 +240,11 @@ class RMSNorm(torch.nn.Module):
             torch.Tensor: The output tensor after applying RMSNorm.
 
         """
+        if self._use_fused_rms_norm and not self.training and (self.norm_dim == -1 or self.norm_dim == x.dim() - 1):
+            import torch.nn.functional as F
+
+            weight = self.weight if self.weight.dtype == torch.float32 else self.weight.float()
+            return F.rms_norm(x.float(), (x.shape[-1],), weight=weight, eps=self.eps).to(x.dtype)
         ndim = x.dim()
         weight_shape = [1] * ndim
         weight_shape[self.norm_dim] = -1

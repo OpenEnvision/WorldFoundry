@@ -32,6 +32,7 @@ hybrids live in sibling modules and reuse these blocks.
 """
 
 import os
+import weakref
 
 import torch
 import torch.nn as nn
@@ -288,12 +289,17 @@ class SanaVideoMSBlock(nn.Module):
                 chunk_index=chunk_index,
                 **kwargs,
             )
-        intermediate_feats = {
-            "x_in": x,
-            "x_self_attn": None,
-            "x_cross_attn": None,
-            "x_ffn": None,
-        }
+        has_hook = self.block_hook is not None
+        intermediate_feats = (
+            {
+                "x_in": x,
+                "x_self_attn": None,
+                "x_cross_attn": None,
+                "x_ffn": None,
+            }
+            if has_hook
+            else None
+        )
         B, N, C = x.shape
 
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
@@ -316,7 +322,8 @@ class SanaVideoMSBlock(nn.Module):
         if kv_cache is not None:
             x_sa, kv_cache = x_sa
 
-        intermediate_feats["x_self_attn"] = x_sa
+        if intermediate_feats is not None:
+            intermediate_feats["x_self_attn"] = x_sa
 
         if self.flash_attn_additional:
             x_sa = x_sa + self.learnable_fa_scale * self.flash_attn_additional(x_sa_in, rotary_emb=rotary_emb, HW=THW)
@@ -328,7 +335,8 @@ class SanaVideoMSBlock(nn.Module):
         else:
             x = x + self.cross_attn(x, y, mask=mask)
 
-        intermediate_feats["x_cross_attn"] = x
+        if intermediate_feats is not None:
+            intermediate_feats["x_cross_attn"] = x
 
         mlp_kwargs = {
             "HW": THW,
@@ -347,9 +355,8 @@ class SanaVideoMSBlock(nn.Module):
             mlp_out, kv_cache = mlp_out
         x = gated_residual(x, mlp_out, gate_mlp, self.drop_path, policy=self._worldfoundry_block_fusion)
 
-        intermediate_feats["x_ffn"] = x
-
-        if self.block_hook is not None:
+        if intermediate_feats is not None and self.block_hook is not None:
+            intermediate_feats["x_ffn"] = x
             self.block_hook(**intermediate_feats)
 
         if kv_cache is not None:
@@ -503,6 +510,170 @@ class SanaMSVideo(Sana):
             self.logger(f"{ffn_type} Temporal kernal: {t_kernel_size}")
 
         self.initialize()
+        self._fast_litela_rope: bool = False
+        self._rope_real_dtype: torch.dtype = torch.float64
+        self._cross_attn_fa3_mask_pack: bool = False
+        self._mask_prefix_cache: list[
+            tuple[weakref.ref[torch.Tensor], int, int, torch.Tensor, bool, bool, torch.Tensor | None]
+        ] = []
+        self._last_mask_prefix_by_shape: dict[tuple[tuple[int, ...], torch.device], tuple[bool, bool]] = {}
+        self._static_caption_cache_enabled: bool = False
+        self._static_caption_cache: list[tuple[weakref.ref[torch.Tensor], int, int, torch.Tensor, torch.Tensor]] = []
+        self._fa3_cross_attn_steps: int = 0
+
+    def reset_sol_caches(self) -> None:
+        """Clear per-request cached caption embeddings, mask analyses, and static cross-KV."""
+        self._static_caption_cache.clear()
+        self._mask_prefix_cache.clear()
+        self._last_mask_prefix_by_shape.clear()
+        for module in self.modules():
+            if isinstance(module, MultiHeadCrossAttention):
+                module.reset_static_cross_kv()
+
+    def _embed_caption_cached(self, y: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
+        use_caption_cache = (
+            self._static_caption_cache_enabled
+            and not self.training
+            and not torch.is_grad_enabled()
+            and not torch.compiler.is_compiling()
+            and not (y.is_cuda and torch.cuda.is_current_stream_capturing())
+        )
+        if use_caption_cache:
+            is_inf = y.is_inference()
+            y_ver = -1 if is_inf else int(y._version)
+            y_ptr = int(y.data_ptr())
+            for ref, saved_ptr, saved_ver, snapshot, cached_y in self._static_caption_cache:
+                if (
+                    not is_inf
+                    and saved_ver >= 0
+                    and ref() is y
+                    and saved_ptr == y_ptr
+                    and saved_ver == y_ver
+                    and snapshot.shape == y.shape
+                    and snapshot.dtype == y.dtype
+                    and snapshot.device == y.device
+                ):
+                    return cached_y
+                if (
+                    snapshot.shape == y.shape
+                    and snapshot.dtype == y.dtype
+                    and snapshot.device == y.device
+                    and torch.equal(snapshot, y)
+                ):
+                    return cached_y
+            y_in = y
+            y_out = self.y_embedder(y_in, self.training, mask=mask)
+            if self.y_norm:
+                y_out = self.attention_y_norm(y_out)
+            if len(self._static_caption_cache) >= 4:
+                self._static_caption_cache.pop(0)
+            self._static_caption_cache.append(
+                (
+                    weakref.ref(y_in),
+                    y_ptr,
+                    y_ver,
+                    y_in.detach().clone(),
+                    y_out.detach(),
+                )
+            )
+            return y_out
+        y_out = self.y_embedder(y, self.training, mask=mask)
+        if self.y_norm:
+            y_out = self.attention_y_norm(y_out)
+        return y_out
+
+    def _prepare_cross_attn_mask(
+        self,
+        raw_mask: torch.Tensor | None,
+        y: torch.Tensor,
+        x: torch.Tensor,
+    ) -> tuple[torch.Tensor, object]:
+        if raw_mask is not None:
+            mask = raw_mask.to(torch.int16)
+            mask = mask.repeat(y.shape[0] // mask.shape[0], 1) if mask.shape[0] != y.shape[0] else mask
+            mask = mask.squeeze(1).squeeze(1)
+            if _xformers_available:
+                y = y.squeeze(1).masked_select(mask.unsqueeze(-1) != 0).view(1, -1, x.shape[-1])
+                y_lens: object = mask.sum(dim=1).tolist()
+            elif self._cross_attn_fa3_mask_pack and not self.training and mask.ndim == 2 and mask.is_cuda:
+                shape_key = (tuple(mask.shape), mask.device)
+                if torch.cuda.is_current_stream_capturing() or torch.compiler.is_compiling():
+                    validated = self._last_mask_prefix_by_shape.get(shape_key)
+                    if validated is not None and validated[0]:
+                        y_lens = None if validated[1] else mask.sum(dim=1).to(torch.int32).contiguous()
+                    else:
+                        # Fail closed when mask was not validated as a right-padded prefix on warmup.
+                        y_lens = mask
+                else:
+                    is_inf = raw_mask.is_inference()
+                    m_ver = -1 if is_inf else int(raw_mask._version)
+                    m_ptr = int(raw_mask.data_ptr())
+                    matched = None
+                    for (
+                        ref,
+                        saved_ptr,
+                        saved_ver,
+                        snapshot,
+                        is_prefix,
+                        all_ones,
+                        cached_ylens,
+                    ) in self._mask_prefix_cache:
+                        if (
+                            not is_inf
+                            and saved_ver >= 0
+                            and ref() is raw_mask
+                            and saved_ptr == m_ptr
+                            and saved_ver == m_ver
+                            and snapshot.shape == mask.shape
+                            and snapshot.device == mask.device
+                        ):
+                            matched = (is_prefix, all_ones, cached_ylens)
+                            break
+                        if (
+                            snapshot.shape == mask.shape
+                            and snapshot.dtype == mask.dtype
+                            and snapshot.device == mask.device
+                            and torch.equal(snapshot, mask)
+                        ):
+                            matched = (is_prefix, all_ones, cached_ylens)
+                            break
+                    if matched is not None:
+                        is_prefix, all_ones, y_lens = matched
+                        self._last_mask_prefix_by_shape[shape_key] = (is_prefix, all_ones)
+                    else:
+                        is_binary = bool(((mask == 0) | (mask == 1)).all().item())
+                        is_prefix = is_binary and (
+                            mask.shape[1] <= 1 or bool((mask[:, 1:] <= mask[:, :-1]).all().item())
+                        )
+                        all_ones = bool(is_prefix and (mask == 1).all().item())
+                        if is_prefix:
+                            y_lens = None if all_ones else mask.sum(dim=1).to(torch.int32).contiguous()
+                        else:
+                            y_lens = mask
+                        if len(self._mask_prefix_cache) >= 8:
+                            self._mask_prefix_cache.pop(0)
+                        self._mask_prefix_cache.append(
+                            (
+                                weakref.ref(raw_mask),
+                                m_ptr,
+                                m_ver,
+                                mask.detach().clone(),
+                                is_prefix,
+                                all_ones,
+                                y_lens,
+                            )
+                        )
+                        self._last_mask_prefix_by_shape[shape_key] = (is_prefix, all_ones)
+            else:
+                y_lens = mask
+        elif _xformers_available:
+            y_lens = [y.shape[2]] * y.shape[0]
+            y = y.squeeze(1).view(1, -1, x.shape[-1])
+        elif self._cross_attn_fa3_mask_pack and not self.training:
+            y_lens = None
+        else:
+            raise ValueError(f"Attention type is not available due to _xformers_available={_xformers_available}.")
+        return y, y_lens
 
     def get_rope(self, pos_embed_type, attention_head_dim, patch_size, rope_fhw_dim):
         if pos_embed_type == "wan_rope":
@@ -594,7 +765,12 @@ class SanaMSVideo(Sana):
             image_pos_embed = self.pos_embed_ms(latent_image_ids)
 
         elif self.pos_embed_type == "wan_rope":
-            image_pos_embed = self.rope((self.f, self.h, self.w), x.device)
+            if self._fast_litela_rope and not self.training and hasattr(self.rope, "forward_real"):
+                image_pos_embed = self.rope.forward_real(
+                    (self.f, self.h, self.w), x.device, dtype=self._rope_real_dtype
+                )
+            else:
+                image_pos_embed = self.rope((self.f, self.h, self.w), x.device)
 
         elif self.pos_embed_type == "casual_wan_rope":
             assert start_f is not None and end_f is not None
@@ -652,24 +828,25 @@ class SanaMSVideo(Sana):
         t0 = self.t_block(t)
         t = t.unflatten(dim=0, sizes=timestep.shape)
         t0 = t0.unflatten(dim=0, sizes=timestep.shape)
-        y = self.y_embedder(y, self.training, mask=mask)  # (N, D)
-        if self.y_norm:
-            y = self.attention_y_norm(y)
+        y = self._embed_caption_cached(y, mask)
+        y, y_lens = self._prepare_cross_attn_mask(mask, y, x)
 
-        if mask is not None:
-            mask = mask.to(torch.int16)
-            mask = mask.repeat(y.shape[0] // mask.shape[0], 1) if mask.shape[0] != y.shape[0] else mask
-            mask = mask.squeeze(1).squeeze(1)
-            if _xformers_available:
-                y = y.squeeze(1).masked_select(mask.unsqueeze(-1) != 0).view(1, -1, x.shape[-1])
-                y_lens = mask.sum(dim=1).tolist()
-            else:
-                y_lens = mask
-        elif _xformers_available:
-            y_lens = [y.shape[2]] * y.shape[0]
-            y = y.squeeze(1).view(1, -1, x.shape[-1])
-        else:
-            raise ValueError(f"Attention type is not available due to _xformers_available={_xformers_available}.")
+        fa3_step_eligible = (
+            self._cross_attn_fa3_mask_pack
+            and not self.training
+            and not torch.is_grad_enabled()
+            and x.is_cuda
+            and x.dtype in {torch.bfloat16, torch.float16}
+            and y.dtype == x.dtype
+            and (
+                y_lens is None
+                or (isinstance(y_lens, torch.Tensor) and y_lens.ndim == 1 and y_lens.dtype == torch.int32)
+            )
+        )
+
+        def _on_stack_execute() -> None:
+            if fa3_step_eligible and not torch.compiler.is_compiling():
+                self._fa3_cross_attn_steps += 1
 
         x = run_sana_blocks(
             self.blocks,
@@ -679,6 +856,7 @@ class SanaMSVideo(Sana):
             y_lens,
             (self.f, self.h, self.w),
             image_pos_embed,
+            on_stack_execute=_on_stack_execute if fa3_step_eligible else None,
             **kwargs,
         )
 
@@ -742,28 +920,26 @@ class SanaMSVideo(Sana):
         t0 = self.t_block(t)
         t = t.unflatten(dim=0, sizes=timestep.shape)
         t0 = t0.unflatten(dim=0, sizes=timestep.shape)
-        y = self.y_embedder(y, self.training, mask=mask)  # (N, D)
-        if self.y_norm:
-            y = self.attention_y_norm(y)
-
-        if mask is not None:
-            mask = mask.to(torch.int16)
-            mask = mask.repeat(y.shape[0] // mask.shape[0], 1) if mask.shape[0] != y.shape[0] else mask
-            mask = mask.squeeze(1).squeeze(1)
-            if _xformers_available:
-                y = y.squeeze(1).masked_select(mask.unsqueeze(-1) != 0).view(1, -1, x.shape[-1])
-                y_lens = mask.sum(dim=1).tolist()
-            else:
-                y_lens = mask
-        elif _xformers_available:
-            y_lens = [y.shape[2]] * y.shape[0]
-            y = y.squeeze(1).view(1, -1, x.shape[-1])
-        else:
-            raise ValueError(f"Attention type is not available due to _xformers_available={_xformers_available}.")
+        y = self._embed_caption_cached(y, mask)
+        y, y_lens = self._prepare_cross_attn_mask(mask, y, x)
 
         assert kv_cache is not None and len(kv_cache) == len(self.blocks), (
             "kv_cache must be a list of the same length as the number of blocks"
         )
+        if (
+            self._cross_attn_fa3_mask_pack
+            and not self.training
+            and not torch.is_grad_enabled()
+            and x.is_cuda
+            and x.dtype in {torch.bfloat16, torch.float16}
+            and y.dtype == x.dtype
+            and (
+                y_lens is None
+                or (isinstance(y_lens, torch.Tensor) and y_lens.ndim == 1 and y_lens.dtype == torch.int32)
+            )
+            and not torch.compiler.is_compiling()
+        ):
+            self._fa3_cross_attn_steps += 1
         for i, block in enumerate(self.blocks):
             x, kv_cache_i = torch.utils.checkpoint.checkpoint(
                 block,

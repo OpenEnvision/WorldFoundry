@@ -14,6 +14,11 @@ from torchvision.transforms.functional import normalize as normalize_image_tenso
 
 from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc_compat import FlowUniPCMultistepScheduler
 
+from .acceleration import (
+    LingBotAccelerationConfig,
+    accelerate_lingbot_video,
+    lingbot_runtime_receipt,
+)
 from .utils import (
     LOW_NOISE_TAIL_V1_DEFAULT_STEPS,
     batch_cfg_prompt_inputs,
@@ -133,6 +138,30 @@ class LingBotVideoPipeline(DiffusionPipeline):
         self.img_prompt_template = IMG_PROMPT_TEMPLATE
         self.video_prompt_template = VIDEO_PROMPT_TEMPLATE
         self._crop_start: int | None = None
+        self._sol_acceleration_receipt: dict[str, Any] | None = None
+
+    def apply_sol_engine(
+        self,
+        config: LingBotAccelerationConfig | str = "sol_balanced",
+        *,
+        accelerate_vae: bool = True,
+    ) -> dict[str, Any]:
+        """Install the LingBot-Video SOL-Engine stack (kernel fusion + PISA + EasyCache + piecewise graph)."""
+        if self.transformer is None:
+            raise RuntimeError("LingBotVideoPipeline requires a loaded transformer before applying SOL-Engine.")
+        receipt = accelerate_lingbot_video(
+            self.transformer,
+            config,
+            vae=self.vae if accelerate_vae and isinstance(self.vae, torch.nn.Module) else None,
+        )
+        self._sol_acceleration_receipt = receipt
+        return receipt
+
+    def sol_engine_report(self) -> dict[str, Any]:
+        """Return live SOL-Engine execution telemetry and zero-fallback audit receipt."""
+        if self.transformer is None:
+            return {"installed": [], "fallbacks": []}
+        return lingbot_runtime_receipt(self.transformer)
 
     @staticmethod
     def check_inputs(height: int, width: int, num_frames: int) -> None:
@@ -464,6 +493,10 @@ class LingBotVideoPipeline(DiffusionPipeline):
                 vae_offloaded = True
         cfg_latent_src = _group_global_rank(cfg_parallel_group, 0)
         cfg_uncond_src = _group_global_rank(cfg_parallel_group, 1)
+        reset_sol = getattr(self.transformer, "reset_sol_caches", None)
+        if callable(reset_sol):
+            reset_sol()
+        total_steps = len(self.scheduler.timesteps)
         for _i, timestep in enumerate(self.progress_bar(self.scheduler.timesteps)):
             if cfg_parallel:
                 dist.broadcast(latents, src=cfg_latent_src, group=cfg_parallel_group)
@@ -473,10 +506,11 @@ class LingBotVideoPipeline(DiffusionPipeline):
                 if cfg_parallel_rank == 0:
                     branch_embeds = prompt_embeds
                     branch_mask = prompt_mask
-                    branch_name = "transformer.cond"  # noqa: F841 - Upstream assignment kept.
+                    branch_name = "positive"
                 else:
                     branch_embeds = negative_embeds
                     branch_mask = negative_mask
+                    branch_name = "negative"
                 branch_model_input = branch_embeds.to(transformer_dtype)
                 with _transformer_autocast(device, transformer_dtype):
                     branch_noise_pred = self.transformer(
@@ -485,6 +519,9 @@ class LingBotVideoPipeline(DiffusionPipeline):
                         branch_model_input,
                         encoder_attention_mask=branch_mask,
                         return_dict=False,
+                        step_index=_i,
+                        total_steps=total_steps,
+                        cache_branch=branch_name,
                     )[0].float()
                 if cfg_parallel_rank == 0:
                     noise_pred = branch_noise_pred
@@ -515,6 +552,9 @@ class LingBotVideoPipeline(DiffusionPipeline):
                             cfg_embeds,
                             encoder_attention_mask=cfg_mask,
                             return_dict=False,
+                            step_index=_i,
+                            total_steps=total_steps,
+                            cache_branch="batched_cfg",
                         )[0].float()
                     noise_pred, noise_pred_uncond = noise_batched.chunk(2, dim=0)
                     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred - noise_pred_uncond)
@@ -526,6 +566,9 @@ class LingBotVideoPipeline(DiffusionPipeline):
                             prompt_model_input,
                             encoder_attention_mask=prompt_mask,
                             return_dict=False,
+                            step_index=_i,
+                            total_steps=total_steps,
+                            cache_branch="positive",
                         )[0].float()
 
                 if do_cfg and not effective_batch_cfg:
@@ -537,6 +580,9 @@ class LingBotVideoPipeline(DiffusionPipeline):
                             negative_model_input,
                             encoder_attention_mask=negative_mask,
                             return_dict=False,
+                            step_index=_i,
+                            total_steps=total_steps,
+                            cache_branch="negative",
                         )[0].float()
                     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred - noise_pred_uncond)
 

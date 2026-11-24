@@ -41,6 +41,7 @@ Conditioning
 
 import math
 import os
+import weakref
 
 import torch
 import torch.nn as nn
@@ -52,6 +53,7 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.capabilities 
 from worldfoundry.base_models.diffusion_model.models.networks.sana.normalization import RMSNorm
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 from worldfoundry.core.attention.rotary.rope_nd import get_1d_rotary_pos_embed_linear as get_1d_rotary_pos_embed
+from worldfoundry.core.kernels.diffusion import apply_real_rope_bshd
 from worldfoundry.core.nn import get_same_padding, to_2tuple, to_3tuple
 from worldfoundry.core.nn.blocks.layers import Mlp
 from worldfoundry.core.nn.blocks.layers import VisionAttention as Attention_
@@ -60,6 +62,38 @@ from worldfoundry.core.nn.transformer.dit import modulate_sequence as modulate
 _xformers_available = False if os.environ.get("DISABLE_XFORMERS", "0") == "1" else is_xformers_available()
 if _xformers_available:
     import xformers.ops
+
+
+@torch.library.custom_op("worldfoundry::sana_fa3_cross_attn", mutates_args=(), device_types="cuda")
+def _sana_fa3_cross_attn_op(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+    import flash_attn_interface as fa3
+
+    out = fa3.flash_attn_func(q, k, v, causal=False)
+    return out[0] if isinstance(out, tuple) else out
+
+
+@_sana_fa3_cross_attn_op.register_fake
+def _sana_fa3_cross_attn_fake(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+    del k
+    return q.new_empty((*q.shape[:-1], v.shape[-1]))
+
+
+@torch.library.custom_op("worldfoundry::sana_fa3_cross_attn_kvcache", mutates_args=(), device_types="cuda")
+def _sana_fa3_cross_attn_kvcache_op(
+    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, seqlens: torch.Tensor
+) -> torch.Tensor:
+    import flash_attn_interface as fa3
+
+    out = fa3.flash_attn_with_kvcache(q, k, v, cache_seqlens=seqlens, causal=False)
+    return out[0] if isinstance(out, tuple) else out
+
+
+@_sana_fa3_cross_attn_kvcache_op.register_fake
+def _sana_fa3_cross_attn_kvcache_fake(
+    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, seqlens: torch.Tensor
+) -> torch.Tensor:
+    del k, seqlens
+    return q.new_empty((*q.shape[:-1], v.shape[-1]))
 
 
 def t2i_modulate(x, shift, scale):
@@ -90,6 +124,83 @@ class MultiHeadCrossAttention(nn.Module):
         else:
             self.q_norm = nn.Identity()
             self.k_norm = nn.Identity()
+        self._cross_attn_backend: str = "torch"
+        self._static_cross_kv: bool = False
+        self._static_kv_cache: list[
+            tuple[
+                weakref.ref[torch.Tensor],
+                int,
+                int,
+                int,
+                torch.Tensor,
+                torch.Tensor,
+                torch.Tensor,
+            ]
+        ] = []
+        self._fa3_calls: int = 0
+        self._sdpa_calls: int = 0
+        self._static_kv_hits: int = 0
+
+    def reset_static_cross_kv(self) -> None:
+        self._static_kv_cache.clear()
+
+    def _project_kv(self, cond: torch.Tensor, first_dim: int, C: int) -> tuple[torch.Tensor, torch.Tensor]:
+        use_cache = (
+            self._static_cross_kv
+            and not self.training
+            and not torch.is_grad_enabled()
+            and not torch.compiler.is_compiling()
+            and not (cond.is_cuda and torch.cuda.is_current_stream_capturing())
+        )
+        if use_cache:
+            is_inf = cond.is_inference()
+            version = -1 if is_inf else int(cond._version)
+            ptr = int(cond.data_ptr())
+            for ref, saved_ptr, saved_first_dim, saved_ver, snapshot, cached_k, cached_v in self._static_kv_cache:
+                if saved_first_dim != first_dim:
+                    continue
+                if (
+                    not is_inf
+                    and saved_ver >= 0
+                    and ref() is cond
+                    and saved_ptr == ptr
+                    and saved_ver == version
+                    and snapshot.shape == cond.shape
+                    and snapshot.dtype == cond.dtype
+                    and snapshot.device == cond.device
+                ):
+                    self._static_kv_hits += 1
+                    return cached_k, cached_v
+                if (
+                    snapshot.shape == cond.shape
+                    and snapshot.dtype == cond.dtype
+                    and snapshot.device == cond.device
+                    and torch.equal(snapshot, cond)
+                ):
+                    self._static_kv_hits += 1
+                    return cached_k, cached_v
+        kv = self.kv_linear(cond).view(first_dim, -1, 2, C)
+        k, v = kv.unbind(2)
+        k = self.k_norm(k).view(first_dim, -1, self.num_heads, self.head_dim)
+        v = v.view(first_dim, -1, self.num_heads, self.head_dim)
+        if use_cache:
+            if len(self._static_kv_cache) >= 4:
+                self._static_kv_cache.pop(0)
+            k_c, v_c = k.detach().contiguous(), v.detach().contiguous()
+            version = -1 if cond.is_inference() else int(cond._version)
+            self._static_kv_cache.append(
+                (
+                    weakref.ref(cond),
+                    int(cond.data_ptr()),
+                    int(first_dim),
+                    version,
+                    cond.detach().clone(),
+                    k_c,
+                    v_c,
+                )
+            )
+            return k_c, v_c
+        return k, v
 
     def forward(self, x, cond, mask=None):
         # query: img tokens; key/value: condition; mask: if padding tokens
@@ -97,26 +208,45 @@ class MultiHeadCrossAttention(nn.Module):
         first_dim = 1 if _xformers_available else B
 
         q = self.q_linear(x)
-        kv = self.kv_linear(cond).view(first_dim, -1, 2, C)
-        k, v = kv.unbind(2)
         q = self.q_norm(q).view(first_dim, -1, self.num_heads, self.head_dim)
-        k = self.k_norm(k).view(first_dim, -1, self.num_heads, self.head_dim)
-        v = v.view(first_dim, -1, self.num_heads, self.head_dim)
+        k, v = self._project_kv(cond, first_dim, C)
 
         if _xformers_available:
             attn_bias = None
             if mask is not None:
                 attn_bias = xformers.ops.fmha.BlockDiagonalMask.from_seqlens([N] * B, mask)
             x = xformers.ops.memory_efficient_attention(q, k, v, p=self.attn_drop.p, attn_bias=attn_bias)
+        elif (
+            self._cross_attn_backend == "flash_attention_3"
+            and not self.training
+            and not torch.is_grad_enabled()
+            and q.is_cuda
+            and q.dtype in {torch.bfloat16, torch.float16}
+            and k.dtype == q.dtype
+            and v.dtype == q.dtype
+            and (mask is None or (mask.ndim == 1 and mask.dtype == torch.int32))
+        ):
+            if mask is None:
+                x = _sana_fa3_cross_attn_op(q.contiguous(), k.contiguous(), v.contiguous())
+            else:
+                x = _sana_fa3_cross_attn_kvcache_op(q.contiguous(), k.contiguous(), v.contiguous(), mask)
+            if not torch.compiler.is_compiling():
+                self._fa3_calls += 1
         else:
             q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
             if mask is not None and mask.ndim == 2:
                 mask = (1 - mask.to(q.dtype)) * -10000.0
                 mask = mask[:, None, None].repeat(1, self.num_heads, 1, 1)
+            elif mask is not None and mask.ndim == 1 and mask.dtype == torch.int32:
+                # Reconstruct boolean prefix mask for portable SDPA fallback if needed
+                positions = torch.arange(k.shape[2], device=k.device, dtype=torch.int32)[None, :]
+                mask = (positions < mask[:, None])[:, None, None, :]
             x = _worldfoundry_scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False)
             x = x.transpose(1, 2)
+            if not torch.compiler.is_compiling():
+                self._sdpa_calls += 1
 
-        x = x.view(B, -1, C)
+        x = x.reshape(B, -1, C)
         x = self.proj(x)
         x = self.proj_drop(x)
 
@@ -369,9 +499,51 @@ class LiteLAReLURope(Attention_):
             self.k_norm = nn.Identity()
 
         self.qkv_store_buffer = None
+        self._fast_litela_rope: bool = False
 
     def forward(self, x: torch.Tensor, mask=None, HW=None, rotary_emb=None, block_mask=None, **kwargs) -> torch.Tensor:
         B, N, C = x.shape
+
+        if self._fast_litela_rope and not self.training and self.qkv_store_buffer is None and rotary_emb is not None:
+            qkv = self.qkv(x).reshape(B, N, 3, C)
+            q, k, v = qkv.unbind(2)
+            dtype = q.dtype
+            heads = C // self.dim
+
+            q = F.relu(self.q_norm(q)).view(B, N, heads, self.dim)
+            k = F.relu(self.k_norm(k)).view(B, N, heads, self.dim)
+            v = v.view(B, N, heads, self.dim)
+
+            if isinstance(rotary_emb, tuple):
+                cos, sin = rotary_emb
+            else:
+                cos = rotary_emb.real.transpose(1, 2).contiguous()
+                sin = rotary_emb.imag.transpose(1, 2).contiguous()
+
+            q_rotated = apply_real_rope_bshd(q, cos, sin)
+            k_rotated = apply_real_rope_bshd(k, cos, sin)
+
+            q_h = q.transpose(1, 2)
+            q_rot_h = q_rotated.transpose(1, 2)
+            k_rot_h = k_rotated.transpose(1, 2)
+            v_h = v.transpose(1, 2)
+
+            use_fp32_attention = getattr(self, "fp32_attention", False)
+            if use_fp32_attention:
+                q_rot_h = q_rot_h.float()
+                k_rot_h = k_rot_h.float()
+                v_h = v_h.float()
+                q_h = q_h.float()
+                k_sum = k.float().sum(dim=1).unsqueeze(-1)  # (B, h, d, 1)
+            else:
+                k_sum = k.sum(dim=1).unsqueeze(-1)  # (B, h, d, 1)
+
+            kv = torch.matmul(k_rot_h.transpose(-2, -1), v_h)  # (B, h, d, d)
+            out = torch.matmul(q_rot_h, kv)  # (B, h, N, d)
+            denom = torch.matmul(q_h, k_sum) + self.eps  # (B, h, N, 1)
+            out = (out / denom).to(dtype)
+            out = out.transpose(1, 2).reshape(B, N, C)
+            return self.proj(out)
 
         qkv = self.qkv(x).reshape(B, N, 3, C)
         q, k, v = qkv.unbind(2)  # B, N, 3, C --> B, N, C
@@ -389,7 +561,10 @@ class LiteLAReLURope(Attention_):
         q = self.kernel_func(q)  # B, h, h_d, N
         k = self.kernel_func(k)
 
-        def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
+        def apply_rotary_emb(hidden_states: torch.Tensor, freqs):
+            if isinstance(freqs, tuple):
+                cos_f, sin_f = freqs
+                freqs = torch.complex(cos_f.to(torch.float64), sin_f.to(torch.float64)).transpose(1, 2)
             x_rotated = torch.view_as_complex(hidden_states.permute(0, 1, 3, 2).to(torch.float64).unflatten(3, (-1, 2)))
             x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4).permute(0, 1, 3, 2)
             return x_out.type_as(hidden_states)
@@ -463,7 +638,10 @@ class ChunkCausalAttention(LiteLAReLURope):
         q = self.kernel_func(q)  # B, h, h_d, N
         k = self.kernel_func(k)
 
-        def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
+        def apply_rotary_emb(hidden_states: torch.Tensor, freqs):
+            if isinstance(freqs, tuple):
+                cos_f, sin_f = freqs
+                freqs = torch.complex(cos_f.to(torch.float64), sin_f.to(torch.float64)).transpose(1, 2)
             x_rotated = torch.view_as_complex(hidden_states.permute(0, 1, 3, 2).to(torch.float64).unflatten(3, (-1, 2)))
             x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4).permute(0, 1, 3, 2)
             return x_out.type_as(hidden_states)
@@ -567,7 +745,10 @@ class CachedCausalAttention(LiteLAReLURope):
         q = self.kernel_func(q)  # B, h, h_d, N
         k = self.kernel_func(k)
 
-        def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
+        def apply_rotary_emb(hidden_states: torch.Tensor, freqs):
+            if isinstance(freqs, tuple):
+                cos_f, sin_f = freqs
+                freqs = torch.complex(cos_f.to(torch.float64), sin_f.to(torch.float64)).transpose(1, 2)
             x_rotated = torch.view_as_complex(hidden_states.permute(0, 1, 3, 2).to(torch.float64).unflatten(3, (-1, 2)))
             x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4).permute(0, 1, 3, 2)
             return x_out.type_as(hidden_states)
@@ -781,7 +962,10 @@ class SelfAttnProcessorLiteLAReLURope:
         q = self.attn.kernel_func(q)  # B, h, h_d, N
         k = self.attn.kernel_func(k)
 
-        def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
+        def apply_rotary_emb(hidden_states: torch.Tensor, freqs):
+            if isinstance(freqs, tuple):
+                cos_f, sin_f = freqs
+                freqs = torch.complex(cos_f.to(torch.float64), sin_f.to(torch.float64)).transpose(1, 2)
             x_rotated = torch.view_as_complex(hidden_states.permute(0, 1, 3, 2).to(torch.float64).unflatten(3, (-1, 2)))
             x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4).permute(0, 1, 3, 2)
             return x_out.type_as(hidden_states)
@@ -1432,11 +1616,19 @@ class WanRotaryPosEmbed(nn.Module):
             )
             freqs.append(freq)
         self.freqs = torch.cat(freqs, dim=1)
+        self._cached_fhw: tuple[int, int, int, str] | None = None
+        self._cached_freqs: torch.Tensor | None = None
+        self._cached_real_fhw: tuple[int, int, int, str, torch.dtype] | None = None
+        self._cached_real_cos_sin: tuple[torch.Tensor, torch.Tensor] | None = None
 
     def forward(self, fhw: torch.Tensor, device: torch.device) -> torch.Tensor:
-        ppf, pph, ppw = fhw
+        ppf, pph, ppw = int(fhw[0]), int(fhw[1]), int(fhw[2])
+        cache_key = (ppf, pph, ppw, str(device))
+        if self._cached_fhw == cache_key and self._cached_freqs is not None and not torch.compiler.is_compiling():
+            return self._cached_freqs
 
-        self.freqs = self.freqs.to(device)
+        if self.freqs.device != device:
+            self.freqs = self.freqs.to(device)
         freqs = self.freqs.split_with_sizes(
             [
                 self.attention_head_dim // 2 - 2 * (self.attention_head_dim // 6),
@@ -1449,8 +1641,39 @@ class WanRotaryPosEmbed(nn.Module):
         freqs_f = freqs[0][:ppf].view(ppf, 1, 1, -1).expand(ppf, pph, ppw, -1)
         freqs_h = freqs[1][:pph].view(1, pph, 1, -1).expand(ppf, pph, ppw, -1)
         freqs_w = freqs[2][:ppw].view(1, 1, ppw, -1).expand(ppf, pph, ppw, -1)
-        freqs = torch.cat([freqs_f, freqs_h, freqs_w], dim=-1).reshape(1, 1, ppf * pph * ppw, -1)
-        return freqs
+        out = torch.cat([freqs_f, freqs_h, freqs_w], dim=-1).reshape(1, 1, ppf * pph * ppw, -1)
+        if not torch.compiler.is_compiling() and not (
+            device.type == "cuda" and torch.cuda.is_current_stream_capturing()
+        ):
+            self._cached_fhw = cache_key
+            self._cached_freqs = out
+        return out
+
+    def forward_real(
+        self,
+        fhw: tuple[int, int, int],
+        device: torch.device,
+        *,
+        dtype: torch.dtype = torch.float64,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return cached ``(cos, sin)`` tensors of shape ``[1, N, 1, D//2]`` for Triton RoPE."""
+        ppf, pph, ppw = int(fhw[0]), int(fhw[1]), int(fhw[2])
+        cache_key = (ppf, pph, ppw, str(device), dtype)
+        if (
+            self._cached_real_fhw == cache_key
+            and self._cached_real_cos_sin is not None
+            and not torch.compiler.is_compiling()
+        ):
+            return self._cached_real_cos_sin
+        freqs = self.forward(fhw, device)  # [1, 1, N, D//2] complex128
+        cos = freqs.real.transpose(1, 2).to(dtype).contiguous()
+        sin = freqs.imag.transpose(1, 2).to(dtype).contiguous()
+        if not torch.compiler.is_compiling() and not (
+            device.type == "cuda" and torch.cuda.is_current_stream_capturing()
+        ):
+            self._cached_real_fhw = cache_key
+            self._cached_real_cos_sin = (cos, sin)
+        return cos, sin
 
 
 class CausalWanRotaryPosEmbed(WanRotaryPosEmbed):
@@ -1782,7 +2005,10 @@ class ChunkedLiteLAReLURope(LiteLAReLURope):
         q = self.kernel_func(q)  # B, h, h_d, N
         k = self.kernel_func(k)
 
-        def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
+        def apply_rotary_emb(hidden_states: torch.Tensor, freqs):
+            if isinstance(freqs, tuple):
+                cos_f, sin_f = freqs
+                freqs = torch.complex(cos_f.to(torch.float64), sin_f.to(torch.float64)).transpose(1, 2)
             x_rotated = torch.view_as_complex(hidden_states.permute(0, 1, 3, 2).to(torch.float64).unflatten(3, (-1, 2)))
             x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4).permute(0, 1, 3, 2)
             return x_out.type_as(hidden_states)

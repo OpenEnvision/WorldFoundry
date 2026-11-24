@@ -27,9 +27,11 @@ that the Triton fused path in ``fastlinear/`` mirrors.
 # This file is modified from https://github.com/PixArt-alpha/PixArt-sigma
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from worldfoundry.base_models.diffusion_model.models.networks.sana.activation import build_act, get_act_name
 from worldfoundry.base_models.diffusion_model.models.networks.sana.normalization import build_norm, get_norm_name
+from worldfoundry.core.kernels import silu_mul
 from worldfoundry.core.nn import get_same_padding, val2tuple
 from worldfoundry.core.nn.blocks.layers import Mlp
 
@@ -166,6 +168,65 @@ class GLUMBConv(nn.Module):
             norm=norm[2],
             act=act[2],
         )
+        self._fused_glumbconv = False
+
+    def _can_use_fused_spatial(self) -> bool:
+        inv_conv = self.inverted_conv.conv
+        pt_conv = self.point_conv.conv
+        return (
+            self._fused_glumbconv
+            and not self.training
+            and self.inverted_conv.norm is None
+            and self.depth_conv.norm is None
+            and self.point_conv.norm is None
+            and self.inverted_conv.dropout is None
+            and self.depth_conv.dropout is None
+            and self.point_conv.dropout is None
+            and isinstance(self.inverted_conv.act, nn.SiLU)
+            and isinstance(self.glu_act, nn.SiLU)
+            and self.point_conv.act is None
+            and isinstance(inv_conv, nn.Conv2d)
+            and isinstance(self.depth_conv.conv, nn.Conv2d)
+            and isinstance(pt_conv, nn.Conv2d)
+            and inv_conv.kernel_size == (1, 1)
+            and inv_conv.stride == (1, 1)
+            and inv_conv.padding == (0, 0)
+            and inv_conv.dilation == (1, 1)
+            and inv_conv.groups == 1
+            and pt_conv.kernel_size == (1, 1)
+            and pt_conv.stride == (1, 1)
+            and pt_conv.padding == (0, 0)
+            and pt_conv.dilation == (1, 1)
+            and pt_conv.groups == 1
+        )
+
+    def _apply_spatial_fused_nhwc(self, x_nhwc: torch.Tensor) -> torch.Tensor:
+        """NHWC fused inverted bottleneck: F.linear -> channels_last depthwise conv -> silu_mul -> F.linear."""
+        inv_conv = self.inverted_conv.conv
+        pt_conv = self.point_conv.conv
+        assert inv_conv is not None and pt_conv is not None
+        inv_w = inv_conv.weight.squeeze(-1).squeeze(-1)
+        h = F.silu(F.linear(x_nhwc, inv_w, inv_conv.bias))
+        # Permute NHWC -> NCHW view that is already channels_last contiguous!
+        h_nchw = h.permute(0, 3, 1, 2)
+        h_dw = self.depth_conv(h_nchw).permute(0, 2, 3, 1)
+        # Note operand order: GLUMBConv computes a * silu(g) where a, g = chunk(2)
+        a, g = h_dw.chunk(2, dim=-1)
+        gated = silu_mul(g.contiguous(), a.contiguous())
+        pt_w = pt_conv.weight.squeeze(-1).squeeze(-1)
+        return F.linear(gated, pt_w, pt_conv.bias)
+
+    def _apply_spatial_fused_nhwc_autochunked(self, x_nhwc: torch.Tensor) -> torch.Tensor:
+        BT, H, W, _ = x_nhwc.shape
+        inv_conv = self.inverted_conv.conv
+        assert inv_conv is not None
+        elements_per_bt = inv_conv.out_channels * H * W
+        if BT == 0 or elements_per_bt <= 0:
+            return self._apply_spatial_fused_nhwc(x_nhwc)
+        max_bt = max(1, _INT32_SAFE_CONV_ELEMENTS // elements_per_bt)
+        if max_bt >= BT:
+            return self._apply_spatial_fused_nhwc(x_nhwc)
+        return torch.cat([self._apply_spatial_fused_nhwc(x_nhwc[s : s + max_bt]) for s in range(0, BT, max_bt)], dim=0)
 
     def _apply_spatial(self, x: torch.Tensor) -> torch.Tensor:
         """Fused spatial pipeline: inverted_conv -> depth_conv -> GLU -> point_conv."""
@@ -188,6 +249,15 @@ class GLUMBConv(nn.Module):
 
     def forward(self, x: torch.Tensor, HW=None) -> torch.Tensor:
         B, N, C = x.shape
+        if self._can_use_fused_spatial() and HW is not None:
+            if len(HW) == 2:
+                H, W = HW
+                x_nhwc = x.reshape(B, H, W, C)
+                return self._apply_spatial_fused_nhwc_autochunked(x_nhwc).reshape(B, N, -1)
+            if len(HW) == 3:
+                T, H, W = HW
+                x_nhwc = x.reshape(B * T, H, W, C)
+                return self._apply_spatial_fused_nhwc_autochunked(x_nhwc).reshape(B, N, -1)
         if HW is None:
             H = W = int(N**0.5)
         elif len(HW) == 2:
@@ -254,6 +324,13 @@ class GLUMBConvTemp(GLUMBConv):
 
         assert len(HW) == 3, "HW must be a tuple of (T, H, W)"
         T, H, W = HW
+        if self._can_use_fused_spatial():
+            x_nhwc = x.reshape(B * T, H, W, C)
+            x_spatial = self._apply_spatial_fused_nhwc_autochunked(x_nhwc)
+            # Temporal aggregation: [B, C, T, H*W]
+            x_reshaped = x_spatial.reshape(B, T, H * W, C).permute(0, 3, 1, 2)
+            x_out = x_reshaped + self.t_conv(x_reshaped)
+            return x_out.permute(0, 2, 3, 1).reshape(B, N, C)
         x = x.reshape(B * T, H, W, C).permute(0, 3, 1, 2)
 
         x = self._apply_spatial_autochunked(x)
