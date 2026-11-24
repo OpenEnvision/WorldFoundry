@@ -48,7 +48,10 @@ from worldfoundry.base_models.diffusion_model.schedulers.minimax_h3 import (
 
 from ..pipeline_utils import PipelineABC
 from ._minimax_h3 import (
+    MiniMaxH3CFGParallelConfig,
+    MiniMaxH3ContextParallelConfig,
     MiniMaxH3DenoiseBranch,
+    MiniMaxH3StepCacheConfig,
     minimax_h3_denoise_loop,
     minimax_h3_packed_sequence,
     minimax_h3_packed_sequence_ref2va_blocks,
@@ -199,6 +202,36 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         self.tokenizer = tokenizer
         self.processor = processor
         self.component_devices = dict(component_devices or dict.fromkeys(_COMPONENT_NAMES, device))
+        self._step_cache_config: MiniMaxH3StepCacheConfig | Mapping[str, Any] | None = None
+        self._cfg_parallel_config: MiniMaxH3CFGParallelConfig | bool | None = None
+        self._context_parallel_config: MiniMaxH3ContextParallelConfig | None = None
+        self._last_step_cache_report: dict[str, Any] | None = None
+        self._last_cfg_parallel_report: dict[str, Any] | None = None
+        self._last_context_parallel_report: dict[str, Any] | None = None
+
+    @staticmethod
+    def _merge_context_parallel_args(
+        context_parallel: MiniMaxH3ContextParallelConfig | Mapping[str, Any] | int | bool | None,
+        context_parallel_size: int | None,
+    ) -> tuple[bool, MiniMaxH3ContextParallelConfig | int | bool | None]:
+        """Validate and merge ``context_parallel`` and ``context_parallel_size`` aliases."""
+
+        if context_parallel is None and context_parallel_size is None:
+            return False, None
+        from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.dit import (
+            _coerce_context_parallel_config,
+        )
+
+        cp1 = _coerce_context_parallel_config(context_parallel) if context_parallel is not None else None
+        cp2 = _coerce_context_parallel_config(context_parallel_size) if context_parallel_size is not None else None
+        if context_parallel is not None and context_parallel_size is not None:
+            sp1 = int(cp1.sp_size) if cp1 is not None else 1
+            sp2 = int(cp2.sp_size) if cp2 is not None else 1
+            if sp1 != sp2:
+                raise ValueError(f"conflicting context_parallel (sp_size={sp1}) and context_parallel_size={sp2}")
+            return True, (cp1 if cp1 is not None else 1)
+        resolved = cp1 if context_parallel is not None else cp2
+        return True, (resolved if resolved is not None else 1)
 
     # ------------------------------------------------------------------ #
     # Loading.
@@ -274,6 +307,10 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
             options.get(key) not in (None, False)
             for key in (
                 "acceleration",
+                "step_cache",
+                "cfg_parallel",
+                "context_parallel",
+                "context_parallel_size",
                 "vae_decode_autocast",
                 "vae_channels_last_3d",
                 "vae_stack_tiling",
@@ -283,6 +320,10 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         ):
             pipe.configure_acceleration(
                 acceleration=options.get("acceleration"),
+                step_cache=options.get("step_cache"),
+                cfg_parallel=options.get("cfg_parallel"),
+                context_parallel=options.get("context_parallel"),
+                context_parallel_size=options.get("context_parallel_size"),
                 vae_decode_autocast=options.get("vae_decode_autocast"),
                 vae_channels_last_3d=options.get("vae_channels_last_3d"),
                 vae_stack_tiling=options.get("vae_stack_tiling"),
@@ -295,14 +336,19 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         self,
         *,
         acceleration: Any = None,
+        step_cache: MiniMaxH3StepCacheConfig | Mapping[str, Any] | None = None,
+        cfg_parallel: MiniMaxH3CFGParallelConfig | bool | None = None,
+        context_parallel: MiniMaxH3ContextParallelConfig | Mapping[str, Any] | int | bool | None = None,
+        context_parallel_size: int | None = None,
         vae_decode_autocast: torch.dtype | str | bool | None = None,
         vae_channels_last_3d: bool | None = None,
         vae_stack_tiling: bool | None = None,
         vae_tile_batch_size: int | None = None,
         vae_compile: bool = False,
     ) -> dict[str, Any]:
-        """Configure SOL-Engine acceleration across the DiT and Video VAE."""
+        """Configure SOL-Engine acceleration across the DiT, denoise loop, and Video VAE."""
 
+        cp_supplied, merged_cp = self._merge_context_parallel_args(context_parallel, context_parallel_size)
         receipt: dict[str, Any] = {}
         if acceleration is not None and self.transformer is not None:
             from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.acceleration import (
@@ -310,6 +356,14 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
             )
 
             receipt["transformer"] = accelerate_minimax_h3_dit(self.transformer, acceleration)
+            if not cp_supplied:
+                transformer_cp = getattr(self.transformer, "_context_parallel", None)
+                self._context_parallel_config = (
+                    transformer_cp if isinstance(transformer_cp, MiniMaxH3ContextParallelConfig) else None
+                )
+                self._last_context_parallel_report = None
+                if "context_parallel" in receipt["transformer"]:
+                    receipt["context_parallel"] = dict(receipt["transformer"]["context_parallel"])
             # When a declarative SOL profile tier string is requested and VAE
             # flags were not explicitly overridden, align VAE acceleration too.
             if isinstance(acceleration, str):
@@ -319,6 +373,39 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
                     vae_channels_last_3d = True
                 if vae_stack_tiling is None:
                     vae_stack_tiling = True
+
+        if step_cache is not None:
+            from ._minimax_h3.denoise_loop import _coerce_step_cache_config
+
+            parsed_cache = _coerce_step_cache_config(step_cache)
+            self._step_cache_config = parsed_cache
+            self._last_step_cache_report = None
+            receipt["step_cache"] = parsed_cache.to_dict() if parsed_cache is not None else {"enabled": False}
+
+        if cfg_parallel is not None:
+            from ._minimax_h3.denoise_loop import _coerce_cfg_parallel_config
+
+            parsed_cfg_parallel = _coerce_cfg_parallel_config(cfg_parallel)
+            self._cfg_parallel_config = parsed_cfg_parallel
+            self._last_cfg_parallel_report = None
+            receipt["cfg_parallel"] = {
+                "enabled": bool(parsed_cfg_parallel is not None and parsed_cfg_parallel.enabled),
+            }
+
+        if cp_supplied:
+            parsed_cp = merged_cp if isinstance(merged_cp, MiniMaxH3ContextParallelConfig) else None
+            if self.transformer is not None and hasattr(self.transformer, "set_context_parallel"):
+                cp_receipt = self.transformer.set_context_parallel(parsed_cp)
+            else:
+                sp_size = int(parsed_cp.sp_size) if parsed_cp is not None else 1
+                cp_receipt = {
+                    "enabled": sp_size > 1,
+                    "sp_size": sp_size,
+                    "allow_cuda_graph": bool(parsed_cp.allow_cuda_graph) if parsed_cp is not None else False,
+                }
+            self._context_parallel_config = parsed_cp
+            self._last_context_parallel_report = None
+            receipt["context_parallel"] = cp_receipt
 
         if (
             self.video_vae is not None
@@ -338,13 +425,30 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         return receipt
 
     def acceleration_report(self) -> dict[str, Any]:
-        """Return runtime acceleration receipts for the transformer and video VAE."""
+        """Return runtime acceleration receipts for the transformer, denoise loop, and video VAE."""
 
         report: dict[str, Any] = {}
         if self.transformer is not None and hasattr(self.transformer, "acceleration_report"):
             report["transformer"] = self.transformer.acceleration_report()
         if self.video_vae is not None and hasattr(self.video_vae, "acceleration_report"):
             report["video_vae"] = self.video_vae.acceleration_report()
+        if self._last_step_cache_report is not None:
+            report["step_cache"] = dict(self._last_step_cache_report)
+        if self._last_cfg_parallel_report is not None:
+            report["cfg_parallel"] = dict(self._last_cfg_parallel_report)
+        elif self._cfg_parallel_config is not None:
+            cfg_p = self._cfg_parallel_config
+            report["cfg_parallel"] = {
+                "enabled": bool(cfg_p.enabled if isinstance(cfg_p, MiniMaxH3CFGParallelConfig) else cfg_p),
+            }
+        if self._last_context_parallel_report is not None:
+            report["context_parallel"] = dict(self._last_context_parallel_report)
+        elif self._context_parallel_config is not None:
+            report["context_parallel"] = {
+                "enabled": bool(self._context_parallel_config.sp_size > 1),
+                "sp_size": int(self._context_parallel_config.sp_size),
+                "allow_cuda_graph": bool(self._context_parallel_config.allow_cuda_graph),
+            }
         return report
 
     @classmethod
@@ -695,6 +799,10 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         renoise: bool = False,
         shared_initial_noise: bool = False,
         return_latent_rows: bool = False,
+        step_cache: MiniMaxH3StepCacheConfig | Mapping[str, Any] | None = None,
+        cfg_parallel: MiniMaxH3CFGParallelConfig | bool | None = None,
+        context_parallel: MiniMaxH3ContextParallelConfig | Mapping[str, Any] | int | bool | None = None,
+        context_parallel_size: int | None = None,
     ) -> dict[str, Any]:
         """Run the coupled denoise loop and return decoded (or raw) modalities."""
 
@@ -846,12 +954,41 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
             loop_kwargs["cfg_scale"] = float(cfg_scale)
         if branch_context is not None:
             loop_kwargs["branch_context"] = branch_context
+        effective_step_cache = self._step_cache_config if step_cache is None else step_cache
+        cache_report: dict[str, Any] | None = None
+        if effective_step_cache is not None:
+            cache_report = {}
+            loop_kwargs["step_cache"] = effective_step_cache
+            loop_kwargs["step_cache_report"] = cache_report
+        effective_cfg_parallel = self._cfg_parallel_config if cfg_parallel is None else cfg_parallel
+        cfg_parallel_report: dict[str, Any] | None = None
+        if effective_cfg_parallel is not None:
+            cfg_parallel_report = {}
+            loop_kwargs["cfg_parallel"] = effective_cfg_parallel
+            loop_kwargs["cfg_parallel_report"] = cfg_parallel_report
+        cp_supplied, merged_cp = self._merge_context_parallel_args(context_parallel, context_parallel_size)
+        effective_cp = merged_cp if cp_supplied else self._context_parallel_config
+        cp_report: dict[str, Any] | None = None
+        if effective_cp is not None or getattr(self.transformer, "_context_parallel", None) is not None:
+            cp_report = {}
+            if effective_cp is not None:
+                loop_kwargs["context_parallel"] = effective_cp
+            loop_kwargs["context_parallel_report"] = cp_report
         video_rows, audio_rows = minimax_h3_denoise_loop(**loop_kwargs)
+        self._last_step_cache_report = cache_report
+        self._last_cfg_parallel_report = cfg_parallel_report
+        self._last_context_parallel_report = cp_report
 
         # Target rows are the suffix after any condition/reference rows.
         video_target = video_rows[branch.video_target_slice]
         audio_target = audio_rows[branch.audio_target_slice]
         result: dict[str, Any] = {"plan": plan, "task": task}
+        if cache_report is not None and cache_report.get("enabled"):
+            result["step_cache"] = cache_report
+        if cfg_parallel_report is not None and cfg_parallel_report.get("active"):
+            result["cfg_parallel"] = cfg_parallel_report
+        if cp_report is not None and cp_report.get("active"):
+            result["context_parallel"] = cp_report
         if return_latent_rows:
             result["video_rows"] = video_target
             result["audio_rows"] = audio_target
@@ -906,6 +1043,7 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         self,
         prompt: str,
         *,
+        negative_prompt: str | None = None,
         task: str = "t2va",
         short_edge: int = DEFAULT_SHORT_EDGE,
         aspect_ratio: str = DEFAULT_ASPECT_RATIO,
@@ -920,6 +1058,8 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         if self.text_encoder is None or self.tokenizer is None:
             raise RuntimeError("text_encoder/tokenizer are not initialized; call from_pretrained with a checkpoint")
         prompt_embeds = self._encode_prompt(prompt)
+        if negative_prompt is not None and "negative_prompt_embeds" not in kwargs:
+            kwargs["negative_prompt_embeds"] = self._encode_prompt(negative_prompt)
         result = self.generate(
             prompt_embeds=prompt_embeds,
             task=task,

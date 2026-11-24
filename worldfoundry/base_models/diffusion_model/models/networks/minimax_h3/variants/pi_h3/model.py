@@ -486,6 +486,9 @@ class PiH3DiTModel(MiniMaxH3DiTModel):
             ignore_trailing_pad=ignore_trailing_pad,
             prefix_sink_tokens=prefix_sink_tokens,
             force_dense_attention=force_dense_attention,
+            step_cache=kwargs.get("step_cache"),
+            step_index=kwargs.get("step_index"),
+            context_parallel=kwargs.get("context_parallel"),
         )
 
         norm_hidden = self.final_layer.modulate(hidden, adaln_input=temb, inverse_indices=inverse_indices)

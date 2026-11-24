@@ -35,7 +35,7 @@ from typing import Any, Literal
 import torch
 from torch import nn
 
-from .dit import MiniMaxH3DiTModel
+from .dit import MiniMaxH3ContextParallelConfig, MiniMaxH3DiTModel
 from .triton_fp8_swiglu import fuse_minimax_h3_fp8_swiglu_ffns
 
 DEFAULT_MINIMAX_H3_FP8_EXCLUDES: tuple[str, ...] = (
@@ -58,6 +58,7 @@ class MiniMaxH3AccelerationConfig:
     fuse_projections: bool = True
     attention_backend: str | None = None
     attention_options: Mapping[str, Any] | None = None
+    dense_attention_backend: str | None = None
     dense_attention_layers: tuple[int, ...] = ()
     dense_initial_steps: int = 0
     include_refiner_attention: bool = False
@@ -73,8 +74,9 @@ class MiniMaxH3AccelerationConfig:
     cuda_graph_warmup: int = 1
     cuda_graph_max_graphs: int = 16
     cuda_graph_clone_outputs: bool = True
-    piecewise_head_blocks: int = 2
+    piecewise_head_blocks: int = 1
     piecewise_tail_blocks: int = 2
+    context_parallel_size: int = 1
     compile: bool = False
     compile_mode: str = "default"
     skip_host_validation: bool = True
@@ -217,7 +219,7 @@ def quantize_minimax_h3_fp8(
     model: nn.Module,
     *,
     scaling: Literal["rowwise", "tensorwise"] = "rowwise",
-    use_fast_accum: bool = True,
+    use_fast_accum: bool = False,
     keep_dense_fallback: bool = False,
     min_features: int = 1024,
     exclude_edge_blocks: bool = False,
@@ -265,7 +267,7 @@ def install_minimax_h3_cuda_graph(
     warmup: int = 1,
     max_graphs: int = 16,
     clone_outputs: bool = True,
-    head_blocks: int = 2,
+    head_blocks: int = 1,
     tail_blocks: int = 2,
     extra_key: str = "minimax-h3",
 ) -> dict[str, Any]:
@@ -352,58 +354,111 @@ def compile_minimax_h3_blocks(
     return {"compiled_blocks": compiled_count, "mode": mode, "fullgraph": bool(fullgraph)}
 
 
+def _resolve_hopper_dense_backend(sm_major: int) -> str:
+    """Prefer lossless Hopper FlashAttention-3 for dense attention on SM90 when usable."""
+
+    if int(sm_major) == 9:
+        from worldfoundry.core.attention.backends.probe import attention_backend_capability
+
+        if attention_backend_capability("flash_attention_3").usable:
+            return "flash_attention_3"
+    return "torch"
+
+
+def _sol_attention_options(
+    *,
+    tau: float,
+    kv_splits: int,
+    sm_major: int,
+) -> dict[str, Any]:
+    opts: dict[str, Any] = {"tau": float(tau), "thresh_type": "exact", "compress_kv": True}
+    if int(kv_splits) > 1 and int(sm_major) == 9:
+        opts["kv_splits"] = int(kv_splits)
+        opts["allow_multi_split"] = True
+    return opts
+
+
 def minimax_h3_sol_profile(
     tier: Literal["exact", "fast", "sol_high_fidelity", "sol_balanced", "sol_turbo"] | str,
     *,
     sm_major: int = 9,
     keep_dense_fallback: bool = False,
     cuda_graph: Literal["off", "whole", "piecewise"] | None = None,
+    kv_splits: Literal[1, 2, 4] = 1,
+    dense_backend: str | None = None,
+    context_parallel_size: int = 1,
 ) -> MiniMaxH3AccelerationConfig:
     """Return a validated SOL-Engine preset for MiniMax H3 DiT models.
 
     Tiers:
-        - ``exact``: Projection fusion + zero-sync Triton kernels + cuDNN9 BF16
-          SDPA + whole-stack CUDA Graph (lossless BF16 parity).
-        - ``fast``: ``exact`` + Hopper rowwise FP8 W8A8 (edge blocks BF16) +
-          Fused SwiGLU-FP8 FFN (excluding sensitive conditioning/AdaLN/head layers).
+        - ``exact``: Projection fusion + zero-sync Triton kernels + Hopper FA3
+          (or cuDNN9 BF16 SDPA fallback) + whole-stack CUDA Graph (lossless).
+        - ``fast``: ``exact`` + Hopper rowwise FP8 W8A8 (``use_fast_accum=False``,
+          edge blocks BF16) + Fused SwiGLU-FP8 FFN (excluding sensitive layers).
         - ``sol_high_fidelity``: ``fast`` + step-adaptive ``sol_attn``
-          (``tau=0.25, thresh_type="exact"``, blocks ``0, 1, -1`` dense, first
-          2 denoising steps dense, prefix-sink) + piecewise block CUDA Graph.
+          (``tau=0.25, thresh_type="exact"``, blocks ``0, 1, -1`` dense via FA3,
+          first 2 denoising steps dense, prefix-sink) + piecewise CUDA Graph
+          (``head = blocks[0:1]``, ``body = blocks[1:48]``, ``tail = blocks[48:50]``).
         - ``sol_balanced``: ``fast`` + step-adaptive ``sol_attn``
-          (``tau=0.5, thresh_type="exact"``, blocks ``0, 1, -1`` dense, first
-          1 denoising step dense, prefix-sink) + piecewise block CUDA Graph.
+          (``tau=0.5, thresh_type="exact"``, blocks ``0, 1, -1`` dense via FA3,
+          first 1 denoising step dense, prefix-sink) + piecewise CUDA Graph.
         - ``sol_turbo``: FP8 W8A8 + ``sol_attn`` (``tau=1.0, thresh_type="exact"``,
-          blocks ``0, 1, -1`` dense, prefix-sink) + piecewise block CUDA Graph.
+          blocks ``0, 1, -1`` dense via FA3, prefix-sink) + piecewise CUDA Graph.
     """
+
+    if isinstance(kv_splits, bool) or not isinstance(kv_splits, int) or kv_splits not in (1, 2, 4):
+        raise ValueError(f"kv_splits must be 1, 2, or 4, got {kv_splits!r}")
+    if (
+        isinstance(context_parallel_size, bool)
+        or not isinstance(context_parallel_size, int)
+        or context_parallel_size < 1
+    ):
+        raise ValueError(f"context_parallel_size must be a positive integer, got {context_parallel_size!r}")
 
     normalized = str(tier).strip().lower()
     fp8_ok = int(sm_major) >= 9
+    cp_size = int(context_parallel_size)
+    eff_dense = dense_backend if dense_backend is not None else _resolve_hopper_dense_backend(sm_major)
+    eff_whole_graph: Literal["off", "whole", "piecewise"] = (
+        cuda_graph if cuda_graph is not None else ("off" if cp_size > 1 else "whole")
+    )
+    eff_piecewise_graph: Literal["off", "whole", "piecewise"] = (
+        cuda_graph if cuda_graph is not None else ("off" if cp_size > 1 else "piecewise")
+    )
     if normalized == "exact":
         return MiniMaxH3AccelerationConfig(
             fuse_projections=True,
-            attention_backend="torch",
+            attention_backend=eff_dense,
+            dense_attention_backend=eff_dense,
             quantization="none",
-            cuda_graph=cuda_graph or "whole",
-            notes=("lossless BF16 projection fusion + zero-sync Triton kernels + CUDA Graph",),
+            cuda_graph=eff_whole_graph,
+            context_parallel_size=cp_size,
+            notes=(f"lossless BF16 projection fusion + zero-sync Triton kernels + {eff_dense} + CUDA Graph",),
         )
     if normalized == "fast":
         return MiniMaxH3AccelerationConfig(
             fuse_projections=True,
-            attention_backend="torch",
+            attention_backend=eff_dense,
+            dense_attention_backend=eff_dense,
             quantization="fp8" if fp8_ok else "none",
             fp8_scaling="rowwise",
             fp8_use_fast_accum=False,
             fp8_keep_dense_fallback=keep_dense_fallback,
             fp8_exclude_edge_blocks=True,
             fuse_fp8_ffn=True,
-            cuda_graph=cuda_graph or "whole",
-            notes=("Hopper rowwise FP8 W8A8 (edge blocks BF16) + Fused SwiGLU-FP8 FFN + whole CUDA Graph",),
+            cuda_graph=eff_whole_graph,
+            context_parallel_size=cp_size,
+            notes=(
+                f"Hopper rowwise FP8 W8A8 (exact accum, edge blocks BF16) + {eff_dense} "
+                "+ Fused SwiGLU-FP8 FFN + whole CUDA Graph",
+            ),
         )
     if normalized == "sol_high_fidelity":
         return MiniMaxH3AccelerationConfig(
             fuse_projections=True,
             attention_backend="sol_attn",
-            attention_options={"tau": 0.25, "thresh_type": "exact", "compress_kv": True},
+            attention_options=_sol_attention_options(tau=0.25, kv_splits=kv_splits, sm_major=sm_major),
+            dense_attention_backend=eff_dense,
             dense_attention_layers=(0, 1, -1),
             dense_initial_steps=2,
             quantization="fp8" if fp8_ok else "none",
@@ -412,19 +467,21 @@ def minimax_h3_sol_profile(
             fp8_keep_dense_fallback=keep_dense_fallback,
             fp8_exclude_edge_blocks=True,
             fuse_fp8_ffn=True,
-            cuda_graph=cuda_graph or "piecewise",
-            piecewise_head_blocks=2,
+            cuda_graph=eff_piecewise_graph,
+            piecewise_head_blocks=1,
             piecewise_tail_blocks=2,
+            context_parallel_size=cp_size,
             notes=(
-                "Step-adaptive SOL-Attn(exact, tau=0.25, dense_steps=2, prefix-sink, dense 0/1/-1) "
-                "+ FP8(edge-excl) + Piecewise Graph",
+                f"Step-adaptive SOL-Attn(exact, tau=0.25, kv_splits={kv_splits}, dense_steps=2, "
+                f"prefix-sink, dense 0/1/-1 via {eff_dense}) + FP8(exact accum, edge-excl) + Piecewise Graph",
             ),
         )
     if normalized == "sol_balanced":
         return MiniMaxH3AccelerationConfig(
             fuse_projections=True,
             attention_backend="sol_attn",
-            attention_options={"tau": 0.5, "thresh_type": "exact", "compress_kv": True},
+            attention_options=_sol_attention_options(tau=0.5, kv_splits=kv_splits, sm_major=sm_major),
+            dense_attention_backend=eff_dense,
             dense_attention_layers=(0, 1, -1),
             dense_initial_steps=1,
             quantization="fp8" if fp8_ok else "none",
@@ -433,19 +490,21 @@ def minimax_h3_sol_profile(
             fp8_keep_dense_fallback=keep_dense_fallback,
             fp8_exclude_edge_blocks=True,
             fuse_fp8_ffn=True,
-            cuda_graph=cuda_graph or "piecewise",
-            piecewise_head_blocks=2,
+            cuda_graph=eff_piecewise_graph,
+            piecewise_head_blocks=1,
             piecewise_tail_blocks=2,
+            context_parallel_size=cp_size,
             notes=(
-                "Step-adaptive SOL-Attn(exact, tau=0.5, dense_steps=1, prefix-sink, dense 0/1/-1) "
-                "+ FP8(edge-excl) + Piecewise Graph",
+                f"Step-adaptive SOL-Attn(exact, tau=0.5, kv_splits={kv_splits}, dense_steps=1, "
+                f"prefix-sink, dense 0/1/-1 via {eff_dense}) + FP8(exact accum, edge-excl) + Piecewise Graph",
             ),
         )
     if normalized == "sol_turbo":
         return MiniMaxH3AccelerationConfig(
             fuse_projections=True,
             attention_backend="sol_attn",
-            attention_options={"tau": 1.0, "thresh_type": "exact", "compress_kv": True},
+            attention_options=_sol_attention_options(tau=1.0, kv_splits=kv_splits, sm_major=sm_major),
+            dense_attention_backend=eff_dense,
             dense_attention_layers=(0, 1, -1),
             dense_initial_steps=0,
             quantization="fp8" if fp8_ok else "none",
@@ -454,10 +513,14 @@ def minimax_h3_sol_profile(
             fp8_keep_dense_fallback=keep_dense_fallback,
             fp8_exclude_edge_blocks=False,
             fuse_fp8_ffn=True,
-            cuda_graph=cuda_graph or "piecewise",
-            piecewise_head_blocks=2,
+            cuda_graph=eff_piecewise_graph,
+            piecewise_head_blocks=1,
             piecewise_tail_blocks=2,
-            notes=("SOL-Attn(exact, tau=1.0, prefix-sink, dense 0/1/-1) + FP8 W8A8 + Piecewise Graph",),
+            context_parallel_size=cp_size,
+            notes=(
+                f"SOL-Attn(exact, tau=1.0, kv_splits={kv_splits}, prefix-sink, dense 0/1/-1 via {eff_dense}) "
+                "+ FP8 W8A8(exact accum) + Piecewise Graph",
+            ),
         )
     raise ValueError(
         f"unsupported MiniMax H3 acceleration tier {tier!r}; "
@@ -488,10 +551,14 @@ def accelerate_minimax_h3_dit(
 
     # Validate before mutating model so failed calls leave model untouched.
     normalized_backend: str | None = None
-    if resolved.attention_backend is not None:
+    normalized_dense_backend = "torch"
+    if resolved.attention_backend is not None or resolved.dense_attention_backend is not None:
         from worldfoundry.core.attention.backends.probe import normalize_attention_backend
 
-        normalized_backend = normalize_attention_backend(str(resolved.attention_backend))
+        if resolved.attention_backend is not None:
+            normalized_backend = normalize_attention_backend(str(resolved.attention_backend))
+        if resolved.dense_attention_backend is not None:
+            normalized_dense_backend = normalize_attention_backend(str(resolved.dense_attention_backend))
     if resolved.compile and normalized_backend == "sol_attn":
         raise ValueError("Sol-Attn cannot be combined with torch.compile; use CUDA Graph instead")
     if (
@@ -507,6 +574,22 @@ def accelerate_minimax_h3_dit(
         )
     if int(resolved.dense_initial_steps) < 0:
         raise ValueError(f"dense_initial_steps must be non-negative, got {resolved.dense_initial_steps}")
+    if (
+        isinstance(resolved.context_parallel_size, bool)
+        or not isinstance(resolved.context_parallel_size, int)
+        or resolved.context_parallel_size < 1
+    ):
+        raise ValueError(f"context_parallel_size must be a positive integer, got {resolved.context_parallel_size!r}")
+    if resolved.context_parallel_size > 1 and model.num_attention_heads % resolved.context_parallel_size != 0:
+        raise ValueError(
+            f"MiniMax H3 context parallel requires num_attention_heads ({model.num_attention_heads}) "
+            f"divisible by context_parallel_size ({resolved.context_parallel_size})"
+        )
+    if resolved.context_parallel_size > 1 and int(getattr(getattr(model, "attention_state", None), "degree", 1)) > 1:
+        raise ValueError(
+            "HyperFlowDiTModel with degree > 1 cannot be combined with Ulysses context_parallel_size > 1 "
+            "(would double-shard the sequence)."
+        )
 
     receipt: dict[str, Any] = {"config": resolved.to_dict()}
 
@@ -522,10 +605,27 @@ def accelerate_minimax_h3_dit(
             backend_options=resolved.attention_options,
             dense_layers=resolved.dense_attention_layers,
             include_refiner=resolved.include_refiner_attention,
+            dense_backend=normalized_dense_backend,
         )
         receipt["attention"] = {
             "backend": model.attention_backend,
+            "dense_backend": model.dense_attention_backend,
             "options": dict(resolved.attention_options) if resolved.attention_options else None,
+            "dense_layers": list(resolved.dense_attention_layers),
+            "dense_initial_steps": int(resolved.dense_initial_steps),
+        }
+    elif resolved.dense_attention_backend is not None:
+        model.invalidate_cuda_graphs()
+        model.dense_attention_backend = normalized_dense_backend
+        for block in model.blocks:
+            raw_block = getattr(block, "_orig_mod", block)
+            raw_attn = getattr(raw_block, "attn", None)
+            if raw_attn is not None:
+                raw_attn.dense_attention_backend = normalized_dense_backend
+        receipt["attention"] = {
+            "backend": model.attention_backend,
+            "dense_backend": model.dense_attention_backend,
+            "options": None,
             "dense_layers": list(resolved.dense_attention_layers),
             "dense_initial_steps": int(resolved.dense_initial_steps),
         }
@@ -551,6 +651,19 @@ def accelerate_minimax_h3_dit(
     # 5. Optional regional torch.compile on individual DiT blocks.
     if resolved.compile:
         receipt["compile"] = compile_minimax_h3_blocks(model, mode=resolved.compile_mode)
+
+    # 5b. Ulysses Context Parallel (SP) head/sequence sharding.
+    # When caller explicitly opts into CUDA Graph alongside context_parallel_size > 1,
+    # enable allow_cuda_graph on the CP config so the installed graph actually executes.
+    if resolved.context_parallel_size > 1:
+        receipt["context_parallel"] = model.set_context_parallel(
+            MiniMaxH3ContextParallelConfig(
+                sp_size=resolved.context_parallel_size,
+                allow_cuda_graph=normalized_graph in {"whole", "piecewise"},
+            )
+        )
+    elif model._context_parallel is not None:
+        receipt["context_parallel"] = model.set_context_parallel(None)
 
     # 6. CUDA Graph / Piecewise Block Graph capture wrapper (always last).
     receipt["cuda_graph"] = install_minimax_h3_cuda_graph(

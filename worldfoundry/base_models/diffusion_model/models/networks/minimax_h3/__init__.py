@@ -30,8 +30,10 @@ from .config import (
 from .dit import (
     MINIMAX_H3_FP32_BUFFER_NAMES,
     MINIMAX_H3_FP32_PARAM_NAMES,
+    MiniMaxH3ContextParallelConfig,
     MiniMaxH3DiTModel,
     reorder_grouped_qkv_to_qkv,
+    resolve_minimax_h3_context_parallel,
 )
 
 __all__ = [
@@ -41,6 +43,7 @@ __all__ = [
     "MINIMAX_H3_FP32_PARAM_NAMES",
     "MINIMAX_H3_PACKED_SEQUENCE_ALIGNMENT",
     "MiniMaxH3AccelerationConfig",
+    "MiniMaxH3ContextParallelConfig",
     "MiniMaxH3DiTArchConfig",
     "MiniMaxH3DiTModel",
     "accelerate_minimax_h3_dit",
@@ -50,4 +53,5 @@ __all__ = [
     "minimax_h3_sol_profile",
     "quantize_minimax_h3_fp8",
     "reorder_grouped_qkv_to_qkv",
+    "resolve_minimax_h3_context_parallel",
 ]

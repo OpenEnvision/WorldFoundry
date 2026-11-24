@@ -14,7 +14,11 @@ from .denoise_loop import (
     MINIMAX_H3_AUDIO_ROW_WIDTH,
     MINIMAX_H3_IMGVID_COND_TIMESTEP,
     MINIMAX_H3_VIDEO_ROW_WIDTH,
+    MiniMaxH3CFGParallelConfig,
+    MiniMaxH3ContextParallelConfig,
     MiniMaxH3DenoiseBranch,
+    MiniMaxH3ResidualCache,
+    MiniMaxH3StepCacheConfig,
     minimax_h3_denoise_loop,
 )
 from .packed_sequence import (
@@ -42,7 +46,11 @@ __all__ = [
     "MINIMAX_H3_TASK_REF2VA",
     "MINIMAX_H3_TASK_T2VA",
     "MINIMAX_H3_VIDEO_ROW_WIDTH",
+    "MiniMaxH3CFGParallelConfig",
+    "MiniMaxH3ContextParallelConfig",
     "MiniMaxH3DenoiseBranch",
+    "MiniMaxH3ResidualCache",
+    "MiniMaxH3StepCacheConfig",
     "minimax_h3_denoise_loop",
     "minimax_h3_packed_sequence",
     "minimax_h3_packed_sequence_ref2va_blocks",

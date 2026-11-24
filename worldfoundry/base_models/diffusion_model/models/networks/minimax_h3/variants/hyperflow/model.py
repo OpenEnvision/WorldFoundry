@@ -5,13 +5,15 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 import torch.nn.functional as F
 
 from worldfoundry.core.distributed.collectives.tensor import all_gather_concat
 
 from ...config import MiniMaxH3DiTArchConfig
-from ...dit import MiniMaxH3DiTModel
+from ...dit import MiniMaxH3DiTModel, _coerce_context_parallel_config
 from .attention import HyperFlowAttention, HyperFlowAttentionState
 from .conditioning import HyperFlowQKVProjection, HyperFlowSwiGLUProjection, HyperFlowTwoTimeEmbedder
 
@@ -102,6 +104,15 @@ class HyperFlowDiTModel(MiniMaxH3DiTModel):
             self.attention_state.step = None
         return video_out[None], audio_out[None]
 
+    def set_context_parallel(self, config: Any) -> dict[str, Any]:
+        parsed = _coerce_context_parallel_config(config)
+        if self.attention_state.degree > 1 and parsed is not None and parsed.sp_size > 1:
+            raise ValueError(
+                "HyperFlowDiTModel with degree > 1 cannot be combined with Ulysses context_parallel > 1 "
+                "(would double-shard the sequence)."
+            )
+        return super().set_context_parallel(config)
+
     def forward_blocks(
         self,
         hidden: torch.Tensor,
@@ -111,10 +122,26 @@ class HyperFlowDiTModel(MiniMaxH3DiTModel):
         rope_cache: tuple[torch.Tensor, torch.Tensor],
         cu_seqlens: torch.Tensor,
         inverse_indices: torch.Tensor,
+        cu_seqlens_host: tuple[int, ...] | None = None,
+        max_seqlen: int | None = None,
+        ignore_trailing_pad: bool = False,
+        prefix_sink_tokens: int | None = None,
+        force_dense_attention: bool = False,
+        step_cache: object | None = None,
+        step_index: int | None = None,
+        context_parallel: object | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         state = self.attention_state
         state.sequence_length = hidden.shape[0]
         if state.degree > 1:
+            eff_cp = self._context_parallel if context_parallel is None else context_parallel
+            if eff_cp not in (None, False, 1):
+                parsed_cp = _coerce_context_parallel_config(eff_cp)  # type: ignore[arg-type]
+                if parsed_cp is not None and parsed_cp.sp_size > 1:
+                    raise ValueError(
+                        "HyperFlowDiTModel with degree > 1 cannot be combined with Ulysses context_parallel > 1 "
+                        "(would double-shard the sequence)."
+                    )
             chunk = (state.sequence_length + state.degree - 1) // state.degree
             padding = chunk * state.degree - state.sequence_length
 
@@ -127,6 +154,9 @@ class HyperFlowDiTModel(MiniMaxH3DiTModel):
             inverse_indices = split_rows(inverse_indices)
             rope_cache = tuple(split_rows(value) for value in rope_cache)
             cu_seqlens = torch.tensor([0, chunk], device=hidden.device, dtype=torch.int32)
+            cu_seqlens_host = (0, chunk)
+            max_seqlen = chunk
+            ignore_trailing_pad = False
         outputs = super().forward_blocks(
             hidden,
             adaln_input=adaln_input,
@@ -134,6 +164,14 @@ class HyperFlowDiTModel(MiniMaxH3DiTModel):
             rope_cache=rope_cache,
             cu_seqlens=cu_seqlens,
             inverse_indices=inverse_indices,
+            cu_seqlens_host=cu_seqlens_host,
+            max_seqlen=max_seqlen,
+            ignore_trailing_pad=ignore_trailing_pad,
+            prefix_sink_tokens=prefix_sink_tokens,
+            force_dense_attention=force_dense_attention,
+            step_cache=step_cache,
+            step_index=step_index,
+            context_parallel=context_parallel,
         )
         if state.degree > 1:
             outputs = tuple(all_gather_concat(value, dim=0)[: state.sequence_length] for value in outputs)
