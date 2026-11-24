@@ -27,7 +27,12 @@ if version.parse(torch.__version__) < version.parse("1.7.1"):
 
 
 __all__ = ["available_models", "clear_checkpoint_cache", "load", "tokenize"]
-_tokenizer = _Tokenizer()
+
+
+@lru_cache(maxsize=1)
+def _get_tokenizer() -> _Tokenizer:
+    return _Tokenizer()
+
 
 _MODELS = {
     "RN50": "https://openaipublic.azureedge.net/clip/models/afeb0e10f9e5a86da6080e35cf09123aca3b358a0c3e3b6c78a7b63bc04b6762/RN50.pt",
@@ -275,9 +280,10 @@ def tokenize(
     if isinstance(texts, str):
         texts = [texts]
 
-    sot_token = _tokenizer.encoder["<|startoftext|>"]
-    eot_token = _tokenizer.encoder["<|endoftext|>"]
-    all_tokens = [[sot_token] + _tokenizer.encode(text) + [eot_token] for text in texts]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+    tokenizer = _get_tokenizer()
+    sot_token = tokenizer.encoder["<|startoftext|>"]
+    eot_token = tokenizer.encoder["<|endoftext|>"]
+    all_tokens = [[sot_token] + tokenizer.encode(text) + [eot_token] for text in texts]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     if version.parse(torch.__version__) < version.parse("1.8.0"):
         result = torch.zeros(len(all_tokens), context_length, dtype=torch.long)
     else:
