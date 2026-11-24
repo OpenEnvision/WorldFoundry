@@ -297,10 +297,12 @@ def test_h3_tiny_pipeline_end_to_end_ref2va_and_fl2va_and_artifact_write(
         width=32,
         num_inference_steps=2,
         seed=5,
+        output_dir=tmp_path / "fl2va_out",
         return_dict=True,
     )
     assert fl_res["task"] == "fl2va"
     assert fl_res["endpoint_mode"] == "none"
+    assert (tmp_path / "fl2va_out" / "h3-tiny.mp4").is_file()
     with pytest.raises(ValueError, match="Ref2VA"):
         pipe_fl(prompt="refs on fl2va", references=[str(ref_img)], num_inference_steps=2)
 

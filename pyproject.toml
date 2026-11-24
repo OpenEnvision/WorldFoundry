@@ -581,6 +581,7 @@ extend-exclude = [
     "./runs",
     "./benchmark_results",
     "./inspatio_world_output",
+    "./wf-goal",
     "docs/fumadocs/.next",
     "docs/fumadocs/node_modules",
     "docs/fumadocs/out",

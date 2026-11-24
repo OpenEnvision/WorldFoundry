@@ -4,6 +4,9 @@
 .codex/
 .claude/
 .agents/
+.pi/
+.pi-traces/
+wf-goal/
 .cursor/
 .vscode/
 .idea/
@@ -31,6 +34,8 @@ benchmark_results/
 cache/
 data/
 model/
+outputs/
+output/
 runs/
 tmp/
 inspatio_world_output/
@@ -41,7 +46,11 @@ worldfoundry_outputs/
 
 node_modules/
 docs/fumadocs/.next/
+docs/fumadocs/.source/
+docs/fumadocs/generated/
 docs/fumadocs/node_modules/
+docs/fumadocs/out/
+docs/fumadocs/tmp/
 
 *.ckpt
 *.gguf

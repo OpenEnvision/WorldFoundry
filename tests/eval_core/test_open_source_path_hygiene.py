@@ -30,14 +30,25 @@ FORBIDDEN_MACHINE_PATHS = (
 PRUNED_DIRS = {
     ".git",
     ".next",
+    ".pi",
+    ".pi-traces",
     ".pytest_cache",
+    ".source",
+    ".venv",
     "__pycache__",
+    "benchmark_results",
+    "build",
     "cache",
+    "dist",
     "logs",
     "node_modules",
     "out",
     "outputs",
+    "runs",
     "tmp",
+    "venv",
+    "wf-goal",
+    "worldfoundry.egg-info",
 }
 PRUNED_DIR_PREFIXES = ("out.nfs-busy-",)
 

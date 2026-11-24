@@ -259,6 +259,7 @@ worldfoundry/studio/assets/vendor/
 /memory/
 /configs/
 /gg
+/wf-goal/
 
 # Public branch: keep private training and embedded upstream QA out of commits.
 /worldfoundry/training/

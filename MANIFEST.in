@@ -54,6 +54,11 @@ prune cache
 prune cache*
 prune outputs
 prune output
+prune runs
+prune benchmark_results
+prune wf-goal
+prune .pi
+prune .pi-traces
 prune data/hfd_datasets
 prune data/bench_results
 prune data/benchmark_zoo
@@ -61,7 +66,10 @@ prune assets/datasets
 prune assets/repos
 prune worldfoundry/data/test_cases
 prune docs/fumadocs/.next
+prune docs/fumadocs/.source
+prune docs/fumadocs/generated
 prune docs/fumadocs/out
+prune docs/fumadocs/tmp
 prune docs/fumadocs/node_modules
 prune worldfoundry/studio/assets/vendor
 
