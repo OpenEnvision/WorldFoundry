@@ -141,6 +141,32 @@ class BasicAVTransformerBlock(torch.nn.Module):
             self.audio_prompt_scale_shift_table = torch.nn.Parameter(torch.empty(2, audio.dim))
 
         self.norm_eps = norm_eps
+        self._use_fused_residual_gate: bool = False
+
+    def _all_ada_values(
+        self,
+        scale_shift_table: torch.Tensor,
+        batch_size: int,
+        timestep: torch.Tensor,
+    ) -> tuple[torch.Tensor, ...]:
+        """Compute every AdaLN modulation slice for this block in one fused addition."""
+        num_ada_params = scale_shift_table.shape[0]
+        return (
+            scale_shift_table.unsqueeze(0).unsqueeze(0).to(device=timestep.device, dtype=timestep.dtype)
+            + timestep.reshape(batch_size, timestep.shape[1], num_ada_params, -1)
+        ).unbind(dim=2)
+
+    def _add_gated_residual(
+        self,
+        residual: torch.Tensor,
+        update: torch.Tensor,
+        gate: torch.Tensor,
+    ) -> torch.Tensor:
+        if self._use_fused_residual_gate:
+            from worldfoundry.core.kernels.diffusion import residual_gate_add
+
+            return residual_gate_add(residual, update, gate)
+        return residual + update * gate
 
     def get_ada_values(
         self, scale_shift_table: torch.Tensor, batch_size: int, timestep: torch.Tensor, indices: slice
@@ -187,10 +213,14 @@ class BasicAVTransformerBlock(torch.nn.Module):
         prompt_timestep: torch.Tensor | None,
         context_mask: torch.Tensor | None,
         cross_attention_adaln: bool = False,
+        ca_ada_values: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None,
     ) -> torch.Tensor:
         """Apply text cross-attention to normalized post-self-attention tokens."""
         if cross_attention_adaln:
-            shift_q, scale_q, gate = self.get_ada_values(scale_shift_table, x.shape[0], timestep, slice(6, 9))
+            if ca_ada_values is not None:
+                shift_q, scale_q, gate = ca_ada_values
+            else:
+                shift_q, scale_q, gate = self.get_ada_values(scale_shift_table, x.shape[0], timestep, slice(6, 9))
             return apply_cross_attention_adaln(
                 x,
                 context,
@@ -222,10 +252,13 @@ class BasicAVTransformerBlock(torch.nn.Module):
         run_a2v = run_vx and (audio is not None and ax.numel() > 0)
         run_v2a = run_ax and (video is not None and vx.numel() > 0)
 
+        v_ada: tuple[torch.Tensor, ...] | None = None
+        a_ada: tuple[torch.Tensor, ...] | None = None
+
         if run_vx:
-            vshift_msa, vscale_msa, vgate_msa = self.get_ada_values(
-                self.scale_shift_table, vx.shape[0], video.timesteps, slice(0, 3)
-            )
+            assert video is not None and vx is not None
+            v_ada = self._all_ada_values(self.scale_shift_table, vx.shape[0], video.timesteps)
+            vshift_msa, vscale_msa, vgate_msa = v_ada[0], v_ada[1], v_ada[2]
             norm_vx = self.ada_zero_function(vx, self.norm_eps, vscale_msa, vshift_msa)
             del vshift_msa, vscale_msa
 
@@ -250,13 +283,14 @@ class BasicAVTransformerBlock(torch.nn.Module):
                 video.prompt_timestep,
                 video.context_mask,
                 cross_attention_adaln=self.cross_attention_adaln,
+                ca_ada_values=(v_ada[6], v_ada[7], v_ada[8]) if self.cross_attention_adaln else None,
             )
             del vx_normed
 
         if run_ax:
-            ashift_msa, ascale_msa, agate_msa = self.get_ada_values(
-                self.audio_scale_shift_table, ax.shape[0], audio.timesteps, slice(0, 3)
-            )
+            assert audio is not None and ax is not None
+            a_ada = self._all_ada_values(self.audio_scale_shift_table, ax.shape[0], audio.timesteps)
+            ashift_msa, ascale_msa, agate_msa = a_ada[0], a_ada[1], a_ada[2]
 
             norm_ax = self.ada_zero_function(ax, self.norm_eps, ascale_msa, ashift_msa)
             del ashift_msa, ascale_msa
@@ -280,11 +314,13 @@ class BasicAVTransformerBlock(torch.nn.Module):
                 audio.prompt_timestep,
                 audio.context_mask,
                 cross_attention_adaln=self.cross_attention_adaln,
+                ca_ada_values=(a_ada[6], a_ada[7], a_ada[8]) if self.cross_attention_adaln else None,
             )
             del ax_normed
 
         # Audio - Video cross attention.
         if run_a2v or run_v2a:
+            assert video is not None and audio is not None and vx is not None and ax is not None
             # Snapshot vx/ax before A2V mutates vx; V2A's video keys/values must
             # use the pre-A2V state so direction order doesn't bias the result.
             vx_pre_av = vx
@@ -309,18 +345,18 @@ class BasicAVTransformerBlock(torch.nn.Module):
                 )
                 a2v_ax_scaled = self.ada_zero_function(ax_pre_av, self.norm_eps, scale_ca_audio_a2v, shift_ca_audio_a2v)
                 del scale_ca_audio_a2v, shift_ca_audio_a2v
-                vx = vx + (
-                    self.audio_to_video_attn(
-                        a2v_vx_scaled,
-                        context=a2v_ax_scaled,
-                        pe=video.cross_positional_embeddings,
-                        k_pe=audio.cross_positional_embeddings,
-                        cache=video.attention_cache,
-                    )
-                    * gate_out_a2v
-                    * video.cross_attn_perturbation_mask
+                a2v_attn_out = self.audio_to_video_attn(
+                    a2v_vx_scaled,
+                    context=a2v_ax_scaled,
+                    pe=video.cross_positional_embeddings,
+                    k_pe=audio.cross_positional_embeddings,
+                    cache=video.attention_cache,
                 )
-                del gate_out_a2v, a2v_vx_scaled, a2v_ax_scaled
+                if video.cross_attn_perturbation_mask is not None:
+                    vx = vx + a2v_attn_out * gate_out_a2v * video.cross_attn_perturbation_mask
+                else:
+                    vx = self._add_gated_residual(vx, a2v_attn_out, gate_out_a2v)
+                del gate_out_a2v, a2v_vx_scaled, a2v_ax_scaled, a2v_attn_out
 
             if run_v2a and not audio.cross_attn_skip_all:
                 scale_ca_audio_v2a, shift_ca_audio_v2a, gate_out_v2a = self.get_av_ca_ada_values(
@@ -341,35 +377,33 @@ class BasicAVTransformerBlock(torch.nn.Module):
                 )
                 v2a_vx_scaled = self.ada_zero_function(vx_pre_av, self.norm_eps, scale_ca_video_v2a, shift_ca_video_v2a)
                 del scale_ca_video_v2a, shift_ca_video_v2a
-                ax = ax + (
-                    self.video_to_audio_attn(
-                        v2a_ax_scaled,
-                        context=v2a_vx_scaled,
-                        pe=audio.cross_positional_embeddings,
-                        k_pe=video.cross_positional_embeddings,
-                        cache=audio.attention_cache,
-                    )
-                    * gate_out_v2a
-                    * audio.cross_attn_perturbation_mask
+                v2a_attn_out = self.video_to_audio_attn(
+                    v2a_ax_scaled,
+                    context=v2a_vx_scaled,
+                    pe=audio.cross_positional_embeddings,
+                    k_pe=video.cross_positional_embeddings,
+                    cache=audio.attention_cache,
                 )
-                del gate_out_v2a, v2a_vx_scaled, v2a_ax_scaled
+                if audio.cross_attn_perturbation_mask is not None:
+                    ax = ax + v2a_attn_out * gate_out_v2a * audio.cross_attn_perturbation_mask
+                else:
+                    ax = self._add_gated_residual(ax, v2a_attn_out, gate_out_v2a)
+                del gate_out_v2a, v2a_vx_scaled, v2a_ax_scaled, v2a_attn_out
             del vx_pre_av, ax_pre_av
 
         if run_vx:
-            vshift_mlp, vscale_mlp, vgate_mlp = self.get_ada_values(
-                self.scale_shift_table, vx.shape[0], video.timesteps, slice(3, 6)
-            )
+            assert v_ada is not None and vx is not None
+            vshift_mlp, vscale_mlp, vgate_mlp = v_ada[3], v_ada[4], v_ada[5]
             vx_scaled = self.ada_zero_function(vx, self.norm_eps, vscale_mlp, vshift_mlp)
-            vx = vx + self.ff(vx_scaled) * vgate_mlp
+            vx = self._add_gated_residual(vx, self.ff(vx_scaled), vgate_mlp)
 
             del vshift_mlp, vscale_mlp, vgate_mlp, vx_scaled
 
         if run_ax:
-            ashift_mlp, ascale_mlp, agate_mlp = self.get_ada_values(
-                self.audio_scale_shift_table, ax.shape[0], audio.timesteps, slice(3, 6)
-            )
+            assert a_ada is not None and ax is not None
+            ashift_mlp, ascale_mlp, agate_mlp = a_ada[3], a_ada[4], a_ada[5]
             ax_scaled = self.ada_zero_function(ax, self.norm_eps, ascale_mlp, ashift_mlp)
-            ax = ax + self.audio_ff(ax_scaled) * agate_mlp
+            ax = self._add_gated_residual(ax, self.audio_ff(ax_scaled), agate_mlp)
 
             del ashift_mlp, ascale_mlp, agate_mlp, ax_scaled
 

@@ -81,3 +81,14 @@ class Modality:
             else:
                 raise TypeError(f"Cannot split field {f.name!r}: unsupported type {type(value)}")
         return [Modality(**{name: parts[i] for name, parts in split_fields.items()}) for i in range(n)]
+
+
+def _register_modality_pytree() -> None:
+    """Register :class:`Modality` as a pytree dataclass for CUDA Graph capture."""
+    import torch.utils._pytree as pytree
+
+    if Modality not in pytree.SUPPORTED_NODES:
+        pytree.register_dataclass(Modality)
+
+
+_register_modality_pytree()

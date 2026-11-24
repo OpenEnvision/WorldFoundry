@@ -321,11 +321,11 @@ class CausalConv3d(nn.Module):
 
     def forward(self, x: torch.Tensor, causal: bool = True) -> torch.Tensor:
         if causal:
-            first_frame_pad = x[:, :, :1, :, :].repeat((1, 1, self.time_kernel_size - 1, 1, 1))
+            first_frame_pad = x[:, :, :1, :, :].expand(-1, -1, self.time_kernel_size - 1, -1, -1)
             x = torch.concatenate((first_frame_pad, x), dim=2)
         else:
-            first_frame_pad = x[:, :, :1, :, :].repeat((1, 1, (self.time_kernel_size - 1) // 2, 1, 1))
-            last_frame_pad = x[:, :, -1:, :, :].repeat((1, 1, (self.time_kernel_size - 1) // 2, 1, 1))
+            first_frame_pad = x[:, :, :1, :, :].expand(-1, -1, (self.time_kernel_size - 1) // 2, -1, -1)
+            last_frame_pad = x[:, :, -1:, :, :].expand(-1, -1, (self.time_kernel_size - 1) // 2, -1, -1)
             x = torch.concatenate((first_frame_pad, x, last_frame_pad), dim=2)
         x = self.conv(x)
         return x

@@ -342,6 +342,8 @@ class LTXVideoMediaDecoder(MultiModalLatentDecoder):
         first_stage_scale: float | None = None,
         latent_upsample_factor: int = 1,
         tone_map_compression: float = 0.0,
+        compute_dtype: torch.dtype | None = None,
+        decode_autocast: bool = False,
     ) -> None:
         self.video = video
         self.tiling = tiling
@@ -354,6 +356,8 @@ class LTXVideoMediaDecoder(MultiModalLatentDecoder):
         self.first_stage_scale = None if first_stage_scale is None else float(first_stage_scale)
         self.latent_upsample_factor = int(latent_upsample_factor)
         self.tone_map_compression = float(tone_map_compression)
+        self.compute_dtype = compute_dtype
+        self.decode_autocast = bool(decode_autocast)
 
     @staticmethod
     def _round_down_to_vae(value: int) -> int:
@@ -396,7 +400,13 @@ class LTXVideoMediaDecoder(MultiModalLatentDecoder):
         # The timestep-conditioned VAE injects noise too. Keep it request-local
         # so reusing a pipeline or unrelated global RNG draws cannot change RGB.
         generator = torch.Generator(device=video_latent.device).manual_seed(request.sampling.seed)
-        chunks = list(self.video.decoder.decode_video(video_latent, self.tiling, generator=generator))
+        autocast_dtype = self.compute_dtype or video_latent.dtype
+        with torch.autocast(
+            device_type=video_latent.device.type,
+            dtype=autocast_dtype,
+            enabled=self.decode_autocast and autocast_dtype in {torch.float16, torch.bfloat16},
+        ):
+            chunks = list(self.video.decoder.decode_video(video_latent, self.tiling, generator=generator))
         if not chunks:
             raise RuntimeError("LTX-Video decoder returned no chunks")
         video = torch.cat(chunks, dim=0)
@@ -430,12 +440,14 @@ class LTXTensorVideoCodec:
         tiling: TilingConfig | None,
         compute_device: str | torch.device | None = None,
         compute_dtype: torch.dtype | None = None,
+        decode_autocast: bool = False,
     ) -> None:
         self.encoder = encoder
         self.decoder = decoder
         self.tiling = tiling
         self.compute_device = None if compute_device is None else torch.device(compute_device)
         self.compute_dtype = compute_dtype
+        self.decode_autocast = bool(decode_autocast)
 
     def _input_target(self, module: torch.nn.Module) -> tuple[torch.device, torch.dtype]:
         parameter = next(module.parameters())
@@ -487,11 +499,16 @@ class LTXTensorVideoCodec:
         generator = (
             None if request is None else torch.Generator(device=latents.device).manual_seed(request.sampling.seed)
         )
-        chunks = (
-            [self.decoder.decoder(latents, generator=generator)]
-            if self.tiling is None
-            else list(self.decoder.decoder.tiled_decode(latents, self.tiling, generator=generator))
-        )
+        with torch.autocast(
+            device_type=latents.device.type,
+            dtype=dtype,
+            enabled=self.decode_autocast and dtype in {torch.float16, torch.bfloat16},
+        ):
+            chunks = (
+                [self.decoder.decoder(latents, generator=generator)]
+                if self.tiling is None
+                else list(self.decoder.decoder.tiled_decode(latents, self.tiling, generator=generator))
+            )
         if not chunks:
             raise RuntimeError("LTX tensor decoder returned no chunks")
         video = torch.cat(chunks, dim=2)
@@ -607,6 +624,33 @@ def _tiling_from_options(options: Mapping[str, object]) -> TilingConfig | None:
     )
 
 
+def _maybe_enable_vae_channels_last_3d(
+    module: torch.nn.Module,
+    context: ComponentBuildContext,
+) -> None:
+    """Apply ``channels_last_3d`` to LTX 3D VAE convolutions when opted in by policy."""
+    enabled = bool(
+        context.component_options.get(
+            "vae_channels_last_3d",
+            context.policy.options.get("vae_channels_last_3d", False),
+        )
+    )
+    if not enabled or context.policy.offload.mode is not OffloadMode.NONE:
+        return
+    converter = getattr(module, "enable_channels_last_3d", None)
+    if callable(converter):
+        converter()
+
+
+def _resolve_vae_decode_autocast(context: ComponentBuildContext) -> bool:
+    return bool(
+        context.component_options.get(
+            "vae_decode_autocast",
+            context.policy.options.get("vae_decode_autocast", False),
+        )
+    )
+
+
 def build_ltx_media_decoder(context: ComponentBuildContext) -> LTXMediaDecoder:
     lazy = context.component_options.get("precision") == "weights"
     video = _load_configured_module(
@@ -640,6 +684,7 @@ def build_ltx_media_decoder(context: ComponentBuildContext) -> LTXMediaDecoder:
         raise TypeError("LTX audio decoder construction returned an unexpected module")
     if not isinstance(vocoder, LTXVocoderModule):
         raise TypeError("LTX vocoder construction returned an unexpected module")
+    _maybe_enable_vae_channels_last_3d(video.decoder, context)
     return LTXMediaDecoder(
         video,
         audio,
@@ -658,6 +703,7 @@ def build_ltx_video_media_decoder(context: ComponentBuildContext) -> LTXVideoMed
         context.require_checkpoint("weights"),
         context.policy,
     )
+    _maybe_enable_vae_channels_last_3d(video.decoder, context)
     raw_scale = context.component_options.get("first_stage_scale")
     return LTXVideoMediaDecoder(
         video,
@@ -665,6 +711,8 @@ def build_ltx_video_media_decoder(context: ComponentBuildContext) -> LTXVideoMed
         first_stage_scale=None if raw_scale is None else float(raw_scale),
         latent_upsample_factor=int(context.component_options.get("latent_upsample_factor", 1)),
         tone_map_compression=float(context.component_options.get("tone_map_compression", 0.0)),
+        compute_dtype=context.policy.dtype,
+        decode_autocast=_resolve_vae_decode_autocast(context),
     )
 
 
@@ -672,12 +720,17 @@ def build_ltx_tensor_video_codec(context: ComponentBuildContext) -> LTXTensorVid
     """Build one shared LTX encoder/decoder pair for standard diffusion roles."""
 
     checkpoint = context.require_checkpoint("weights")
+    encoder = load_ltx_video_encoder_checkpoint(checkpoint, context.policy)
+    decoder = load_ltx_video_decoder_checkpoint(checkpoint, context.policy)
+    _maybe_enable_vae_channels_last_3d(encoder.encoder, context)
+    _maybe_enable_vae_channels_last_3d(decoder.decoder, context)
     return LTXTensorVideoCodec(
-        load_ltx_video_encoder_checkpoint(checkpoint, context.policy),
-        load_ltx_video_decoder_checkpoint(checkpoint, context.policy),
+        encoder,
+        decoder,
         tiling=_tiling_from_options(context.component_options),
         compute_device=context.policy.device,
         compute_dtype=context.policy.dtype,
+        decode_autocast=_resolve_vae_decode_autocast(context),
     )
 
 

@@ -79,6 +79,17 @@ class TransformerArgs:
     cross_attn_skip_all: bool = False
 
 
+def _register_transformer_args_pytree() -> None:
+    """Register :class:`TransformerArgs` as a pytree dataclass for piecewise CUDA Graphs."""
+    import torch.utils._pytree as pytree
+
+    if TransformerArgs not in pytree.SUPPORTED_NODES:
+        pytree.register_dataclass(TransformerArgs)
+
+
+_register_transformer_args_pytree()
+
+
 class BlockPerturbationsProcessor:
     """Per-block preparation of ``TransformerArgs``.
     The base implementation returns a copy of ``args`` with this block's
@@ -238,16 +249,17 @@ class TransformerArgsPreprocessor:
         if attention_mask is None:
             return None
 
-        # Convert [0, 1] attention mask to additive log-space bias:
+        # Convert [0, 1] attention mask to additive log-space bias without host sync:
         #   1.0 -> log(1.0) = 0.0  (no bias, full attention)
         #   0.0 -> finfo.min        (fully masked)
         finfo = torch.finfo(x_dtype)
         eps = finfo.tiny
 
-        bias = torch.full_like(attention_mask, finfo.min, dtype=x_dtype)
+        mask_float = attention_mask if attention_mask.is_floating_point() else attention_mask.to(x_dtype)
         positive = attention_mask > 0
-        if positive.any():
-            bias[positive] = torch.log(attention_mask[positive].clamp(min=eps)).to(x_dtype)
+        log_bias = torch.log(mask_float.clamp(min=eps)).to(x_dtype)
+        fill_value = attention_mask.new_full((), finfo.min, dtype=x_dtype)
+        bias = torch.where(positive, log_bias, fill_value)
 
         return bias.unsqueeze(1)  # (B, 1, T_q, T_k) for head broadcast
 

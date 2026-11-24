@@ -305,6 +305,15 @@ class VideoEncoder(nn.Module):
             causal=True,
             spatial_padding_mode=encoder_spatial_padding_mode,
         )
+        self._channels_last_3d: bool = False
+
+    def enable_channels_last_3d(self) -> int:
+        """Convert Conv3d weights to ``channels_last_3d`` (NDHWC) for Tensor Core acceleration."""
+        from worldfoundry.core.acceleration.convolution_layout import convert_convolution_weight_layouts
+
+        report = convert_convolution_weight_layouts(self, conv3d=True)
+        self._channels_last_3d = report.conv3d_converted > 0
+        return report.conv3d_converted
 
     def _posterior_moments(self, sample: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Encode pixels to the checkpoint posterior before latent normalization."""
@@ -732,6 +741,15 @@ class VideoDecoder(nn.Module):
                 embedding_dim=feature_channels * 2, size_emb_dim=0
             )
             self.last_scale_shift_table = nn.Parameter(torch.empty(2, feature_channels))
+        self._channels_last_3d: bool = False
+
+    def enable_channels_last_3d(self) -> int:
+        """Convert Conv3d weights to ``channels_last_3d`` (NDHWC) for Tensor Core acceleration."""
+        from worldfoundry.core.acceleration.convolution_layout import convert_convolution_weight_layouts
+
+        report = convert_convolution_weight_layouts(self, conv3d=True)
+        self._channels_last_3d = report.conv3d_converted > 0
+        return report.conv3d_converted
 
     def forward(
         self,

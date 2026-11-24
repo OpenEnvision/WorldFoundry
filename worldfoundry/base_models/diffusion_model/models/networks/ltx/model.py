@@ -12,7 +12,11 @@ linear map back to latent channels.
 per-token timesteps.  Sampling lives in the LTX denoiser, not here.
 """
 
+import weakref
+from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from enum import Enum
+from typing import Any
 
 import torch
 
@@ -39,6 +43,139 @@ from worldfoundry.base_models.diffusion_model.models.networks.ltx.transformer_ar
 from worldfoundry.core.nn import DEFAULT_TRANSFORMER_OPS, TransformerOpsConfig
 from worldfoundry.core.nn import velocity_to_denoised as to_denoised
 from worldfoundry.core.nn.checkpointing.gradient import gradient_checkpoint_forward
+
+
+def infer_video_grid_shape(positions: torch.Tensor) -> tuple[int, int, int] | None:
+    """Infer exact ``(F, H, W)`` raster grid dimensions from LTX video ``positions``.
+
+    Returns ``None`` when ``positions`` is not a 3-axis raster grid with
+    ``F * H * W == T`` (for example when auxiliary reference tokens are appended).
+    Call outside CUDA Graph capture so the single-step verification never syncs
+    during capture or replay.
+    """
+    if positions.ndim == 4:
+        coords = positions[0, :, :, 0]
+    elif positions.ndim == 3:
+        coords = positions[0]
+    else:
+        return None
+    if coords.shape[0] != 3 or coords.shape[1] <= 0:
+        return None
+    total_tokens = int(coords.shape[1])
+    f_count = int(torch.unique(coords[0]).numel())
+    h_count = int(torch.unique(coords[1]).numel())
+    w_count = int(torch.unique(coords[2]).numel())
+    if f_count <= 0 or h_count <= 0 or w_count <= 0 or f_count * h_count * w_count != total_tokens:
+        return None
+    c0 = coords[0].view(f_count, h_count, w_count)
+    c1 = coords[1].view(f_count, h_count, w_count)
+    c2 = coords[2].view(f_count, h_count, w_count)
+    raster_ok = (c0 == c0[:, :1, :1]).all() & (c1 == c1[:1, :, :1]).all() & (c2 == c2[:1, :1, :]).all()
+    if positions.shape[0] > 1:
+        raster_ok = raster_ok & (positions == positions[:1]).all()
+    if not bool(raster_ok.item()):
+        return None
+    return (f_count, h_count, w_count)
+
+
+def resolve_cached_video_grid_shape(
+    cache: dict[int, tuple[weakref.ref[torch.Tensor], int, int, tuple[int, ...], tuple[int, int, int] | None]],
+    positions: torch.Tensor,
+) -> tuple[int, int, int] | None:
+    """Return cached ``(F, H, W)`` for ``positions`` with zero host syncs on repeat steps."""
+    key = id(positions)
+    ptr = int(positions.data_ptr())
+    version = -1 if positions.is_inference() else int(positions._version)
+    shape = tuple(int(dim) for dim in positions.shape)
+    entry = cache.get(key)
+    if entry is not None:
+        ref, cached_ptr, cached_ver, cached_shape, cached_grid = entry
+        if ref() is positions and cached_ptr == ptr and cached_ver == version and cached_shape == shape:
+            return cached_grid
+    grid = infer_video_grid_shape(positions)
+    if len(cache) >= 16:
+        dead = [k for k, v in cache.items() if v[0]() is None]
+        for k in dead:
+            cache.pop(k, None)
+        if len(cache) >= 16:
+            cache.pop(next(iter(cache)))
+    cache[key] = (weakref.ref(positions), ptr, version, shape, grid)
+    return grid
+
+
+def _build_tile_3d_permutation(
+    f: int,
+    h: int,
+    w: int,
+    tf: int,
+    th: int,
+    tw: int,
+    device: torch.device,
+) -> tuple[torch.Tensor, torch.Tensor, int] | None:
+    """Build ``(perm, inv_perm, sink_tokens)`` grouping ``(F, H, W)`` tokens into 3D tiles."""
+    f_full, h_full, w_full = (f // tf) * tf, (h // th) * th, (w // tw) * tw
+    if f_full <= 0 or h_full <= 0 or w_full <= 0:
+        return None
+    total = f * h * w
+    grid_idx = torch.arange(total, device=device, dtype=torch.long).view(f, h, w)
+    core = (
+        grid_idx[:f_full, :h_full, :w_full]
+        .view(f_full // tf, tf, h_full // th, th, w_full // tw, tw)
+        .permute(0, 2, 4, 1, 3, 5)
+        .reshape(-1)
+    )
+    if core.numel() < total:
+        in_core = torch.zeros(total, device=device, dtype=torch.bool)
+        in_core[core] = True
+        tail = torch.nonzero(~in_core, as_tuple=False).squeeze(-1)
+        perm = torch.cat((tail, core), dim=0)
+        sink_tokens = int(tail.numel())
+    else:
+        perm = core
+        sink_tokens = 0
+    inv_perm = torch.empty_like(perm)
+    inv_perm[perm] = torch.arange(total, device=device, dtype=torch.long)
+    return perm, inv_perm, sink_tokens
+
+
+def _permute_rope(
+    pe: tuple[torch.Tensor, torch.Tensor] | None,
+    perm: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor] | None:
+    if pe is None:
+        return None
+    dim = 2 if pe[0].ndim == 4 else 1
+    return (pe[0].index_select(dim, perm), pe[1].index_select(dim, perm))
+
+
+def _permute_video_args(video_args: TransformerArgs, perm: torch.Tensor) -> TransformerArgs:
+    """Permute every per-token field of ``video_args`` by ``perm``."""
+    token_count = int(video_args.x.shape[1])
+
+    def _sel(tensor: torch.Tensor | None) -> torch.Tensor | None:
+        if tensor is not None and tensor.ndim >= 2 and tensor.shape[1] == token_count:
+            return tensor.index_select(1, perm)
+        return tensor
+
+    context_mask = video_args.context_mask
+    if context_mask is not None and context_mask.ndim == 4 and context_mask.shape[2] == token_count:
+        context_mask = context_mask.index_select(2, perm)
+
+    return replace(
+        video_args,
+        x=video_args.x.index_select(1, perm),
+        context_mask=context_mask,
+        timesteps=video_args.timesteps.index_select(1, perm)
+        if video_args.timesteps.shape[1] == token_count
+        else video_args.timesteps,
+        embedded_timestep=video_args.embedded_timestep.index_select(1, perm)
+        if video_args.embedded_timestep.shape[1] == token_count
+        else video_args.embedded_timestep,
+        positional_embeddings=_permute_rope(video_args.positional_embeddings, perm),  # type: ignore[arg-type]
+        cross_positional_embeddings=_permute_rope(video_args.cross_positional_embeddings, perm),
+        cross_scale_shift_timestep=_sel(video_args.cross_scale_shift_timestep),
+        cross_gate_timestep=_sel(video_args.cross_gate_timestep),
+    )
 
 
 class LTXModelType(Enum):
@@ -168,6 +305,93 @@ class LTXModel(torch.nn.Module):
     def num_blocks(self) -> int:
         """Number of transformer blocks for mask preparation and block streaming."""
         return len(self.transformer_blocks)
+
+    def __getattr__(self, name: str) -> Any:
+        if name == "blocks" and "blocks" not in self._modules and "transformer_blocks" in self._modules:
+            return self._modules["transformer_blocks"]
+        return super().__getattr__(name)
+
+    def configure_attention_backend(
+        self,
+        backend: str | None,
+        *,
+        self_only: bool = False,
+        cross_only: bool = False,
+        backend_options: Mapping[str, object] | None = None,
+        dense_blocks: Iterable[int] = (),
+    ) -> int:
+        """Bind an attention backend to eligible LTX ``Attention`` modules.
+
+        When ``self_only=True`` and ``backend="sol_attn"``, binds every self-attention
+        module with ``dim_head == 128`` (e.g. LTX-2 video ``attn1``) while leaving
+        cross-attention, 64-dim audio attention, and any ``dense_blocks`` indices on
+        exact SDPA.
+        """
+        if self_only and cross_only:
+            raise ValueError("self_only and cross_only cannot both be True")
+
+        from .attention import Attention
+
+        normalized: str | None = None
+        if backend is not None:
+            from worldfoundry.core.attention.backends.probe import normalize_attention_backend
+
+            normalized = normalize_attention_backend(str(backend))
+
+        num_blocks = len(self.transformer_blocks)
+        dense_indices: set[int] = set()
+        for raw_idx in dense_blocks:
+            if isinstance(raw_idx, bool) or not isinstance(raw_idx, int):
+                raise ValueError(f"dense_blocks entries must be integers, got {raw_idx!r}")
+            idx = raw_idx + num_blocks if raw_idx < 0 else raw_idx
+            if 0 <= idx < num_blocks:
+                dense_indices.add(idx)
+
+        dense_modules: set[int] = set()
+        if dense_indices:
+            for block_idx in dense_indices:
+                for child in self.transformer_blocks[block_idx].modules():
+                    if isinstance(child, Attention):
+                        dense_modules.add(id(child))
+
+        configured = 0
+        for child in self.modules():
+            if not isinstance(child, Attention):
+                continue
+            if self_only and not child.is_self_attention:
+                continue
+            if cross_only and child.is_self_attention:
+                continue
+            if self_only and normalized == "sol_attn" and child.dim_head != 128:
+                continue
+            if id(child) in dense_modules:
+                child.set_attention_backend("torch" if normalized is not None else None)
+                continue
+            child.set_attention_backend(normalized, backend_options=backend_options)
+            configured += 1
+        if backend is not None and configured == 0:
+            raise ValueError(
+                f"no eligible LTX attention modules matched backend={backend!r} "
+                f"(self_only={self_only}, cross_only={cross_only})"
+            )
+        return configured
+
+    def fuse_projections(
+        self,
+        *,
+        fuse_self_qkv: bool = True,
+        fuse_cross_kv: bool = True,
+    ) -> dict[str, int]:
+        """Fuse LTX self-attention QKV and cross-attention KV projections in place."""
+        from .fused_ops import fuse_ltx_projections
+
+        return fuse_ltx_projections(self, fuse_self_qkv=fuse_self_qkv, fuse_cross_kv=fuse_cross_kv)
+
+    def enable_fused_ops(self) -> int:
+        """Install fused Triton QK-RMSNorm+RoPE, post-SA residual+RMSNorm, and gated FFN add."""
+        from .fused_ops import enable_ltx_fused_ops
+
+        return enable_ltx_fused_ops(self)
 
     def _keyframes_embedding(self) -> torch.Tensor | None:
         """Resolve the current parameter after checkpoint loading or device placement."""
@@ -414,6 +638,14 @@ class LTXModel(torch.nn.Module):
         """All-keep masks for ``args``'s batch, in its token dtype and device."""
         return BatchedPerturbationConfig.empty(args.x.shape[0], self.num_blocks, args.x.device, args.x.dtype)
 
+    def _needs_materialized_perturbations(self) -> bool:
+        """True when a custom processor, block forward override, or legacy CudaGraphRunner requires explicit masks."""
+        return (
+            type(self.block_input_processor) is not BlockPerturbationsProcessor
+            or hasattr(self._process_transformer_blocks, "_captures")
+            or self.TRANSFORMER_BLOCK_CLS.forward is not BasicAVTransformerBlock.forward
+        )
+
     def _process_transformer_blocks(
         self,
         video: TransformerArgs | None,
@@ -424,7 +656,25 @@ class LTXModel(torch.nn.Module):
         Per-block perturbation masks are precomputed here and attached to each
         modality's ``TransformerArgs`` so the block forward has no per-block
         identity to specialise on — all blocks share a single Dynamo cache slot.
+        When ``perturbations`` is ``None`` and the default processor and block
+        forward are active, skips host-to-device mask materialization and
+        redundant all-ones clones.
         """
+        if (
+            perturbations is None
+            and type(self.block_input_processor) is BlockPerturbationsProcessor
+            and self.TRANSFORMER_BLOCK_CLS.forward is BasicAVTransformerBlock.forward
+        ):
+            for block in self.transformer_blocks:
+                video, audio = gradient_checkpoint_forward(
+                    block,
+                    self._enable_gradient_checkpointing and self.training,
+                    False,
+                    video,
+                    audio,
+                )
+            return video, audio
+
         if perturbations is None:
             perturbations = self._keep_all_perturbations(video or audio)
 
@@ -456,6 +706,55 @@ class LTXModel(torch.nn.Module):
 
         return video, audio
 
+    def _run_blocks_maybe_graphed(
+        self,
+        video_args: TransformerArgs | None,
+        audio_args: TransformerArgs | None,
+        perturbations: BatchedPerturbationConfig | None,
+        piecewise_graph: Any,
+        *,
+        segment_name: str = "ltx_blocks",
+    ) -> tuple[TransformerArgs | None, TransformerArgs | None, bool, str]:
+        """Execute transformer blocks through ``piecewise_graph`` when eligible."""
+        piecewise_seg_name = segment_name
+        piecewise_eligible = (
+            piecewise_graph is not None
+            and perturbations is None
+            and not self.training
+            and not self._enable_gradient_checkpointing
+            and type(self.block_input_processor) is BlockPerturbationsProcessor
+            and not hasattr(self._process_transformer_blocks, "_captures")
+            and (video_args is None or (video_args.video_control is None and video_args.attention_cache is None))
+            and (audio_args is None or audio_args.attention_cache is None)
+        )
+        if not piecewise_eligible:
+            video_out, audio_out = self._process_transformer_blocks(
+                video=video_args,
+                audio=audio_args,
+                perturbations=perturbations,
+            )
+            return video_out, audio_out, False, piecewise_seg_name
+
+        def _graphed_stack(
+            v_in: TransformerArgs | None,
+            a_in: TransformerArgs | None,
+        ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+            v_out, a_out = self._process_transformer_blocks(video=v_in, audio=a_in, perturbations=None)
+            return (
+                None if v_out is None else v_out.x,
+                None if a_out is None else a_out.x,
+            )
+
+        piecewise_graph.get_or_register_segment(
+            piecewise_seg_name,
+            _graphed_stack,
+            extra_key=f"ltx_piecewise:{id(self)}:{piecewise_seg_name}",
+        )
+        vx_out, ax_out = piecewise_graph.run_segment(piecewise_seg_name, video_args, audio_args)
+        video_out = None if video_args is None else replace(video_args, x=vx_out)
+        audio_out = None if audio_args is None else replace(audio_args, x=ax_out)
+        return video_out, audio_out, True, piecewise_seg_name
+
     def _process_output(
         self,
         scale_shift_table: torch.Tensor,
@@ -477,8 +776,18 @@ class LTXModel(torch.nn.Module):
         return x
 
     def forward(
-        self, video: Modality | None, audio: Modality | None, perturbations: BatchedPerturbationConfig | None
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        self,
+        video: Modality | None,
+        audio: Modality | None,
+        perturbations: BatchedPerturbationConfig | None = None,
+        *,
+        feature_cache: Any = None,
+        feature_cache_step: int = 0,
+        feature_cache_total_steps: int | None = None,
+        _worldfoundry_piecewise_graph: Any = None,
+        _video_grid_shape: tuple[int, int, int] | None = None,
+        _sol_force_dense: bool = False,
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
         """Predict velocity for each enabled modality; unused streams return ``None``.
 
         Inputs are packed ``B T D`` latents inside :class:`Modality`.  STG
@@ -492,14 +801,160 @@ class LTXModel(torch.nn.Module):
 
         video_args = self.video_args_preprocessor.prepare(video, audio) if video is not None else None
         audio_args = self.audio_args_preprocessor.prepare(audio, video) if audio is not None else None
-        # Materialize defaults before the block loop: compile transforms may replace it with a CUDA-graph runner.
-        if perturbations is None:
+        # Materialize defaults only when a custom processor or legacy graph wrapper requires them.
+        if perturbations is None and self._needs_materialized_perturbations():
             perturbations = self._keep_all_perturbations(video_args or audio_args)
-        video_out, audio_out = self._process_transformer_blocks(
-            video=video_args,
-            audio=audio_args,
-            perturbations=perturbations,
-        )
+
+        sol_schedule = getattr(self, "_worldfoundry_sol_schedule", None)
+        orig_video_args = video_args
+        tile_inv_perm: torch.Tensor | None = None
+        tile_sink_tokens: int | None = None
+        if (
+            isinstance(sol_schedule, Mapping)
+            and sol_schedule.get("tile_3d") is not None
+            and not _sol_force_dense
+            and video is not None
+            and video_args is not None
+            and video_args.enabled
+            and video_args.x.numel() > 0
+            and int(video_args.x.shape[1]) >= int(sol_schedule.get("min_tokens", 0))
+            and not self.training
+            and not torch.is_grad_enabled()
+            and perturbations is None
+            and video_args.self_attention_mask is None
+            and video_args.video_control is None
+            and video_args.attention_cache is None
+        ):
+            grid_shape = _video_grid_shape
+            if grid_shape is None and not (
+                video_args.x.device.type == "cuda" and torch.cuda.is_current_stream_capturing()
+            ):
+                grid_cache = self.__dict__.setdefault("_worldfoundry_video_grid_cache", {})
+                grid_shape = resolve_cached_video_grid_shape(grid_cache, video.positions)
+            if grid_shape is not None and grid_shape[0] * grid_shape[1] * grid_shape[2] == int(video_args.x.shape[1]):
+                tf, th, tw = (int(v) for v in sol_schedule["tile_3d"])
+                perm_cache: dict[Any, tuple[torch.Tensor, torch.Tensor, int] | None] = self.__dict__.setdefault(
+                    "_worldfoundry_tile_perm_cache", {}
+                )
+                perm_key = (grid_shape[0], grid_shape[1], grid_shape[2], tf, th, tw, video_args.x.device)
+                if perm_key in perm_cache:
+                    cached_perm = perm_cache[perm_key]
+                else:
+                    cached_perm = _build_tile_3d_permutation(
+                        grid_shape[0],
+                        grid_shape[1],
+                        grid_shape[2],
+                        tf,
+                        th,
+                        tw,
+                        video_args.x.device,
+                    )
+                    if len(perm_cache) >= 16:
+                        perm_cache.pop(next(iter(perm_cache)))
+                    perm_cache[perm_key] = cached_perm
+                if cached_perm is not None:
+                    tile_perm, tile_inv_perm, sink = cached_perm
+                    video_args = _permute_video_args(video_args, tile_perm)
+                    if sink > 0:
+                        tile_sink_tokens = sink
+
+        sol_attn_modules: list[Any] = []
+        if _sol_force_dense or tile_sink_tokens is not None:
+            for block in self.transformer_blocks:
+                attn1 = getattr(block, "attn1", None)
+                if attn1 is not None and getattr(attn1, "attention_backend", None) == "sol_attn":
+                    sol_attn_modules.append(attn1)
+            for mod in sol_attn_modules:
+                if _sol_force_dense:
+                    mod._worldfoundry_force_dense = True
+                if tile_sink_tokens is not None:
+                    mod._worldfoundry_sol_sink_tokens = tile_sink_tokens
+
+        seg_label = "ltx_blocks"
+        if _sol_force_dense:
+            seg_label = f"{seg_label}_dense"
+        elif tile_sink_tokens is not None:
+            seg_label = f"{seg_label}_sink{tile_sink_tokens}"
+
+        try:
+            if feature_cache is None or perturbations is not None:
+                video_out, audio_out, _, _ = self._run_blocks_maybe_graphed(
+                    video_args,
+                    audio_args,
+                    perturbations,
+                    _worldfoundry_piecewise_graph,
+                    segment_name=seg_label,
+                )
+            else:
+                if video_args is not None and audio_args is not None:
+                    cache_signal = torch.cat(
+                        (video_args.timesteps.mean(dim=1), audio_args.timesteps.mean(dim=1)),
+                        dim=-1,
+                    )
+                elif video_args is not None:
+                    cache_signal = video_args.timesteps
+                else:
+                    assert audio_args is not None
+                    cache_signal = audio_args.timesteps
+
+                ran_dense = [False]
+                piecewise_used = [False]
+                seg_name = [seg_label]
+
+                def _compute_residual() -> torch.Tensor:
+                    ran_dense[0] = True
+                    v_out, a_out, used_pw, name = self._run_blocks_maybe_graphed(
+                        video_args,
+                        audio_args,
+                        None,
+                        _worldfoundry_piecewise_graph,
+                        segment_name=seg_label,
+                    )
+                    piecewise_used[0] = used_pw
+                    seg_name[0] = name
+                    if video_args is not None and audio_args is not None:
+                        assert v_out is not None and a_out is not None
+                        return torch.cat(
+                            ((v_out.x - video_args.x).reshape(-1), (a_out.x - audio_args.x).reshape(-1)),
+                            dim=0,
+                        )
+                    if video_args is not None:
+                        assert v_out is not None
+                        return v_out.x - video_args.x
+                    assert audio_args is not None and a_out is not None
+                    return a_out.x - audio_args.x
+
+                residual = feature_cache.run(
+                    int(feature_cache_step),
+                    cache_signal,
+                    _compute_residual,
+                    total_steps=feature_cache_total_steps,
+                )
+                if _worldfoundry_piecewise_graph is not None and not ran_dense[0]:
+                    _worldfoundry_piecewise_graph.record_skip(seg_name[0])
+
+                if video_args is not None and audio_args is not None:
+                    v_numel = video_args.x.numel()
+                    v_res = residual[:v_numel].view_as(video_args.x)
+                    a_res = residual[v_numel:].view_as(audio_args.x)
+                    video_out = replace(video_args, x=video_args.x + v_res)
+                    audio_out = replace(audio_args, x=audio_args.x + a_res)
+                elif video_args is not None:
+                    video_out = replace(video_args, x=video_args.x + residual)
+                    audio_out = None
+                else:
+                    assert audio_args is not None
+                    video_out = None
+                    audio_out = replace(audio_args, x=audio_args.x + residual)
+        finally:
+            for mod in sol_attn_modules:
+                if _sol_force_dense:
+                    mod._worldfoundry_force_dense = False
+                if tile_sink_tokens is not None:
+                    mod._worldfoundry_sol_sink_tokens = None
+
+        if tile_inv_perm is not None and video_out is not None and orig_video_args is not None:
+            video_out = replace(orig_video_args, x=video_out.x.index_select(1, tile_inv_perm))
 
         # Process output
         vx = (
