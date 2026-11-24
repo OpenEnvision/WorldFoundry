@@ -552,6 +552,11 @@ def compose_sol_stack(
 
     if token_pruning.enabled and topology.sequence_parallel_degree > 1:
         raise ValueError("token_pruning cannot be combined with sequence_parallel > 1")
+    if cache.algorithm == "easycache":
+        if topology.sequence_parallel_degree > 1:
+            raise ValueError("easycache cannot be combined with sequence_parallel > 1")
+        if execution.compile:
+            raise ValueError("easycache cannot be combined with torch.compile")
 
     resolved_inplace = kernel_fusion.inplace_residual
     resolved_graph: CudaGraphMode = execution.cuda_graph

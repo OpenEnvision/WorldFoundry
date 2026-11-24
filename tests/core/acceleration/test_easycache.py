@@ -108,3 +108,36 @@ def test_subsampling_does_not_hide_nonfinite_input():
 def test_config_rejects_invalid_budgets(options):
     with pytest.raises((TypeError, ValueError)):
         EasyCacheConfig(**options)
+
+
+@pytest.mark.parametrize("threshold", [0.0, 0.2])
+def test_run_stack_matches_run_blocks_and_returns_hit_flag(threshold):
+    cfg = EasyCacheConfig(threshold=threshold, max_skip_steps=2)
+    stack_cache = EasyCache(cfg, total_steps=8)
+    block_cache = EasyCache(cfg, total_steps=8)
+    stack_calls = 0
+
+    def run_block(index, value):
+        return value * 1.5 + (index + 1) * 0.25
+
+    def run_stack(value):
+        nonlocal stack_calls
+        stack_calls += 1
+        out = value
+        for i in range(3):
+            out = run_block(i, out)
+        return out
+
+    hits = []
+    with torch.inference_mode():
+        for step in range(8):
+            value = torch.full((2, 4, 8), 1.0 + step * 0.001)
+            out_stack, hit = stack_cache.run_stack(step, value, run_stack, block_count=3)
+            out_block = block_cache.run_blocks(step, value, run_block, block_count=3)
+            torch.testing.assert_close(out_stack, out_block, rtol=0, atol=0)
+            hits.append(hit)
+            assert hit is stack_cache.events[-1].hit
+    assert stack_calls == sum(not h for h in hits)
+    assert stack_cache.dense_block_calls == block_cache.dense_block_calls
+    assert stack_cache.skipped_block_calls == block_cache.skipped_block_calls
+    assert sum(hits) == (0 if threshold == 0 else 4)

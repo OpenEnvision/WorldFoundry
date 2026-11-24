@@ -14,6 +14,7 @@ import torch
 
 from worldfoundry.core.acceleration.profiles import resolve_acceleration_profile
 from worldfoundry.core.acceleration.sol_engine import (
+    CachePillar,
     ExecutionPillar,
     ModelHardwareProfile,
     QualityBudget,
@@ -1248,3 +1249,330 @@ def test_wave2_review_regressions_fp_fusion_rope_precision_cols0_and_fa3_autogra
     assert _can_use_wan_fa3_bshd(qg, kg, vg) is False
     with torch.inference_mode():
         assert _can_use_wan_fa3_bshd(qg.detach(), kg.detach(), vg.detach()) is True
+
+
+def test_wan_easycache_3d_tiling_piecewise_seam_and_runner_cli(monkeypatch) -> None:
+    import copy
+    import tempfile
+    from pathlib import Path
+
+    from safetensors.torch import save_file
+
+    from benchmarks.videogen.runner import _build_pipeline_options, parse_args
+    from worldfoundry.base_models.diffusion_model.components import (
+        BuildPurpose,
+        ComponentBuildContext,
+        ComponentKey,
+        ComponentKind,
+    )
+    from worldfoundry.base_models.diffusion_model.contracts import DenoiserInput
+    from worldfoundry.base_models.diffusion_model.loaders.checkpoints import CheckpointSpec
+    from worldfoundry.base_models.diffusion_model.models.denoisers.wan import WanDenoiser, _build_wan_denoiser
+    from worldfoundry.base_models.diffusion_model.models.networks.wan.model import WanModel
+    from worldfoundry.base_models.diffusion_model.optimizations import (
+        parse_attention_backend,
+        parse_offload_policy,
+        parse_torch_dtype,
+    )
+    from worldfoundry.base_models.diffusion_model.optimizations.plugins import (
+        install_diffusion_accelerations,
+        validate_acceleration_installation,
+    )
+    from worldfoundry.base_models.diffusion_model.optimizations.qkv_fusion import fuse_qkv_projections
+    from worldfoundry.base_models.diffusion_model.optimizations.static_cross_kv import install_static_cross_kv_cache
+    from worldfoundry.core.acceleration.easycache import EasyCache, EasyCacheConfig
+    from worldfoundry.core.attention.backends import probe
+    from worldfoundry.core.model_loading.policy import RuntimePolicy
+    from worldfoundry.pipelines.wan.pipeline_wan_2p1_t2v import Wan2p1T2V14BPipeline
+
+    # 1. Verify runner.py --easycache wiring replaces TeaCache cleanly and sets allow_approximate_composition
+    args = parse_args(
+        [
+            "--model",
+            "wan2.1-t2v-14b",
+            "--label",
+            "test_ec",
+            "--profile",
+            "sol",
+            "--attention-backend",
+            "flash_attention_3",
+            "--easycache",
+            "0.15",
+            "--easycache-warmup",
+            "4",
+            "--easycache-stride",
+            "64",
+            "--out",
+            "/tmp/test_ec.json",
+        ]
+    )
+    opts, _ = _build_pipeline_options(args, world_size=1, sm_major=9)
+    assert "teacache" not in opts
+    assert opts["cuda_graph"] == "piecewise"
+    assert opts["inplace_residual"] is False
+    assert opts["allow_approximate_composition"] is True
+    assert opts["accelerations"]["easycache"] == {"threshold": 0.15, "warmup_steps": 4, "subsample_stride": 64}
+    assert opts["accelerations"]["attention_policy"]["self"]["backend"] == "sol_attn"
+    assert opts["attention_backend"] == "flash_attention_3"
+
+    # Fail-closed CLI validation checks (conflict, non-finite/negative, orphan sub-options, bounds, SP, compile)
+    base_argv = ["--model", "wan2.1-t2v-14b", "--label", "chk", "--out", "/tmp/chk.json"]
+    with pytest.raises(ValueError, match="cannot combine --teacache and --easycache"):
+        _build_pipeline_options(parse_args([*base_argv, "--teacache", "0.15", "--easycache", "0.15"]), 1, 9)
+    with pytest.raises(ValueError, match="--easycache must be finite and non-negative"):
+        _build_pipeline_options(parse_args([*base_argv, "--profile", "sol", "--easycache", "nan"]), 1, 9)
+    with pytest.raises(ValueError, match="--easycache must be finite and non-negative"):
+        _build_pipeline_options(parse_args([*base_argv, "--profile", "sol", "--easycache", "inf"]), 1, 9)
+    with pytest.raises(ValueError, match="--easycache must be finite and non-negative"):
+        _build_pipeline_options(parse_args([*base_argv, "--profile", "sol", "--easycache", "-0.1"]), 1, 9)
+    with pytest.raises(ValueError, match="--teacache must be finite"):
+        _build_pipeline_options(parse_args([*base_argv, "--teacache", "nan"]), 1, 9)
+    with pytest.raises(ValueError, match="--easycache-\\* options require --easycache > 0"):
+        _build_pipeline_options(parse_args([*base_argv, "--profile", "sol", "--easycache-warmup", "4"]), 1, 9)
+    with pytest.raises(ValueError, match="--easycache-stride must be >= 1"):
+        _build_pipeline_options(
+            parse_args([*base_argv, "--profile", "sol", "--easycache", "0.15", "--easycache-stride", "0"]), 1, 9
+        )
+    with pytest.raises(ValueError, match="EasyCache cannot be combined with sequence_parallel > 1"):
+        _build_pipeline_options(parse_args([*base_argv, "--profile", "sol", "--easycache", "0.15"]), 4, 9)
+    with pytest.raises(ValueError, match="EasyCache cannot be combined with --compile"):
+        _build_pipeline_options(parse_args([*base_argv, "--profile", "fast", "--easycache", "0.15", "--compile"]), 1, 9)
+
+    # SolEngineStack fail-closed checks for EasyCache + SP > 1 / torch.compile
+    hw_4gpu = ModelHardwareProfile(
+        model_id="wan2.1-t2v-14b",
+        num_heads=40,
+        head_dim=128,
+        num_layers=40,
+        world_size=4,
+        sm_major=9,
+        supports_cfg=True,
+        available_attention_backends=("torch", "sol_attn"),
+    )
+    with pytest.raises(ValueError, match="easycache cannot be combined with sequence_parallel > 1"):
+        compose_sol_stack(hw_4gpu, budget="balanced", cache=CachePillar("easycache", 0.15))
+    hw_1gpu = ModelHardwareProfile(
+        model_id="wan2.1-t2v-14b",
+        num_heads=40,
+        head_dim=128,
+        num_layers=40,
+        world_size=1,
+        sm_major=9,
+        supports_cfg=True,
+        available_attention_backends=("torch",),
+    )
+    with pytest.raises(ValueError, match="easycache cannot be combined with torch.compile"):
+        compose_sol_stack(
+            hw_1gpu,
+            budget="balanced",
+            cache=CachePillar("easycache", 0.15),
+            execution=ExecutionPillar(cuda_graph="piecewise", compile=True),
+        )
+
+    # 2. Verify true numerical tile equivariance (tiled == untiled in FP32) under EasyCache.run_stack +
+    #    3D tiling + dense_steps + fuse_qkv + static_cross_kv + fused_adaln + 2-branch CFG
+    monkeypatch.setattr(probe, "resolve_attention_backend", lambda req, dev=None: req)
+    wan_cfg: dict[str, Any] = {
+        "dim": 256,
+        "in_dim": 4,
+        "ffn_dim": 512,
+        "out_dim": 4,
+        "text_dim": 64,
+        "freq_dim": 32,
+        "eps": 1e-6,
+        "patch_size": (1, 2, 2),
+        "num_heads": 2,
+        "num_layers": 4,
+        "has_image_input": False,
+    }
+    torch.manual_seed(0)
+    m_untiled = WanModel(**wan_cfg).to(torch.float32).eval()
+    m_tiled = copy.deepcopy(m_untiled)
+    sessions = []
+    for m, tile_3d in ((m_untiled, None), (m_tiled, (1, 2, 2))):
+        fuse_qkv_projections(m)
+        cast(Any, m)._worldfoundry_static_cross_kv = install_static_cross_kv_cache(m)
+        cast(Any, m)._worldfoundry_fused_adaln = True
+        policy = RuntimePolicy(
+            dtype=torch.bfloat16,
+            options={"allow_approximate_composition": True, "cuda_graph": "piecewise"},
+        )
+        sol_cfg: dict[str, Any] = {
+            "backend": "sol_attn",
+            "tau": 1.0,
+            "dense_steps": 2,
+            "dense_blocks": (0, -1),
+        }
+        if tile_3d is not None:
+            sol_cfg["tile_3d"] = tile_3d
+        sessions.append(
+            install_diffusion_accelerations(
+                m,
+                {
+                    "easycache": {"threshold": 0.15, "warmup_steps": 2, "dense_last": 1},
+                    "attention_policy": {"self": sol_cfg},
+                },
+                policy=policy,
+            )
+        )
+        for blk in m.blocks:
+            attn_mod = cast(Any, blk).self_attn.attn
+            if attn_mod.attention_backend == "sol_attn":
+                attn_mod.attention_backend = "torch"
+                attn_mod._worldfoundry_attention_options = None
+
+    d_untiled = WanDenoiser(
+        m_untiled,
+        compute_dtype=torch.float32,
+        manage_autocast=False,
+        enable_cuda_graph="piecewise",
+        inplace_residual=False,
+    )
+    d_tiled = WanDenoiser(
+        m_tiled,
+        compute_dtype=torch.float32,
+        manage_autocast=False,
+        enable_cuda_graph="piecewise",
+        inplace_residual=False,
+    )
+    lat_u = torch.randn(1, 4, 2, 8, 8, dtype=torch.float32)
+    lat_t = lat_u.clone()
+    ctx_pos = torch.randn(1, 8, 64, dtype=torch.float32)
+    ctx_neg = torch.randn(1, 8, 64, dtype=torch.float32)
+    with torch.inference_mode():
+        for step in range(8):
+            t = torch.tensor([1000.0 - step * 100.0])
+            out_u_pos = out_t_pos = None
+            for branch, ctx in (("positive", ctx_pos), ("negative", ctx_neg)):
+                ou = d_untiled(
+                    DenoiserInput(
+                        latents=lat_u,
+                        timestep=t,
+                        next_timestep=t,
+                        conditioning={"context": ctx},
+                        step_index=step,
+                        total_steps=8,
+                        branch=branch,
+                        request_id="req-ec-3d",
+                    )
+                )
+                ot = d_tiled(
+                    DenoiserInput(
+                        latents=lat_t,
+                        timestep=t,
+                        next_timestep=t,
+                        conditioning={"context": ctx},
+                        step_index=step,
+                        total_steps=8,
+                        branch=branch,
+                        request_id="req-ec-3d",
+                    )
+                )
+                assert torch.isfinite(ot.sample).all()
+                torch.testing.assert_close(ot.sample, ou.sample, rtol=1e-4, atol=1e-5)
+                if branch == "positive":
+                    out_u_pos, out_t_pos = ou.sample, ot.sample
+            assert out_u_pos is not None and out_t_pos is not None
+            lat_u = lat_u - 0.01 * out_u_pos
+            lat_t = lat_t - 0.01 * out_t_pos
+    d_untiled.end_request("req-ec-3d")
+    d_tiled.end_request("req-ec-3d")
+    report = cast(dict[str, Any], d_tiled.runtime_optimization_report("req-ec-3d"))
+    assert report["fallbacks"] == []
+    assert report["effective"]["feature_cache"] == "residual-reuse"
+    assert report["effective"]["feature_cache_report"]["hits"] > 0
+    assert (2, 4, 4, 1, 2, 2, torch.device("cpu")) in m_tiled.__dict__.get("_worldfoundry_tile_perm_cache", {})
+    for sess in sessions:
+        sess.uninstall()
+
+    # 3. Direct WanModel.forward with EasyCache + sequence_parallel_state must fail closed instead of deadlocking
+    m_sp = WanModel(**wan_cfg).to(torch.float32).eval()
+    m_sp._worldfoundry_sequence_parallel = cast(Any, type("_FakeSP", (), {"sp_degree": 2})())
+    ec_sp = EasyCache(EasyCacheConfig(0.15), total_steps=4)
+    with torch.inference_mode(), pytest.raises(ValueError, match="not synchronized across Ulysses sequence-parallel"):
+        m_sp(
+            torch.randn(1, 4, 2, 8, 8, dtype=torch.float32),
+            torch.tensor([500.0]),
+            torch.randn(1, 8, 64, dtype=torch.float32),
+            feature_cache=ec_sp,
+            feature_cache_step=0,
+            feature_cache_total_steps=4,
+        )
+
+    # 4. Full _build_wan_denoiser + pipeline option round-trip with runner.py --profile sol --easycache options
+    with tempfile.TemporaryDirectory() as td:
+        ckpt_path = Path(td) / "wan.safetensors"
+        save_file(
+            {k: v.contiguous() for k, v in WanModel(**wan_cfg).to(torch.bfloat16).state_dict().items()}, str(ckpt_path)
+        )
+        build_args = parse_args(
+            [
+                *base_argv,
+                "--profile",
+                "sol",
+                "--attention-backend",
+                "torch",
+                "--quantization",
+                "none",
+                "--easycache",
+                "0.15",
+                "--easycache-stride",
+                "64",
+            ]
+        )
+        build_opts, _ = _build_pipeline_options(build_args, world_size=1, sm_major=9)
+        runtime_opts = Wan2p1T2V14BPipeline._runtime_policy_options(build_opts)
+        runtime_opts["fused_rope"] = False  # CPU test: avoid Triton-only fused RoPE fallback receipt
+        build_policy = RuntimePolicy(
+            device=torch.device("cpu"),
+            dtype=parse_torch_dtype(build_opts.get("torch_dtype"), owner="test"),
+            attention=parse_attention_backend(build_opts.get("attention_backend", "torch"), owner="test"),
+            offload=parse_offload_policy(build_opts.get("offload_mode", "resident"), allow_disk=False, owner="test"),
+            quantization=Wan2p1T2V14BPipeline._quantization_policy(build_opts),
+            compile=False,
+            options=runtime_opts,
+        )
+        build_ctx = ComponentBuildContext(
+            model_id="wan2.1-t2v-14b",
+            key=ComponentKey(ComponentKind.DENOISER, "main"),
+            policy=build_policy,
+            purpose=BuildPurpose.INFERENCE,
+            checkpoints={"weights": CheckpointSpec(source=str(ckpt_path))},
+            recipe_options={},
+            component_options={},
+        )
+        built = _build_wan_denoiser(build_ctx, config=cast(dict[str, object], wan_cfg))
+        validate_acceleration_installation(built, build_ctx)
+        assert built._piecewise_graph is not None
+        assert built._graph_runner is None
+        for blk in built.model.blocks:
+            attn_mod = cast(Any, blk).self_attn.attn
+            if attn_mod.attention_backend == "sol_attn":
+                attn_mod.attention_backend = "torch"
+                attn_mod._worldfoundry_attention_options = None
+        lat_b = torch.randn(1, 4, 2, 8, 8, dtype=torch.bfloat16)
+        ctx_b = torch.randn(1, 8, 64, dtype=torch.bfloat16)
+        with torch.inference_mode():
+            for req_id in ("warm", "repeat1"):
+                cur = lat_b.clone()
+                for step in range(6):
+                    t = torch.tensor([1000.0 - step * 100.0])
+                    out_b = built(
+                        DenoiserInput(
+                            latents=cur,
+                            timestep=t,
+                            next_timestep=t,
+                            conditioning={"context": ctx_b},
+                            step_index=step,
+                            total_steps=6,
+                            branch="positive",
+                            request_id=req_id,
+                        )
+                    )
+                    assert torch.isfinite(out_b.sample).all()
+                    cur = cur - 0.01 * out_b.sample
+                built.end_request(req_id)
+        built_rep = cast(dict[str, Any], built.runtime_optimization_report("repeat1"))
+        assert built_rep["fallbacks"] == []
+        assert built_rep["effective"]["feature_cache"] == "residual-reuse"
+        assert built_rep["effective"]["feature_cache_report"]["hits"] > 0

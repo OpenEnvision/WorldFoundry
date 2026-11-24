@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import gc
 import json
+import math
 import os
 import statistics
 import time
@@ -224,11 +225,57 @@ def _build_pipeline_options(args: argparse.Namespace, world_size: int, sm_major:
             opts["cuda_graph"] = True
         else:
             opts["cuda_graph"] = args.cuda_graph
+    if args.teacache is not None and not math.isfinite(args.teacache):
+        raise ValueError("--teacache must be finite")
+    if args.easycache is not None and (not math.isfinite(args.easycache) or args.easycache < 0):
+        raise ValueError("--easycache must be finite and non-negative")
+    easycache_suboptions = (
+        args.easycache_warmup,
+        args.easycache_dense_last,
+        args.easycache_max_skip,
+        args.easycache_stride,
+    )
+    if any(opt is not None for opt in easycache_suboptions) and (args.easycache is None or args.easycache <= 0):
+        raise ValueError("--easycache-* options require --easycache > 0")
+    if args.teacache is not None and args.easycache is not None and args.teacache > 0 and args.easycache > 0:
+        raise ValueError("cannot combine --teacache and --easycache simultaneously")
     if args.teacache is not None:
         if args.teacache <= 0:
             opts.pop("teacache", None)
         else:
             opts["teacache"] = float(args.teacache)
+            opts["inplace_residual"] = False
+            if opts.get("cuda_graph") is True:
+                opts["cuda_graph"] = "piecewise"
+    if args.easycache is not None:
+        acc = dict(opts.get("accelerations") or {})
+        if args.easycache <= 0:
+            acc.pop("easycache", None)
+            if acc:
+                opts["accelerations"] = acc
+            else:
+                opts.pop("accelerations", None)
+        else:
+            opts.pop("teacache", None)
+            ec_cfg: dict[str, Any] = {"threshold": float(args.easycache)}
+            if args.easycache_warmup is not None:
+                if args.easycache_warmup < 0:
+                    raise ValueError("--easycache-warmup must be >= 0")
+                ec_cfg["warmup_steps"] = int(args.easycache_warmup)
+            if args.easycache_dense_last is not None:
+                if args.easycache_dense_last < 0:
+                    raise ValueError("--easycache-dense-last must be >= 0")
+                ec_cfg["dense_last"] = int(args.easycache_dense_last)
+            if args.easycache_max_skip is not None:
+                if args.easycache_max_skip < 1:
+                    raise ValueError("--easycache-max-skip must be >= 1")
+                ec_cfg["max_skip_steps"] = int(args.easycache_max_skip)
+            if args.easycache_stride is not None:
+                if args.easycache_stride < 1:
+                    raise ValueError("--easycache-stride must be >= 1")
+                ec_cfg["subsample_stride"] = int(args.easycache_stride)
+            acc["easycache"] = ec_cfg
+            opts["accelerations"] = acc
             opts["inplace_residual"] = False
             if opts.get("cuda_graph") is True:
                 opts["cuda_graph"] = "piecewise"
@@ -322,6 +369,11 @@ def _build_pipeline_options(args: argparse.Namespace, world_size: int, sm_major:
         opts["compile_scope"] = args.compile_scope
         if args.compile_mode:
             opts["compile_mode"] = args.compile_mode
+    if isinstance(acc_map, Mapping) and "easycache" in acc_map:
+        if int(opts.get("sequence_parallel", 1)) > 1:
+            raise ValueError("EasyCache cannot be combined with sequence_parallel > 1 (use 1 GPU or --sp-degree 1)")
+        if bool(opts.get("compile", False)):
+            raise ValueError("EasyCache cannot be combined with --compile")
 
     if world_size > 1:
         parts = []
@@ -571,6 +623,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--vae-tile-stride", type=int, nargs=2, default=None)
     parser.add_argument("--cuda-graph", choices=("off", "whole", "piecewise"), default=None)
     parser.add_argument("--teacache", type=float, default=None)
+    parser.add_argument("--easycache", type=float, default=None)
+    parser.add_argument("--easycache-warmup", type=int, default=None)
+    parser.add_argument("--easycache-dense-last", type=int, default=None)
+    parser.add_argument("--easycache-max-skip", type=int, default=None)
+    parser.add_argument("--easycache-stride", type=int, default=None)
     parser.add_argument("--quantization", choices=("none", "fp8"), default=None)
     parser.add_argument("--fp8-exclude-edge-blocks", action="store_true")
     parser.add_argument("--fp8-exact-accum", action="store_true")

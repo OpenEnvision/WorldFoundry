@@ -119,17 +119,48 @@ def test_piecewise_block_graph_runner_cpu_lifecycle() -> None:
     report = runner.report()
     assert report["eager"] == 1
     assert report["cache_skips"] == 1
+    assert report["request_window"]["eager"] == 1
+    assert report["request_window"]["cache_skips"] == 1
     assert report["segments"]["blocks"]["cache_skips"] == 1
+    assert report["segments"]["blocks"]["request_window"]["eager"] == 1
+    assert report["segments"]["blocks"]["request_window"]["cache_skips"] == 1
+
+    # Skips recorded before a segment's first miss (e.g., EasyCache/TeaCache hit at
+    # dense_steps -> 3D-tiled Sol-Attn transition) must survive segment registration
+    # and be counted in aggregate + per-window reports even before registration.
+    runner.record_skip("tiled_seg")
+    runner.record_skip("tiled_seg")
+    pre_reg = runner.report()
+    assert pre_reg["cache_skips"] == 3
+    assert pre_reg["request_window"]["cache_skips"] == 3
+    runner.get_or_register_segment("tiled_seg", seg_fn, extra_key="test:tiled")
+    post_reg = runner.report()
+    assert post_reg["cache_skips"] == 3
+    assert post_reg["request_window"]["cache_skips"] == 3
+    assert post_reg["segments"]["tiled_seg"]["cache_skips"] == 2
+    assert post_reg["segments"]["tiled_seg"]["request_window"]["cache_skips"] == 2
 
     runner.begin_request_window()
     report_after = runner.report()
     assert report_after["request_window"]["cache_skips"] == 0
     assert report_after["request_window"]["eager"] == 0
+    assert report_after["segments"]["tiled_seg"]["request_window"]["cache_skips"] == 0
+
+    # Unregistered skips across request windows must reset cleanly on begin_request_window
+    runner.record_skip("unreg_seg")
+    assert runner.report()["request_window"]["cache_skips"] == 1
+    runner.begin_request_window()
+    assert runner.report()["request_window"]["cache_skips"] == 0
+    runner.record_skip("unreg_seg")
+    runner.get_or_register_segment("unreg_seg", seg_fn, extra_key="test:unreg")
+    unreg_rep = runner.report()
+    assert unreg_rep["segments"]["unreg_seg"]["cache_skips"] == 2
+    assert unreg_rep["segments"]["unreg_seg"]["request_window"]["cache_skips"] == 1
 
     runner.freeze()
     assert runner.report()["frozen"] is True
     runner.invalidate()
-    assert runner.report()["segment_count"] == 1
+    assert runner.report()["segment_count"] == 3
 
 
 def test_transformer_protocols_and_hunyuan_seam() -> None:

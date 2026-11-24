@@ -80,8 +80,8 @@ class PiecewiseBlockGraphRunner:
         if self._frozen:
             runner.freeze()
         self._segments[segment_name] = runner
-        self._skips[segment_name] = 0
-        self._window_skips_baseline[segment_name] = 0
+        self._skips.setdefault(segment_name, 0)
+        self._window_skips_baseline.setdefault(segment_name, 0)
         return runner
 
     def get_or_register_segment(
@@ -106,14 +106,19 @@ class PiecewiseBlockGraphRunner:
 
     def record_skip(self, name: str, count: int = 1) -> None:
         """Record that a cache controller bypassed segment ``name``."""
+        segment_name = str(name).strip()
+        if not segment_name:
+            raise ValueError("piecewise graph segment name cannot be empty")
         if count < 0:
             raise ValueError("skip count must be non-negative")
-        self._skips[name] = self._skips.get(name, 0) + int(count)
+        self._skips[segment_name] = self._skips.get(segment_name, 0) + int(count)
+        self._window_skips_baseline.setdefault(segment_name, 0)
 
     def begin_request_window(self) -> None:
         """Reset per-request telemetry while preserving captured graphs."""
-        for name, runner in self._segments.items():
+        for runner in self._segments.values():
             runner.begin_request_window()
+        for name in set(self._segments) | set(self._skips):
             self._window_skips_baseline[name] = self._skips.get(name, 0)
 
     def freeze(self) -> None:
@@ -155,20 +160,33 @@ class PiecewiseBlockGraphRunner:
             seg_report = runner.report()
             seg_skips = self._skips.get(name, 0)
             seg_win_skips = seg_skips - self._window_skips_baseline.get(name, 0)
-            seg_window = dict(seg_report.get("request_window", {}))
-            seg_window["cache_skips"] = seg_win_skips
+            seg_win_capture = int(seg_report.get("capture", 0))
+            seg_win_replay = int(seg_report.get("replay", 0))
+            seg_win_eager = int(seg_report.get("eager", 0))
+            seg_window = {
+                "capture": seg_win_capture,
+                "replay": seg_win_replay,
+                "eager": seg_win_eager,
+                "cache_skips": seg_win_skips,
+            }
             segments[name] = {
                 **seg_report,
                 "cache_skips": seg_skips,
                 "request_window": seg_window,
             }
-            total_captures += int(seg_report.get("capture", 0))
-            total_replays += int(seg_report.get("replay", 0))
-            total_eager += int(seg_report.get("eager", 0))
+            total_captures += seg_win_capture
+            total_replays += seg_win_replay
+            total_eager += seg_win_eager
             total_skips += seg_skips
-            window_captures += int(seg_window.get("capture", 0))
-            window_replays += int(seg_window.get("replay", 0))
-            window_eager += int(seg_window.get("eager", 0))
+            window_captures += seg_win_capture
+            window_replays += seg_win_replay
+            window_eager += seg_win_eager
+            window_skips += seg_win_skips
+        for name, seg_skips in self._skips.items():
+            if name in self._segments:
+                continue
+            seg_win_skips = seg_skips - self._window_skips_baseline.get(name, 0)
+            total_skips += seg_skips
             window_skips += seg_win_skips
         return {
             "mode": "piecewise-block-graph",

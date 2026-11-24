@@ -1516,10 +1516,15 @@ class WanModel(torch.nn.Module):
         )
 
         phase_cache_runner = getattr(feature_cache, "run_phase_blocks", None)
+        stack_cache_runner = getattr(feature_cache, "run_stack", None)
         block_cache_runner = getattr(feature_cache, "run_blocks", None)
         is_residual_cache = (
-            feature_cache is not None and not callable(phase_cache_runner) and not callable(block_cache_runner)
+            feature_cache is not None
+            and not callable(phase_cache_runner)
+            and not callable(stack_cache_runner)
+            and not callable(block_cache_runner)
         )
+        is_whole_stack_cache = is_residual_cache or callable(stack_cache_runner)
         sol_schedule = getattr(self, "_worldfoundry_sol_schedule", None)
         has_tile_schedule = isinstance(sol_schedule, dict) and sol_schedule.get("tile_3d") is not None
         sol_dense_steps = int(sol_schedule.get("dense_steps", 0)) if isinstance(sol_schedule, dict) else 0
@@ -1537,7 +1542,10 @@ class WanModel(torch.nn.Module):
             "after_transformer_block" not in self.__dict__
             and type(self).after_transformer_block is WanModel.after_transformer_block
             and all(type(getattr(block, "_orig_mod", block)) is DiTBlock for block in self.blocks)
-            and not ((callable(phase_cache_runner) or callable(block_cache_runner)) and sol_dense_steps > 0)
+            and not (
+                (callable(phase_cache_runner) or (callable(block_cache_runner) and not callable(stack_cache_runner)))
+                and sol_dense_steps > 0
+            )
         )
         tile_perm: torch.Tensor | None = None
         tile_inv_perm: torch.Tensor | None = None
@@ -1579,11 +1587,11 @@ class WanModel(torch.nn.Module):
             if sp_padding and tile_sink_tokens is not None:
                 tile_sink_tokens += int(sp_padding)
 
-        # Keep residual-reuse caches (TeaCache / MagCache / AdaCache) in canonical
-        # unpermuted full-sequence token space across dense-to-tiled transitions
-        # and skip tile permutation + SP all-gather entirely on cache-hit steps.
+        # Keep whole-stack reuse caches (TeaCache / MagCache / AdaCache / EasyCache)
+        # in canonical unpermuted full-sequence token space across dense-to-tiled
+        # transitions and skip tile permutation + SP all-gather entirely on cache hits.
         defer_tile_and_sp = bool(
-            is_residual_cache and ((has_tile_schedule and tile_layout_safe) or sequence_parallel_state is not None)
+            is_whole_stack_cache and ((has_tile_schedule and tile_layout_safe) or sequence_parallel_state is not None)
         )
 
         def _prepare_block_layout(
@@ -1987,6 +1995,34 @@ class WanModel(torch.nn.Module):
                         block_count=len(self.blocks),
                         total_steps=feature_cache_total_steps,
                     )
+                elif callable(stack_cache_runner):
+                    if sequence_parallel_state is not None:
+                        raise ValueError(
+                            "Wan stack feature-cache runner (EasyCache) is not synchronized across "
+                            "Ulysses sequence-parallel ranks"
+                        )
+
+                    def _dense_stack(stack_in: torch.Tensor) -> torch.Tensor:
+                        nonlocal freqs, t_mod
+                        if defer_tile_and_sp:
+                            orig_freqs, orig_t_mod = freqs, t_mod
+                            work_x, freqs, t_mod = _prepare_block_layout(stack_in, orig_freqs, orig_t_mod)
+                            try:
+                                work_x = run_transformer_blocks_maybe_graphed(work_x)
+                            finally:
+                                freqs, t_mod = orig_freqs, orig_t_mod
+                            return _restore_block_layout(work_x)
+                        return run_transformer_blocks_maybe_graphed(stack_in)
+
+                    x, hit = stack_cache_runner(
+                        int(feature_cache_step),
+                        block_input,
+                        _dense_stack,
+                        block_count=len(self.blocks),
+                        total_steps=feature_cache_total_steps,
+                    )
+                    if piecewise_eligible and hit:
+                        _worldfoundry_piecewise_graph.record_skip(piecewise_seg_name)
                 elif callable(block_cache_runner):
                     x = block_cache_runner(
                         int(feature_cache_step),
