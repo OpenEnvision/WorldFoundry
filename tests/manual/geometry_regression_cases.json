@@ -14442,5 +14442,151 @@
       "depth": "${WORLDFOUNDRY_REGRESSION_TESSERACT_DEPTH_SHA256}",
       "normal": "${WORLDFOUNDRY_REGRESSION_TESSERACT_NORMAL_SHA256}"
     }
+  },
+  "pi4-kart-tracking-short": {
+    "id": "pi4-kart-tracking-short",
+    "model_id": "pi4",
+    "target": "worldfoundry.pipelines.pi4.pipeline_pi4:Pi4Pipeline",
+    "requires_gpu": true,
+    "seed": 42,
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/yyfz233--Pi4/model.safetensors",
+      "video": "${WORLDFOUNDRY_PI4_REPLAY_VIDEO}"
+    },
+    "asset_sha256": {
+      "video": "9852d936955b5dadbcdcceedd8d1b419f060f04bf2e901932eb7a5ebb935eb60",
+      "checkpoint": "fefacac1fb3d23d33c628c41f40d3ce3be98ca064c271948371805db7b5a0e69"
+    },
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/yyfz233--Pi4/model.safetensors",
+      "device": "cuda",
+      "model_id": "pi4"
+    },
+    "call": {
+      "video_path": "${WORLDFOUNDRY_PI4_REPLAY_VIDEO}",
+      "task_type": "tracking",
+      "query_frame": 0,
+      "stride": 4,
+      "max_frames": 8,
+      "max_size": 512,
+      "output_dir": "${OUTPUT_DIR}/export"
+    },
+    "result_outputs": [
+      "numpy_data.points",
+      "numpy_data.depth_map",
+      "numpy_data.camera_poses",
+      "numpy_data.metric_scale",
+      "numpy_data.tracks_2d",
+      "numpy_data.tracks_3d",
+      "numpy_data.visibility",
+      "numpy_data.dynamic_mask"
+    ],
+    "export_artifacts": [
+      "export/point_cloud/result.ply",
+      "export/raw_data/tracks_3d.npy",
+      "export/raw_data/dynamic_mask.npy"
+    ],
+    "required_outputs": [
+      "result.numpy_data.points",
+      "result.numpy_data.depth_map",
+      "result.numpy_data.camera_poses",
+      "result.numpy_data.metric_scale",
+      "result.numpy_data.tracks_2d",
+      "result.numpy_data.tracks_3d",
+      "result.numpy_data.visibility",
+      "result.numpy_data.dynamic_mask",
+      "export.export/raw_data/tracks_3d.npy",
+      "export.export/raw_data/dynamic_mask.npy",
+      "export.export/point_cloud/result.ply.vertex.x"
+    ],
+    "array_contracts": {
+      "result.numpy_data.points": {
+        "shape": [
+          1,
+          8,
+          288,
+          512,
+          3
+        ]
+      },
+      "result.numpy_data.depth_map": {
+        "shape": [
+          1,
+          8,
+          288,
+          512
+        ]
+      },
+      "result.numpy_data.camera_poses": {
+        "shape": [
+          1,
+          8,
+          4,
+          4
+        ]
+      },
+      "result.numpy_data.metric_scale": {
+        "shape": [
+          1
+        ],
+        "min": 0
+      },
+      "result.numpy_data.tracks_2d": {
+        "shape": [
+          1,
+          8,
+          288,
+          512,
+          2
+        ]
+      },
+      "result.numpy_data.tracks_3d": {
+        "shape": [
+          1,
+          8,
+          288,
+          512,
+          3
+        ]
+      },
+      "result.numpy_data.visibility": {
+        "shape": [
+          1,
+          8,
+          288,
+          512
+        ],
+        "min": 0,
+        "max": 1
+      },
+      "result.numpy_data.dynamic_mask": {
+        "shape": [
+          1,
+          8,
+          288,
+          512
+        ],
+        "min": 0,
+        "max": 1
+      }
+    },
+    "comparisons": [
+      {
+        "left": "result.numpy_data.tracks_3d",
+        "right": "export.export/raw_data/tracks_3d.npy",
+        "relation": "equal"
+      },
+      {
+        "left": "result.numpy_data.dynamic_mask",
+        "right": "export.export/raw_data/dynamic_mask.npy",
+        "relation": "equal"
+      }
+    ],
+    "deterministic": true,
+    "projected_tracks": {
+      "result.numpy_data.tracks_3d": "result.numpy_data.tracks_2d",
+      "export.export/raw_data/tracks_3d.npy": "result.numpy_data.tracks_2d"
+    },
+    "scope": "Pi4 released 4D tracker on the upstream kart video. Compare metric geometry, dense 2D and 3D tracks, motion masks, and the exported point cloud. Preserve the out-of-frame track mask."
   }
 }

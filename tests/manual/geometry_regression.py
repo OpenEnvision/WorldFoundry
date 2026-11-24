@@ -224,6 +224,28 @@ def validate_arrays(arrays: dict, required: list[str]) -> None:
             raise ValueError(f"Empty or non-finite output: {key}")
 
 
+def prepare_projected_tracks(arrays: dict[str, np.ndarray], projected_tracks: dict[str, str]) -> None:
+    """Compare valid 3D coordinates and the exact mask of in-frame 2D tracks."""
+    for key, pixel_key in projected_tracks.items():
+        if key not in arrays or pixel_key not in arrays:
+            raise ValueError(f"Missing 3D tracks or corresponding 2D pixels: {key}")
+        xyz, pixels = arrays[key], arrays[pixel_key]
+        if (
+            pixels.ndim != 5
+            or pixels.shape[-1] != 2
+            or xyz.shape != (*pixels.shape[:-1], 3)
+            or not np.isfinite(pixels).all()
+        ):
+            raise ValueError(f"Invalid projected track shape or pixels: {key}")
+        height, width = pixels.shape[-3:-1]
+        x, y = pixels[..., 0], pixels[..., 1]
+        inside = (x >= 0) & (x <= width - 1) & (y >= 0) & (y <= height - 1)
+        if not inside.any() or not np.isfinite(xyz[inside]).all() or not np.isnan(xyz[~inside]).all():
+            raise ValueError(f"3D tracks must be finite in frame and NaN outside: {key}")
+        arrays[key] = np.where(inside[..., None], xyz, 0)
+        arrays[key + ".in_frame"] = inside
+
+
 def validate_contracts(arrays: dict, contracts: dict, comparisons: list[dict]) -> None:
     """Check geometry and request isolation independently of the reference run."""
     for key, contract in contracts.items():
@@ -597,8 +619,10 @@ def run_case(
         arrays.update(exported_text_arrays(output_dir, resolved.get("text_outputs", {})))
         arrays.update(exported_audio_arrays(output_dir, resolved.get("audio_outputs", [])))
         exports = exported_arrays(output_dir, manifest.get("exported_files", []))
-        validate_arrays({**arrays, **exports}, resolved["required_outputs"])
-        validate_contracts({**arrays, **exports}, resolved.get("array_contracts", {}), resolved.get("comparisons", []))
+        outputs = {**arrays, **exports}
+        prepare_projected_tracks(outputs, resolved.get("projected_tracks", {}))
+        validate_arrays(outputs, resolved["required_outputs"])
+        validate_contracts(outputs, resolved.get("array_contracts", {}), resolved.get("comparisons", []))
         np.savez_compressed(output_dir / "arrays.npz", **arrays)
         sources = {}
         for imported in list(sys.modules.values()):
@@ -697,6 +721,9 @@ def compare_runs(
             **exported_text_arrays(candidate, meta_b["case"].get("text_outputs", {})),
             **exported_audio_arrays(candidate, meta_b["case"].get("audio_outputs", [])),
         }
+        projected_tracks = meta_a["case"].get("projected_tracks", {})
+        prepare_projected_tracks(arrays_a, projected_tracks)
+        prepare_projected_tracks(arrays_b, projected_tracks)
         if not arrays_a or not arrays_b:
             raise ValueError("Numerical output keys differ or are empty")
         if arrays_a.keys() != arrays_b.keys():

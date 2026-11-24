@@ -79,6 +79,31 @@ def test_identical_invalid_outputs_cannot_pass(tmp_path, data):
         replay.compare_runs(reference, candidate)
 
 
+def test_projected_tracks_compare_positions_and_frame_mask(tmp_path):
+    case = {"id": "tracking", "projected_tracks": {"world": "pixels"}}
+    pixels = np.array([[[[[0.0, 0.0], [5.0, 0.0]]]]])
+    world = np.array([[[[[1.0, 2.0, 3.0], [np.nan, np.nan, np.nan]]]]])
+    reference = write_run(tmp_path / "reference", {"pixels": pixels, "world": world}, case=case)
+    same = write_run(tmp_path / "same", {"pixels": pixels, "world": world}, case=case)
+    assert replay.compare_runs(reference, same)["status"] == "passed"
+
+    reversed_tracks = write_run(
+        tmp_path / "reversed", {"pixels": pixels[..., ::-1, :], "world": world[..., ::-1, :]}, case=case
+    )
+    report = replay.compare_runs(reference, reversed_tracks, atol=100)
+    assert report["status"] == "failed"
+    assert not report["outputs"]["world.in_frame"]["passed"]
+
+
+@pytest.mark.parametrize(("column", "value"), [(0, np.nan), (1, 0.0), (1, np.inf)])
+def test_projected_tracks_require_nan_only_outside_the_frame(column, value):
+    pixels = np.array([[[[[0.0, 0.0], [5.0, 0.0]]]]])
+    world = np.array([[[[[1.0, 2.0, 3.0], [np.nan, np.nan, np.nan]]]]])
+    world[..., column, 0] = value
+    with pytest.raises(ValueError, match="finite in frame and NaN outside"):
+        replay.prepare_projected_tracks({"pixels": pixels, "world": world}, {"world": "pixels"})
+
+
 def test_failed_inference_and_modified_evidence_cannot_pass(tmp_path):
     reference = write_run(tmp_path / "reference", {"depth": np.ones(2)})
     failed = write_run(tmp_path / "failed", {"depth": np.ones(2)}, status="failed")

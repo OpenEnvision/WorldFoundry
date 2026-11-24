@@ -358,6 +358,12 @@ pixels and frame rate against the reference. Oasis uses this route because
 its subprocess returns an MP4 without in-memory tensors; its generator fixes
 the random seed to 0.
 
+Pi4 declares `projected_tracks` from each captured or exported XYZ array to
+its dense XY track array. The runner derives in-frame validity from pixel
+coordinates and raster size. It requires finite XYZ inside the image and
+NaN markers outside. Replay compares the validity mask exactly and checks
+all in-frame coordinates.
+
 GPU-required cases set `requires_gpu: true`; the runner fails before loading
 weights when CUDA is unavailable. This declaration does not certify a GPU run.
 The native LTX-2.5, LTX-2/2.3 IC-LoRA V2V and HyperFlow cases compare decoded

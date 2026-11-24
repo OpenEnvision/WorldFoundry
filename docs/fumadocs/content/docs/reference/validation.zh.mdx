@@ -186,6 +186,8 @@ LTX 的 timestep-conditioned VAE 在解码时也会注入噪声。视频、音�
 
 只返回视频路径的生成器可以用 `output_arrays` 选择运行目录内的 MP4、WebM、MOV 或 MKV。回归工具完整解码后，将 `artifact.<相对路径>.frames` 和 `.fps` 保存到 `arrays.npz`，因此路径或计划本身不能满足必需数值输出。还应在 `export_artifacts` 中声明视频，比较导出文件解码后的像素及帧率。Oasis 的子进程只返回 MP4，没有内存张量，因此使用此入口；生成器的随机种子固定为 0。
 
+Pi4 的 `projected_tracks` 将待比较的 XYZ 数组映射到对应的密集 XY 轨迹。回放根据像素坐标和画面尺寸判断有效位置，要求画面内的 XYZ 为有限值、画面外为 NaN 标记，并逐项比较画面内坐标与有效位置掩码。
+
 需要 GPU 的用例设置 `requires_gpu: true`；CUDA 不可用时，执行器在加载权重前失败。声明不代表 GPU 已运行。原生 LTX-2.5、LTX-2/2.3 IC-LoRA V2V 和 HyperFlow 用例使用显式权重及控制输入，比较解码后的视频和 FPS。
 
 文本生成模型通过 `text_outputs` 将 JSON 产物的相对文件名映射到明确的输出字段路径，例如 `{"prediction.json": ["text"]}`。执行器将所选字符串编码为 UTF-8 `uint8` 数组，键名为 `text.prediction.json.text`，并在 `required_outputs` 中要求该键。审计会重新读取所选字段，即使提供浮点容差，也要求字节完全一致。输入路径及其他 JSON 字符串不参与捕获。OmniVinci 音视频用例通过此契约比较生成的描述；原有数值用例行为不变。
