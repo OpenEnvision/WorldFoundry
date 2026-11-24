@@ -9,7 +9,7 @@ description: WorldFoundry 推理加速哪些可以开、哪些组合会被拒绝
 
 WorldFoundry 只把「有公开开关、且主链会消费」的技术算作可用。参数被接受不等于加速。forward 之后，应读取 `runtime_optimization_report()` 里的 `requested / effective / fallbacks`。
 
-[可插拔 diffusion 加速](/zh/docs/guides/diffusion-acceleration)补充原生 SANA/Wan 插件、撤销与请求隔离，以及完整视频测试通过和淘汰的配置。
+[可插拔 diffusion 加速](/zh/docs/guides/diffusion-acceleration)补充原生 SANA/Wan 插件、撤销与请求隔离，以及完整视频测试通过和淘汰的配置。15 个加速模型在独占 NVIDIA H200 上的完整实测加速比、质量门禁与回执见[加速基准](/zh/docs/guides/videogen-acceleration-benchmarks)。
 
 下面点名的开关，主要针对 **原生 Wan 2.1 / Wan 2.2** 管线（`Wan2p1*`、`Wan2p2*`，含 VACE）。Wan 2.5 / 2.6 / 2.7 是托管 API，没有本地 kernel 开关。其他原生 recipe 只支持其中一部分（dtype、offload，有的还有 attention 或 VAE tiling）。家族 runtime（LTX、CogVideoX 等）用自己的参数，不要把 Wan 的 key 抄过去。
 
@@ -461,6 +461,7 @@ Framework 对比使用 `benchmarks.inference.framework_ab_wan22` 的 v4 报告�
 ## 下一步
 
 <Cards>
+  <Card title="加速基准" description="15 个模型在独占 H200 上的加速比、质量门禁与回执。" href="/zh/docs/guides/videogen-acceleration-benchmarks" />
   <Card title="运行推理" description="环境、CLI 与 Workspace 命令。" href="/zh/docs/guides/inference" />
   <Card title="模型" description="挑选 model ID 和默认 profile。" href="/zh/docs/guides/supported-models" />
   <Card title="Studio" description="Workspace 勾选与 load JSON。" href="/zh/docs/guides/studio" />

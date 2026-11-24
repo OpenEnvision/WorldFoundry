@@ -78,6 +78,7 @@ export const docsNavPageLabels: Record<Locale, DocsNavPageLabels> = {
     'reference/environments': 'Environment',
     'guides/inference': 'Run inference',
     'guides/inference-optimization': 'Inference optimization',
+    'guides/videogen-acceleration-benchmarks': 'Acceleration benchmarks',
     'guides/run-status': 'Run status',
     'guides/supported-models': 'Models',
     'guides/local-assets': 'Local assets',
@@ -118,6 +119,7 @@ export const docsNavPageLabels: Record<Locale, DocsNavPageLabels> = {
     'reference/environments': '环境配置',
     'guides/inference': '运行推理',
     'guides/inference-optimization': '推理优化',
+    'guides/videogen-acceleration-benchmarks': '加速基准',
     'guides/run-status': '运行状态',
     'guides/supported-models': '模型',
     'guides/local-assets': '本地资产',
@@ -166,6 +168,7 @@ export const docsNavGroups = [
     slugs: [
       ['guides', 'inference'],
       ['guides', 'inference-optimization'],
+      ['guides', 'videogen-acceleration-benchmarks'],
       ['guides', 'supported-models'],
       ['guides', 'studio'],
     ],

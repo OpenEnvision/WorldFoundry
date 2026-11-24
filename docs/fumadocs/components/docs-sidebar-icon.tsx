@@ -24,6 +24,7 @@ import {
   SquareTerminal,
   Terminal,
   Workflow,
+  Zap,
 } from 'lucide-react';
 
 const SIDEBAR_ICONS: Record<string, LucideIcon> = {
@@ -36,6 +37,7 @@ const SIDEBAR_ICONS: Record<string, LucideIcon> = {
   'reference/cli': FileCode2,
   'guides/inference': Play,
   'guides/inference-optimization': Timer,
+  'guides/videogen-acceleration-benchmarks': Zap,
   'guides/run-status': ShieldCheck,
   'guides/supported-models': Layers,
   'guides/studio': MonitorPlay,
