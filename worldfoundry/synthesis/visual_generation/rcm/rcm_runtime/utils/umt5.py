@@ -14,6 +14,8 @@
 # limitations under the License.
 
 import gc
+import os
+from pathlib import Path
 
 import torch
 
@@ -21,7 +23,64 @@ from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import H
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import umt5_xxl
 from worldfoundry.core.distributed.runtime import torch_process_group as distributed
 from worldfoundry.core.io.assets.easy_io import easy_io
+from worldfoundry.core.io.paths import cache_root_path, checkpoint_root_path
 from worldfoundry.core.observability.rank_logging import log
+
+DEFAULT_UMT5_TOKENIZER_ID = "google/umt5-xxl"
+_UMT5_TOKENIZER_MARKER_FILES = ("tokenizer_config.json", "spiece.model", "tokenizer.json")
+
+
+def _is_tokenizer_dir(candidate: Path) -> bool:
+    return candidate.is_dir() and any((candidate / marker).is_file() for marker in _UMT5_TOKENIZER_MARKER_FILES)
+
+
+def resolve_umt5_tokenizer_path(
+    checkpoint_path: str | Path | None = None,
+    tokenizer_path: str | Path | None = None,
+) -> tuple[str, bool]:
+    """Resolve a local UMT5 tokenizer directory when available offline."""
+    if tokenizer_path not in (None, "", DEFAULT_UMT5_TOKENIZER_ID):
+        explicit = Path(str(tokenizer_path)).expanduser()
+        return str(explicit), _is_tokenizer_dir(explicit)
+
+    candidates: list[Path] = []
+    if checkpoint_path not in (None, ""):
+        ckpt_dir = Path(str(checkpoint_path)).expanduser().parent
+        candidates.extend([ckpt_dir / "google" / "umt5-xxl", ckpt_dir / "umt5-xxl"])
+        if ckpt_dir.parent.is_dir():
+            for sibling in sorted(ckpt_dir.parent.iterdir(), key=lambda p: p.name):
+                candidates.append(sibling / "google" / "umt5-xxl")
+
+    for env_key in ("WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT",):
+        root_val = os.environ.get(env_key)
+        if root_val:
+            root = Path(root_val).expanduser()
+            candidates.append(root / "google" / "umt5-xxl")
+            if root.is_dir():
+                for sibling in sorted(root.iterdir(), key=lambda p: p.name):
+                    candidates.append(sibling / "google" / "umt5-xxl")
+
+    default_ckpt_root = checkpoint_root_path()
+    if default_ckpt_root.is_dir():
+        for sibling in sorted(default_ckpt_root.iterdir(), key=lambda p: p.name):
+            candidates.append(sibling / "google" / "umt5-xxl")
+
+    hub_roots: list[Path] = []
+    if os.environ.get("HF_HUB_CACHE"):
+        hub_roots.append(Path(os.environ["HF_HUB_CACHE"]).expanduser())
+    if os.environ.get("HF_HOME"):
+        hub_roots.append(Path(os.environ["HF_HOME"]).expanduser() / "hub")
+    hub_roots.append(cache_root_path() / "huggingface" / "hub")
+    for hub_root in hub_roots:
+        if hub_root.is_dir():
+            for match in sorted(hub_root.glob("models--*/snapshots/*/google/umt5-xxl")):
+                candidates.append(match)
+
+    for candidate in candidates:
+        if _is_tokenizer_dir(candidate):
+            return str(candidate), True
+
+    return DEFAULT_UMT5_TOKENIZER_ID, False
 
 
 def load_model_torch(model, ckpt_path):
@@ -43,7 +102,7 @@ class UMT5EncoderModel:
         dtype=torch.bfloat16,
         device=torch.cuda.current_device(),  # noqa: B008 - Default evaluated once at definition, as upstream.
         checkpoint_path="models_t5_umt5-xxl-enc-bf16.pth",
-        tokenizer_path="google/umt5-xxl",
+        tokenizer_path=None,
     ):
         self.text_len = text_len
         self.dtype = dtype
@@ -57,7 +116,14 @@ class UMT5EncoderModel:
         self.model = model
         self.model.to(self.device)
         # init tokenizer
-        self.tokenizer = HuggingfaceTokenizer(name=tokenizer_path, seq_len=text_len, clean="whitespace")
+        resolved_tokenizer_path, is_local = resolve_umt5_tokenizer_path(checkpoint_path, tokenizer_path)
+        tokenizer_kwargs = {"local_files_only": True} if is_local else {}
+        self.tokenizer = HuggingfaceTokenizer(
+            name=resolved_tokenizer_path,
+            seq_len=text_len,
+            clean="whitespace",
+            **tokenizer_kwargs,
+        )
 
     def __call__(self, texts, device: torch.device | None = None):
         if device is None:
@@ -87,10 +153,16 @@ def get_umt5_embedding(
     prompts: str | list[str],
     device: str = "cuda",
     max_length: int = 512,
+    tokenizer_path: str | None = None,
 ) -> torch.Tensor:
     global t5_encoder
     if t5_encoder is None:
-        t5_encoder = UMT5EncoderModel(text_len=max_length, device=device, checkpoint_path=checkpoint_path)
+        t5_encoder = UMT5EncoderModel(
+            text_len=max_length,
+            device=device,
+            checkpoint_path=checkpoint_path,
+            tokenizer_path=tokenizer_path,
+        )
     return t5_encoder(prompts, device=device)
 
 

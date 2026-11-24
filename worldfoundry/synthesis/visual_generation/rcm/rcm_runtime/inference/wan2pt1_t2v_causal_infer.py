@@ -643,6 +643,9 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--dit_path", type=str, required=True, help="Path to the DiT checkpoint")
     parser.add_argument("--vae_path", type=str, default="assets/checkpoints/Wan2.1_VAE.pth")
     parser.add_argument("--text_encoder_path", type=str, default="assets/checkpoints/models_t5_umt5-xxl-enc-bf16.pth")
+    parser.add_argument(
+        "--tokenizer_path", type=str, default="", help="Optional local path or HF repo id for UMT5 tokenizer"
+    )
     parser.add_argument("--num_frames", type=int, default=81)
     parser.add_argument("--prompt", type=str, default=_DEFAULT_PROMPT)
     parser.add_argument("--negative_prompt", type=str, default=_DEFAULT_NEGATIVE_PROMPT)
@@ -749,15 +752,26 @@ if __name__ == "__main__":
 
     # --- Text embeddings ---
     log.info("Computing text embeddings...")
+    tokenizer_path = args.tokenizer_path or None
     text_emb = (
-        get_umt5_embedding(checkpoint_path=args.text_encoder_path, prompts=args.prompt).to(dtype=torch.bfloat16).cuda()
+        get_umt5_embedding(
+            checkpoint_path=args.text_encoder_path,
+            prompts=args.prompt,
+            tokenizer_path=tokenizer_path,
+        )
+        .to(dtype=torch.bfloat16)
+        .cuda()
     )
 
     condition = {"crossattn_emb": repeat(text_emb.to(**TENSOR_KWARGS), "b l d -> (k b) l d", k=args.num_samples)}
 
     if not args.distilled and args.guidance_scale > 1.0:
         neg_text_emb = (
-            get_umt5_embedding(checkpoint_path=args.text_encoder_path, prompts=args.negative_prompt)
+            get_umt5_embedding(
+                checkpoint_path=args.text_encoder_path,
+                prompts=args.negative_prompt,
+                tokenizer_path=tokenizer_path,
+            )
             .to(dtype=torch.bfloat16)
             .cuda()
         )

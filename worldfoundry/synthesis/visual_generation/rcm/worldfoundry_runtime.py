@@ -351,6 +351,10 @@ def build_command(context) -> list[str]:
         command.extend(["--kv_cache_window_blocks", str(int(_option(settings, "kv_cache_window_blocks", default=6)))])
         command.extend(["--kv_cache_sink_blocks", str(int(_option(settings, "kv_cache_sink_blocks", default=0)))])
 
+    tokenizer_path = _option(settings, "tokenizer_path")
+    if tokenizer_path is not None:
+        command.extend(["--tokenizer_path", str(Path(str(tokenizer_path)).expanduser())])
+
     warmup_iters = int(_option(settings, "warmup_iters", default=0))
     num_runs = int(_option(settings, "num_runs", default=1))
     if warmup_iters or num_runs > 1:
