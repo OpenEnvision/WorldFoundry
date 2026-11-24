@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" width="720" alt="WorldFoundry"/>
+  <img src="assets/logo.png" width="720" alt="WorldFoundry"/>
 </p>
 
 <h1 align="center">

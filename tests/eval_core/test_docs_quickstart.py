@@ -144,12 +144,17 @@ def test_readme_keeps_news_and_community_qr_codes() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
 
     assert (
-        readme.index('src="assets/logo.svg"')
+        readme.index('src="assets/logo.png"')
         < readme.index("## 📰 News")
         < readme.index("## 🤝 Community")
         < readme.index("## Highlights")
     )
-    assert (REPO_ROOT / "assets/logo.svg").is_file()
+    logo_path = REPO_ROOT / "assets/logo.png"
+    assert logo_path.is_file()
+    logo_header = logo_path.read_bytes()[:26]
+    assert logo_header[:8] == b"\x89PNG\r\n\x1a\n"
+    assert logo_header[12:16] == b"IHDR"
+    assert logo_header[25] == 6  # RGBA PNG with alpha transparency
     assert "https://join.slack.com/t/worldfoundrycommunity/" in readme
     assert "https://discord.gg/ybUQMDA4x" in readme
     for filename in ("wechat_qr.png", "wechat_qr_2.png", "wechat_qr_3.png"):
