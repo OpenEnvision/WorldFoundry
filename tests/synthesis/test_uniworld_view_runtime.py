@@ -104,3 +104,72 @@ def test_model_reference_prefers_its_bundle_per_weight(tmp_path: Path, monkeypat
         pipeline.weights["sam2_checkpoint"]
         == (tmp_path / "ckpts" / "facebook--sam2-hiera-large" / "sam2_hiera_large.pt").resolve()
     )
+
+
+def test_setup_diffusion_passes_weight_name_and_local_files_only_for_file_lora(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import importlib
+    import types
+    from types import SimpleNamespace
+
+    if importlib.util.find_spec("carvekit") is None:
+        for mod_name in ("carvekit", "carvekit.ml", "carvekit.ml.wrap", "carvekit.ml.wrap.tracer_b7"):
+            mod = types.ModuleType(mod_name)
+            if mod_name.endswith("tracer_b7"):
+                setattr(mod, "TracerUniversalB7", object)
+            monkeypatch.setitem(sys.modules, mod_name, mod)
+
+    demo = importlib.import_module("worldfoundry.synthesis.visual_generation.uniworld_view.uniworld_view_runtime.demo")
+
+    lora_file = tmp_path / "causvid.safetensors"
+    lora_file.write_bytes(b"weights")
+    lora_dir = tmp_path / "lora_dir"
+    lora_dir.mkdir()
+
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    class FakePipeline:
+        def to(self, device: str):
+            return self
+
+        def load_lora_weights(self, path: str, **kwargs: object) -> None:
+            calls.append((path, kwargs))
+
+        def set_adapters(self, names: list[str], adapter_weights: list[float]) -> None:
+            pass
+
+        def fuse_lora(self) -> None:
+            pass
+
+    for attr in ("WanVACETransformer3DModel", "AutoencoderKLWan", "AutoTokenizer"):
+        monkeypatch.setattr(getattr(demo, attr), "from_pretrained", classmethod(lambda cls, *a, **k: object()))
+    monkeypatch.setattr(
+        demo.UMT5EncoderModel,
+        "from_pretrained",
+        classmethod(lambda cls, *a, **k: SimpleNamespace(eval=lambda: None)),
+    )
+    monkeypatch.setattr(demo.FlowMatchEulerDiscreteScheduler, "from_config", classmethod(lambda cls, *a, **k: object()))
+    monkeypatch.setattr(demo, "WanVACEPipeline", lambda **kwargs: FakePipeline())
+
+    scene = object.__new__(demo.UniScene)
+    scene.opts = SimpleNamespace(
+        transformer_path="t",
+        model_name="m",
+        weight_dtype=None,
+        device="cpu",
+        low_gpu_memory_mode=False,
+        lora_path=str(lora_file),
+    )
+    scene.setup_diffusion()
+    assert calls == [
+        (
+            str(tmp_path),
+            {"weight_name": "causvid.safetensors", "local_files_only": True, "adapter_name": "causvid_lora"},
+        )
+    ]
+
+    calls.clear()
+    scene.opts.lora_path = str(lora_dir)
+    scene.setup_diffusion()
+    assert calls == [(str(lora_dir), {"local_files_only": True, "adapter_name": "causvid_lora"})]

@@ -548,8 +548,21 @@ class UniScene:
 
         lora_path = getattr(self.opts, "lora_path", None)
         if isinstance(lora_path, str) and lora_path:
-            if Path(lora_path).exists():
-                self.pipeline.load_lora_weights(lora_path, adapter_name="causvid_lora")
+            lora_file = Path(lora_path)
+            if lora_file.exists():
+                if lora_file.is_file():
+                    self.pipeline.load_lora_weights(
+                        str(lora_file.parent),
+                        weight_name=lora_file.name,
+                        local_files_only=True,
+                        adapter_name="causvid_lora",
+                    )
+                else:
+                    self.pipeline.load_lora_weights(
+                        str(lora_file),
+                        local_files_only=True,
+                        adapter_name="causvid_lora",
+                    )
                 self.pipeline.set_adapters(["causvid_lora"], adapter_weights=[0.95])
                 self.pipeline.fuse_lora()
             else:
