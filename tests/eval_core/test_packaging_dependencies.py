@@ -59,7 +59,7 @@ def test_lint_tooling_uses_one_exact_ruff_version() -> None:
 
     assert "ruff==0.12.7" in payload["project"]["optional-dependencies"]["dev"]
     assert "ruff==0.12.7" in payload["dependency-groups"]["lint"]
-    assert 'python -m pip install PyYAML "ruff==0.12.7"' in workflow
+    assert 'python -m pip install -e . "ruff==0.12.7"' in workflow
     assert "pytest>=8" in payload["project"]["optional-dependencies"]["dev"]
 
 

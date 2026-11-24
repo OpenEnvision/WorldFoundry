@@ -1,0 +1,47 @@
+name: GPU Contracts
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_cuda_contracts:
+        description: Run CUDA kernel, graph, and precision contract tests
+        required: false
+        type: boolean
+        default: true
+      run_sol_contracts:
+        description: Run SM90 Sol-Attn CUDA contract tests
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: gpu-contracts-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cuda-contracts:
+    name: cuda-contracts
+    runs-on: [self-hosted, linux, gpu]
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Run CUDA kernel contracts
+        if: ${{ inputs.run_cuda_contracts }}
+        run: make test-infer-cuda-contracts
+      - name: Run SM90 Sol-Attn CUDA contracts
+        if: ${{ inputs.run_sol_contracts }}
+        run: make test-infer-sol-cuda-contracts
+      - name: Publish GPU contract reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpu-contract-reports
+          path: |
+            tmp/inference-cuda-contracts.xml
+            tmp/inference-sol-cuda-contracts.xml
+          retention-days: 14
+          if-no-files-found: ignore

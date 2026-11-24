@@ -597,17 +597,21 @@ tracked Python sources used by the import graph must also match that commit.
 Preflight, stale commits, omitted cases, relaxed tolerances and failed runs
 cannot pass. Public CPU and tensor gates must pass separately.
 
-The hosted `inference-replay` job consumes a successful official Actions
-artifact from a maintainer-dispatched control workflow. A missing, expired,
-foreign or stale receipt fails. The dispatch verifies the candidate's exact
+The opt-in `Inference Evidence` workflow (`.github/workflows/inference-evidence.yml`)
+consumes a successful official Actions artifact from a maintainer-dispatched
+control workflow via its `inference-replay` job. A missing, expired, foreign or
+stale receipt fails when enabled. The dispatch verifies the candidate's exact
 commit, tree, comparison base and pinned reference index before publishing
-`trusted-inference-evidence`. Evidence-only dispatches run the attestation job;
-ordinary CI runs verify the receipt. This workflow uses a prepared trusted GPU
-host without requiring a hosted GPU runner. Configure the repository variables
-`INFERENCE_EVIDENCE_CONTROL_REF`, `INFERENCE_EVIDENCE_WORKFLOW_PATH` and
-`INFERENCE_REFERENCE_INDEX_SHA256`; protect the merge branch with the
-`inference-replay` and CPU checks. A workflow declaration alone does not enable
-branch protection. Uncovered and unexecuted variants remain gaps.
+`trusted-inference-evidence`. Evidence-only dispatches run `attest-inference-evidence`;
+ordinary PRs verify the receipt whenever the repository configures
+`INFERENCE_EVIDENCE_CONTROL_REF` and `INFERENCE_REFERENCE_INDEX_SHA256` (and
+optionally `INFERENCE_EVIDENCE_WORKFLOW_PATH`). Repositories without those
+variables run public weight-free checks in `CI` without failing `inference-replay`.
+You can also enable manual `workflow_dispatch` CUDA contract execution on a
+`[self-hosted, linux, gpu]` runner via `.github/workflows/gpu-contracts.yml`.
+Protect the merge branch with the public CPU checks and, once configured,
+`inference-replay`. A workflow declaration alone does not enable branch
+protection. Uncovered and unexecuted variants remain gaps.
 
 MG2 changes, including changes to its numerical contract, additionally require
 all six real-image, 12-block trajectories against a frozen accepted revision.
@@ -628,11 +632,12 @@ INFERENCE_REFERENCE_INDEX_SHA256=<pinned-index> python3 tests/manual/inference_a
   --generic-replay /private/path/replay/report.json --output /private/path/evidence.json
 ```
 
-Dispatch `CI` on the configured control branch with those two commit IDs and
-the compact JSON as `source_revision`, `base_revision` and `evidence_json`.
-After that dispatch succeeds, retry the candidate's `inference-replay` job.
-The companion `inference-evidence-verified.yml` performs this retry once it is
-installed on the repository's default branch; until then retry it explicitly.
+Dispatch `Inference Evidence` on the configured control branch with those two
+commit IDs and the compact JSON as `source_revision`, `base_revision` and
+`evidence_json`. After that dispatch succeeds, retry the candidate's
+`inference-replay` job. The companion `inference-evidence-verified.yml` performs
+this retry once it is installed on the repository's default branch; until then
+retry it explicitly.
 
 ### Component parity and first divergence
 

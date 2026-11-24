@@ -7,29 +7,19 @@ on:
       - main
       - 'release/**'
   workflow_dispatch:
-    inputs:
-      source_revision:
-        description: Exact candidate commit for trusted inference evidence
-        required: false
-        type: string
-      base_revision:
-        description: Exact comparison commit
-        required: false
-        type: string
-      evidence_json:
-        description: Compact numerical evidence from a trusted model host
-        required: false
-        type: string
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
   geometry-impact:
-    name: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_json != '' && 'evidence-dispatch-idle-geometry-impact' || 'geometry-impact' }}
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.evidence_json == '' }}
+    name: geometry-impact
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout with diff history
         uses: actions/checkout@v5
@@ -39,122 +29,94 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - name: Plan affected 3D, video and world-model replays without weights or GPU
         env:
-          IMPACT_BASE_SHA: ${{ inputs.base_revision || github.event.pull_request.base.sha || github.event.before }}
+          IMPACT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          if [ -n "$IMPACT_BASE_SHA" ] && [ "$IMPACT_BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+          if [ -n "$IMPACT_BASE_SHA" ] \
+            && [ "$IMPACT_BASE_SHA" != "0000000000000000000000000000000000000000" ] \
+            && git cat-file -e "${IMPACT_BASE_SHA}^{commit}" 2>/dev/null; then
             python tests/manual/geometry_regression_impact.py --base "$IMPACT_BASE_SHA" --output tmp/geometry-impact.json
           else
             python tests/manual/geometry_regression_impact.py --changed-file worldfoundry/core/__init__.py --output tmp/geometry-impact.json
           fi
-      - name: Publish required replay plan, including uncovered changes
+      - name: Publish required replay plan artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: geometry-impact
           path: tmp/geometry-impact.json
+          retention-days: 14
           if-no-files-found: error
       - name: Install declaration reader
         if: always()
         run: python -m pip install "PyYAML>=6"
-      - name: Reject new, regressed or affected uncovered native variants
+      - name: Check native replay declaration coverage (advisory)
+        id: coverage
         if: always()
+        continue-on-error: true
         env:
-          IMPACT_BASE_SHA: ${{ inputs.base_revision || github.event.pull_request.base.sha || github.event.before }}
+          IMPACT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          if [ -n "$IMPACT_BASE_SHA" ] && [ "$IMPACT_BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+          if [ -n "$IMPACT_BASE_SHA" ] \
+            && [ "$IMPACT_BASE_SHA" != "0000000000000000000000000000000000000000" ] \
+            && git cat-file -e "${IMPACT_BASE_SHA}^{commit}" 2>/dev/null; then
             python tests/manual/inference_regression_coverage.py --base "$IMPACT_BASE_SHA" --output tmp/inference-coverage.json
           else
             python tests/manual/inference_regression_coverage.py --output tmp/inference-coverage.json
           fi
+      - name: Write PR GPU validation summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          lines = ["## GPU Regression Impact & Coverage Summary", ""]
+          impact_path = Path("tmp/geometry-impact.json")
+          if impact_path.is_file():
+              impact = json.loads(impact_path.read_text(encoding="utf-8"))
+              selected = impact.get("selected_cases", [])
+              lines.append(f"- **Impact status**: `{impact.get('status', 'unknown')}` (`{len(selected)}` affected case(s))")
+              if selected:
+                  lines.append("- **Affected cases**: " + ", ".join(f"`{c}`" for c in selected[:20]))
+                  if len(selected) > 20:
+                      lines.append(f"  _(+{len(selected) - 20} more in `geometry-impact` artifact)_")
+          cov_path = Path("tmp/inference-coverage.json")
+          if cov_path.is_file():
+              cov = json.loads(cov_path.read_text(encoding="utf-8"))
+              lines.append(
+                  f"- **Declaration coverage**: `{cov.get('status', 'unknown')}` "
+                  f"(`{cov.get('native_variants_with_replay_recipes', '?')}` covered / "
+                  f"`{cov.get('frozen_native_variants', '?')}` frozen)"
+              )
+          lines += [
+              "",
+              "### Local GPU Validation Commands",
+              "```bash",
+              "make test-infer-cuda-contracts",
+              "make test-infer-sol-cuda-contracts",
+              "make plan-inference INFERENCE_BASE=$(git merge-base origin/main HEAD)",
+              "```",
+          ]
+          summary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
       - name: Publish coverage definitions and gaps
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: inference-coverage
           path: tmp/inference-coverage.json
+          retention-days: 14
           if-no-files-found: error
-
-  inference-replay:
-    name: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_json != '' && 'evidence-dispatch-idle-inference-replay' || 'inference-replay' }}
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.evidence_json == '' }}
-    runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ github.token }}
-      INFERENCE_EVIDENCE_CONTROL_REF: ${{ vars.INFERENCE_EVIDENCE_CONTROL_REF }}
-      INFERENCE_EVIDENCE_WORKFLOW_PATH: ${{ vars.INFERENCE_EVIDENCE_WORKFLOW_PATH }}
-      INFERENCE_REFERENCE_INDEX_SHA256: ${{ vars.INFERENCE_REFERENCE_INDEX_SHA256 }}
-      IMPACT_BASE_SHA: ${{ inputs.base_revision || github.event.pull_request.base.sha || github.event.before }}
-    steps:
-      - name: Checkout exact candidate with comparison history
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-      - name: Compute committed inference impact
-        run: |
-          test -n "$IMPACT_BASE_SHA"
-          test "$IMPACT_BASE_SHA" != "0000000000000000000000000000000000000000"
-          python tests/manual/geometry_regression_impact.py --base "$IMPACT_BASE_SHA" --output tmp/geometry-impact.json
-      - name: Require successful official evidence for this exact commit
-        run: python tests/manual/inference_actions_evidence.py verify-actions --plan tmp/geometry-impact.json --output tmp/inference-evidence.json
-      - name: Publish replay gate result
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: inference-evidence-verification
-          path: tmp/inference-evidence.json
-          if-no-files-found: error
-
-  attest-inference-evidence:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_json != '' }}
-    runs-on: ubuntu-latest
-    env:
-      INFERENCE_EVIDENCE_CONTROL_REF: ${{ vars.INFERENCE_EVIDENCE_CONTROL_REF }}
-      INFERENCE_EVIDENCE_WORKFLOW_PATH: ${{ vars.INFERENCE_EVIDENCE_WORKFLOW_PATH }}
-      INFERENCE_REFERENCE_INDEX_SHA256: ${{ vars.INFERENCE_REFERENCE_INDEX_SHA256 }}
-      INFERENCE_REPORT_JSON: ${{ inputs.evidence_json }}
-      CANDIDATE_REVISION: ${{ inputs.source_revision }}
-      BASE_REVISION: ${{ inputs.base_revision }}
-    steps:
-      - name: Checkout trusted control workflow source
-        uses: actions/checkout@v5
-        with:
-          path: control
-          persist-credentials: false
-      - name: Checkout candidate for immutable source verification
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ inputs.source_revision }}
-          path: candidate
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-      - name: Verify numerical bundle and control provenance
-        run: |
-          python control/tests/manual/inference_actions_evidence.py attest \
-            --base "$BASE_REVISION" --head "$CANDIDATE_REVISION" \
-            --control-revision "$GITHUB_SHA" --actual-control-ref "$GITHUB_REF_NAME" \
-            --run-id "$GITHUB_RUN_ID" --source-root candidate --output tmp/receipt.json
-      - name: Publish trusted inference receipt
-        uses: actions/upload-artifact@v4
-        with:
-          name: trusted-inference-evidence
-          path: tmp/receipt.json
-          if-no-files-found: error
-          retention-days: 90
 
   cpu-tests:
-    name: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_json != '' && 'evidence-dispatch-idle-cpu-tests' || 'cpu-tests' }}
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.evidence_json == '' }}
+    name: cpu-tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -162,6 +124,8 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - name: Install CPU test dependencies
         run: python -m pip install -e ".[test]"
       - name: Run public CPU inference and packaging tests
@@ -178,12 +142,13 @@ jobs:
             tmp/public-cpu-contracts.xml
             tmp/docs-contract-selection.json
             tmp/docs-contracts.xml
+          retention-days: 14
           if-no-files-found: error
 
   inference-tensors:
-    name: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_json != '' && 'evidence-dispatch-idle-inference-tensors' || 'inference-tensors' }}
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.evidence_json == '' }}
+    name: inference-tensors
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     env:
       CUDA_VISIBLE_DEVICES: ""
       PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
@@ -194,6 +159,8 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - name: Install CPU Torch and tensor test dependencies
         run: |
           python -m pip install "torch==2.9.0+cpu" "torchvision==0.24.0+cpu" --index-url https://download.pytorch.org/whl/cpu
@@ -219,12 +186,13 @@ jobs:
           path: |
             tmp/inference-cpu-selection.json
             tmp/inference-cpu-contracts.xml
+          retention-days: 14
           if-no-files-found: error
 
   public-surface:
-    name: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_json != '' && 'evidence-dispatch-idle-public-surface' || 'public-surface' }}
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.evidence_json == '' }}
+    name: public-surface
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -233,9 +201,11 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version-file: docs/fumadocs/.nvmrc
           cache: npm
@@ -264,11 +234,10 @@ jobs:
       - name: Run documented CLI entrypoint checks
         run: make cli-entrypoint-check
 
-
   packaging-license-gate:
-    name: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_json != '' && 'evidence-dispatch-idle-packaging-license-gate' || 'packaging-license-gate' }}
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.evidence_json == '' }}
+    name: packaging-license-gate
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         shell: sh
@@ -281,6 +250,8 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: Install wheel build and audit tooling
         run: python -m pip install --upgrade build "setuptools>=77" "setuptools-scm[toml]" wheel

@@ -294,6 +294,22 @@
       "worldfoundry/runtime/inference_specs/h3_world.py",
       "worldfoundry/base_models/diffusion_model/models/networks/minimax_h3/variants/h3_world.py"
     ],
+    "h3-tiny": [
+      "worldfoundry/pipelines/h3_tiny/**",
+      "worldfoundry/operators/h3_tiny_operator.py",
+      "worldfoundry/runtime/inference_specs/h3_tiny.py",
+      "worldfoundry/base_models/diffusion_model/models/denoisers/h3_tiny.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/minimax_h3/variants/h3_tiny/**",
+      "worldfoundry/base_models/diffusion_model/schedulers/h3_tiny.py"
+    ],
+    "pi-h3": [
+      "worldfoundry/pipelines/pi_h3/**",
+      "worldfoundry/operators/pi_h3_operator.py",
+      "worldfoundry/runtime/inference_specs/pi_h3.py",
+      "worldfoundry/base_models/diffusion_model/models/denoisers/pi_h3.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/minimax_h3/variants/pi_h3/**",
+      "worldfoundry/base_models/diffusion_model/schedulers/pi_h3.py"
+    ],
     "self-forcing": [
       "worldfoundry/pipelines/forcing/__init__.py",
       "worldfoundry/pipelines/forcing/pipeline_native_forcing.py",
@@ -957,6 +973,8 @@
     "pika-h3-flex-t2va-short": ["pika-h3-flex"],
     "pi4-kart-tracking-short": ["pi4"],
     "h3-world-forward-checkpoint-replay": ["h3-world"],
+    "h3-tiny-pruned-fl2va-t2va-short": ["h3-tiny", "native-minimax-h3"],
+    "pi-h3-4step-dwd-t2va-short": ["pi-h3", "native-minimax-h3"],
     "inspatio-world-1p5-image-short": [
       "inspatio-world-1p5"
     ],

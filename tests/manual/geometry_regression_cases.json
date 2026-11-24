@@ -14685,5 +14685,119 @@
       }
     },
     "scope": "H3-World released LoRA over MiniMax-H3 FL2VA on the upstream held-out first frame with the forward preset, comparing generated video and stereo soundtrack. The declared component placement uses two CUDA devices."
+  },
+  "h3-tiny-pruned-fl2va-t2va-short": {
+    "id": "h3-tiny-pruned-fl2va-t2va-short",
+    "model_id": "h3-tiny",
+    "target": "worldfoundry.pipelines.h3_tiny.pipeline_h3_tiny:H3TinyPipeline",
+    "requires_gpu": true,
+    "deterministic": true,
+    "seed": 42,
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/MiniMaxAI--MiniMax-H3",
+      "weights": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/H3-Tiny--MiniMax-H3-Tiny-17B-Pruned-FL2VA"
+    },
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/MiniMaxAI--MiniMax-H3",
+      "weights_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/H3-Tiny--MiniMax-H3-Tiny-17B-Pruned-FL2VA",
+      "variant": "17b-pruned-fl2va",
+      "workflow": "t2va",
+      "device": "cuda"
+    },
+    "call": {
+      "prompt": "A red kite drifts over a windy beach while waves roll onto the sand.",
+      "short_edge": 480,
+      "aspect_ratio": "16:9",
+      "num_frames": 124,
+      "num_inference_steps": 50,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/video.mp4",
+      "return_dict": true
+    },
+    "result_outputs": [
+      "video",
+      "audio"
+    ],
+    "export_artifacts": [
+      "video.mp4"
+    ],
+    "output_arrays": [
+      "video.mp4"
+    ],
+    "required_outputs": [
+      "result.video",
+      "result.audio",
+      "artifact.video.mp4.frames",
+      "artifact.video.mp4.fps"
+    ],
+    "array_contracts": {
+      "artifact.video.mp4.frames": {
+        "dtype": "uint8"
+      },
+      "artifact.video.mp4.fps": {
+        "values": [
+          24,
+          1
+        ]
+      }
+    },
+    "scope": "H3-Tiny 17B pruned FL2VA checkpoint over shared MiniMax-H3 base weights on a 480p five-second text-to-video+audio prompt."
+  },
+  "pi-h3-4step-dwd-t2va-short": {
+    "id": "pi-h3-4step-dwd-t2va-short",
+    "model_id": "pi-h3",
+    "target": "worldfoundry.pipelines.pi_h3.pipeline_pi_h3:PiH3Pipeline",
+    "requires_gpu": true,
+    "deterministic": true,
+    "seed": 42,
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/multimodalart--MiniMax-H3-Pruned",
+      "adapter": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lakonik--pi-H3/pi_h3_4step_dwd_adapter"
+    },
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/multimodalart--MiniMax-H3-Pruned",
+      "adapter_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lakonik--pi-H3/pi_h3_4step_dwd_adapter",
+      "variant": "4step-dwd",
+      "device": "cuda"
+    },
+    "call": {
+      "prompt": "A red kite drifts over a windy beach while waves roll onto the sand.",
+      "task": "t2va",
+      "short_edge": 480,
+      "aspect_ratio": "16:9",
+      "num_frames": 124,
+      "num_inference_steps": 4,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/video.mp4",
+      "return_dict": true
+    },
+    "result_outputs": [
+      "video",
+      "audio"
+    ],
+    "export_artifacts": [
+      "video.mp4"
+    ],
+    "output_arrays": [
+      "video.mp4"
+    ],
+    "required_outputs": [
+      "result.video",
+      "result.audio",
+      "artifact.video.mp4.frames",
+      "artifact.video.mp4.fps"
+    ],
+    "array_contracts": {
+      "artifact.video.mp4.frames": {
+        "dtype": "uint8"
+      },
+      "artifact.video.mp4.fps": {
+        "values": [
+          24,
+          1
+        ]
+      }
+    },
+    "scope": "pi-H3 4-step DWD adapter over pruned MiniMax-H3 weights on a 480p five-second text-to-video+audio prompt."
   }
 }

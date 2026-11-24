@@ -105,12 +105,15 @@ merge with a descriptive PR title and retain contributor DCO trailers in the
 squash commit. Resolve review conversations before merging.
 
 Repository administrators configure `main` rulesets to require pull requests,
-code-owner approval, resolved conversations, and the `DCO`, `Python quality`,
-`public-surface`, `cpu-tests`, `inference-tensors`, `geometry-impact`,
-`inference-replay`, and `packaging-license-gate` checks. Documentation changes
-also need the applicable `docs-build` result. Hosted CPU checks are fast
-weight-free validation; inference changes additionally require the existing
-trusted GPU evidence gates.
+code-owner approval, resolved conversations, and the weight-free public CI checks
+(`DCO`, `Python quality`, `public-surface`, `cpu-tests`, `inference-tensors`,
+and `packaging-license-gate`, plus `docs-build` for documentation changes).
+`geometry-impact` publishes PR replay impact plans and advisory coverage reports.
+Trusted GPU evidence (`Inference Evidence` / `inference-replay`) and
+`GPU Contracts` (`.github/workflows/gpu-contracts.yml`) are opt-in maintainer
+workflows enabled when repository GPU variables or self-hosted GPU runners are
+configured; inference changes still require local CUDA/checkpoint verification
+before merge.
 
 ## Change Checklists
 

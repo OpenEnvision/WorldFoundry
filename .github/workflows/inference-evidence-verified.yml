@@ -2,7 +2,7 @@ name: Verify trusted inference evidence
 
 on:
   workflow_run:
-    workflows: [CI]
+    workflows: [Inference Evidence]
     types: [completed]
 
 permissions:
@@ -12,14 +12,15 @@ permissions:
 
 jobs:
   verify:
-    if: github.event.workflow_run.event == 'workflow_dispatch' && github.event.workflow_run.conclusion == 'success'
+    if: github.event.workflow_run.event == 'workflow_dispatch' && github.event.workflow_run.conclusion == 'success' && vars.INFERENCE_EVIDENCE_CONTROL_REF != '' && vars.INFERENCE_REFERENCE_INDEX_SHA256 != ''
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       GITHUB_TOKEN: ${{ github.token }}
       EVIDENCE_RUN_ID: ${{ github.event.workflow_run.id }}
       INFERENCE_EVIDENCE_CONTROL_REF: ${{ vars.INFERENCE_EVIDENCE_CONTROL_REF }}
       INFERENCE_REFERENCE_INDEX_SHA256: ${{ vars.INFERENCE_REFERENCE_INDEX_SHA256 }}
-      INFERENCE_EVIDENCE_WORKFLOW_PATH: ${{ vars.INFERENCE_EVIDENCE_WORKFLOW_PATH }}
+      INFERENCE_EVIDENCE_WORKFLOW_PATH: ${{ vars.INFERENCE_EVIDENCE_WORKFLOW_PATH || '.github/workflows/inference-evidence.yml' }}
     steps:
       - name: Checkout trusted controller
         uses: actions/checkout@v5
@@ -64,4 +65,5 @@ jobs:
         with:
           name: inference-evidence-verification
           path: tmp/inference-evidence.json
+          retention-days: 14
           if-no-files-found: error
