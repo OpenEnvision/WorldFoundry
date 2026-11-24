@@ -125,3 +125,133 @@ def test_modality_clone_keeps_keyframe_storage_independent() -> None:
     assert cloned.keyframes_mask is not None and state.keyframes_mask is not None
     cloned.keyframes_mask.zero_()
     assert torch.count_nonzero(state.keyframes_mask) == 2
+
+
+@pytest.mark.parametrize(
+    ("offload_mode", "expected_offload"),
+    [("component", True), ("none", False)],
+)
+def test_split_gemma_falls_back_to_native_gemma4_unified_when_transformers_lacks_it(
+    monkeypatch,
+    tmp_path: Path,
+    offload_mode: str,
+    expected_offload: bool,
+) -> None:
+    import builtins
+    import types
+
+    from worldfoundry.base_models.diffusion_model.loaders import CheckpointSpec, MaterializedCheckpoint
+    from worldfoundry.base_models.diffusion_model.models.encoders.ltx import component as encoder_component
+    from worldfoundry.base_models.diffusion_model.models.encoders.ltx import gemma as gemma_mod
+    from worldfoundry.base_models.diffusion_model.models.encoders.ltx import gemma4_unified
+    from worldfoundry.base_models.diffusion_model.optimizations import OffloadMode, OffloadPolicy, RuntimePolicy
+
+    ckpt_file = tmp_path / "gemma4.safetensors"
+    ckpt_file.write_bytes(b"")
+    fake_assets = types.SimpleNamespace(config_dict={"model_type": "gemma4_unified"})
+    sentinel_wrapper = torch.nn.Linear(2, 2)
+    seen_calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        encoder_component.NativeCheckpointResolver,
+        "materialize",
+        lambda self, spec: MaterializedCheckpoint(root=tmp_path, paths=(ckpt_file,)),
+    )
+    monkeypatch.setattr(gemma_mod.GemmaAssets, "load", classmethod(lambda cls, src: fake_assets))
+
+    def fake_load_native(path: Path, *, device, dtype, offload_to_cpu: bool = False):
+        seen_calls.append({"path": path, "device": device, "dtype": dtype, "offload_to_cpu": offload_to_cpu})
+        return sentinel_wrapper, fake_assets
+
+    monkeypatch.setattr(gemma4_unified, "load_native_gemma4_unified_encoder", fake_load_native)
+
+    real_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name.startswith("transformers.models.gemma4_unified"):
+            raise ModuleNotFoundError("No module named 'transformers.models.gemma4_unified'", name=name)
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    policy = RuntimePolicy(
+        device="cpu",
+        dtype=torch.float32,
+        offload=OffloadPolicy(mode=OffloadMode(offload_mode)),
+    )
+    module, assets = encoder_component._load_split_gemma(CheckpointSpec(source=str(ckpt_file)), policy)
+    assert module is sentinel_wrapper
+    assert assets is fake_assets
+    assert seen_calls == [
+        {
+            "path": ckpt_file,
+            "device": torch.device("cpu"),
+            "dtype": torch.float32,
+            "offload_to_cpu": expected_offload,
+        }
+    ]
+
+
+def test_native_gemma4_unified_wrapper_cpu_offload_returns_backbone_to_cpu(monkeypatch) -> None:
+    from worldfoundry.base_models.diffusion_model.models.encoders.ltx.gemma4_unified import (
+        NativeGemma4UnifiedEncoderWrapper,
+        NativeGemma4UnifiedTextBackbone,
+    )
+
+    text_cfg = {
+        "hidden_size": 16,
+        "intermediate_size": 32,
+        "vocab_size": 64,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 1,
+        "num_global_key_value_heads": 1,
+        "head_dim": 8,
+        "global_head_dim": 8,
+        "attention_k_eq_v": True,
+        "sliding_window": 4,
+        "layer_types": ["sliding_attention", "full_attention"],
+    }
+    backbone = NativeGemma4UnifiedTextBackbone(text_cfg).eval()
+
+    class _FakeTok:
+        def tokenize_with_weights(self, text: str) -> dict[str, list[tuple[int, int]]]:
+            del text
+            return {"gemma": [(1, 1), (2, 1), (3, 1)]}
+
+    target_dev = torch.device("meta")
+    moves: list[str] = []
+    real_to = backbone.to
+
+    def tracked_to(*args, **kwargs):
+        dev = args[0] if args else kwargs.get("device")
+        if dev is not None:
+            moves.append(str(dev))
+        if str(dev) == "meta":
+            return backbone
+        return real_to(*args, **kwargs)
+
+    monkeypatch.setattr(backbone, "to", tracked_to)
+    wrapper = NativeGemma4UnifiedEncoderWrapper(
+        backbone,
+        _FakeTok(),
+        execution_device=torch.device("cpu"),
+        offload_to_cpu=True,
+    )
+    assert wrapper.execution_device == torch.device("cpu")
+
+    # Exercise offloading branch cleanly without requiring CUDA by using a dummy non-cpu execution device marker.
+    wrapper._execution_device = target_dev
+    assert wrapper.execution_device == target_dev
+    monkeypatch.setattr(
+        torch,
+        "tensor",
+        lambda data, device=None, dtype=None: torch.as_tensor(data, dtype=dtype),
+    )
+    encoded = wrapper.encode(["hello"])
+    assert len(encoded) == 1
+    hidden_tuple, mask = encoded[0]
+    assert len(hidden_tuple) == 3
+    assert all(h.shape == (1, 3, 16) for h in hidden_tuple)
+    assert mask.shape == (1, 3)
+    assert moves == ["meta", "cpu"]
+    assert next(backbone.parameters()).device.type == "cpu"

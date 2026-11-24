@@ -27,7 +27,7 @@ from ....loaders import (
     NativeModuleLoader,
     safetensors_json_metadata,
 )
-from ....optimizations import OffloadPolicy, QuantizationPolicy, RuntimePolicy
+from ....optimizations import OffloadMode, OffloadPolicy, QuantizationPolicy, RuntimePolicy
 from .embeddings_connector import (
     AudioEmbeddings1DConnectorConfigurator,
     Embeddings1DConnector,
@@ -450,7 +450,7 @@ def _convert_split_gemma_state_dict(
     return TransformedStateDict(converted, {f"encoder.{key}": key for key in converted})
 
 
-def _load_split_gemma(checkpoint: CheckpointSpec, policy: RuntimePolicy) -> tuple[LTXSplitGemmaModule, object]:
+def _load_split_gemma(checkpoint: CheckpointSpec, policy: RuntimePolicy) -> tuple[torch.nn.Module, object]:
     from worldfoundry.core.vram import AutoWrappedModule, AutoWrappedNonRecurseModule
 
     from .gemma import GemmaAssets
@@ -461,10 +461,20 @@ def _load_split_gemma(checkpoint: CheckpointSpec, policy: RuntimePolicy) -> tupl
     module_map = _ltx_text_module_map()
     config_type = str(assets.config_dict["model_type"])
     if config_type == "gemma4_unified":
-        from transformers.models.gemma4_unified.modeling_gemma4_unified import (
-            Gemma4UnifiedRMSNorm,
-            Gemma4UnifiedVisionEmbedder,
-        )
+        try:
+            from transformers.models.gemma4_unified.modeling_gemma4_unified import (
+                Gemma4UnifiedRMSNorm,
+                Gemma4UnifiedVisionEmbedder,
+            )
+        except ModuleNotFoundError:
+            from .gemma4_unified import load_native_gemma4_unified_encoder
+
+            return load_native_gemma4_unified_encoder(
+                source,
+                device=policy.device,
+                dtype=policy.dtype,
+                offload_to_cpu=policy.offload.mode is not OffloadMode.NONE,
+            )
 
         module_map[Gemma4UnifiedRMSNorm] = AutoWrappedModule
         module_map[Gemma4UnifiedVisionEmbedder] = AutoWrappedNonRecurseModule
@@ -501,11 +511,11 @@ class LTXGemmaPromptConditioner:
 
     def __init__(
         self,
-        gemma: LTXSplitGemmaModule,
+        gemma: torch.nn.Module,
         processor: LTXEmbeddingProcessorModule,
         *,
         duration_head: torch.nn.Module | None = None,
-        enhancer: LTXSplitGemmaModule | None = None,
+        enhancer: torch.nn.Module | None = None,
         supports_generated_keyframes: bool = False,
     ) -> None:
         self.gemma = gemma
