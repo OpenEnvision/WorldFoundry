@@ -571,6 +571,11 @@ def _resolve_protected_tokens(
     return result_mask, count
 
 
+def _unwrap_velocity_model(model: Any) -> Any:
+    """Return the inner velocity model whether wrapped or passed directly."""
+    return getattr(model, "velocity_model", model)
+
+
 def _token_pruning_kwargs(
     velocity_model: LTXModel,
     denoise_mask: torch.Tensor,
@@ -1238,8 +1243,9 @@ class LTXJointDenoiser(_LTXFirstBlockCacheMixin, FeatureCacheDenoiserMixin, Grap
                     extra_kwargs.update(cache_kwargs)
         if getattr(self, "_piecewise_graph", None) is not None:
             extra_kwargs["_worldfoundry_piecewise_graph"] = self._piecewise_graph
+        velocity_model = _unwrap_velocity_model(self.model)
         sol_kwargs = _sol_schedule_kwargs(
-            self.model.velocity_model,
+            velocity_model,
             video_state.positions,
             int(model_input.step_index),
             self._video_grid_cache,
@@ -1247,7 +1253,7 @@ class LTXJointDenoiser(_LTXFirstBlockCacheMixin, FeatureCacheDenoiserMixin, Grap
         if sol_kwargs:
             extra_kwargs.update(sol_kwargs)
         tp_kwargs = _token_pruning_kwargs(
-            self.model.velocity_model,
+            velocity_model,
             video_state.denoise_mask,
             video_state.keyframes_mask,
             step_index=int(model_input.step_index),
@@ -1298,7 +1304,7 @@ class LTXJointDenoiser(_LTXFirstBlockCacheMixin, FeatureCacheDenoiserMixin, Grap
         accelerations = getattr(self.model, "_worldfoundry_ltx_accelerations", None)
         if accelerations is not None:
             report["accelerations"] = accelerations
-        tp_rt = getattr(self.model.velocity_model, "_worldfoundry_token_pruning_runtime", None)
+        tp_rt = getattr(_unwrap_velocity_model(self.model), "_worldfoundry_token_pruning_runtime", None)
         if isinstance(tp_rt, Mapping):
             report["token_pruning"] = {k: v for k, v in tp_rt.items() if not str(k).startswith("_")}
         return report
@@ -1412,8 +1418,9 @@ class LTXVideoDenoiser(_LTXFirstBlockCacheMixin, FeatureCacheDenoiserMixin, Grap
                     extra_kwargs.update(cache_kwargs)
         if getattr(self, "_piecewise_graph", None) is not None:
             extra_kwargs["_worldfoundry_piecewise_graph"] = self._piecewise_graph
+        velocity_model = _unwrap_velocity_model(self.model)
         sol_kwargs = _sol_schedule_kwargs(
-            self.model.velocity_model,
+            velocity_model,
             state.positions,
             int(model_input.step_index),
             self._video_grid_cache,
@@ -1421,7 +1428,7 @@ class LTXVideoDenoiser(_LTXFirstBlockCacheMixin, FeatureCacheDenoiserMixin, Grap
         if sol_kwargs:
             extra_kwargs.update(sol_kwargs)
         tp_kwargs = _token_pruning_kwargs(
-            self.model.velocity_model,
+            velocity_model,
             state.denoise_mask,
             state.keyframes_mask,
             step_index=int(model_input.step_index),
@@ -1467,7 +1474,7 @@ class LTXVideoDenoiser(_LTXFirstBlockCacheMixin, FeatureCacheDenoiserMixin, Grap
         accelerations = getattr(self.model, "_worldfoundry_ltx_accelerations", None)
         if accelerations is not None:
             report["accelerations"] = accelerations
-        tp_rt = getattr(self.model.velocity_model, "_worldfoundry_token_pruning_runtime", None)
+        tp_rt = getattr(_unwrap_velocity_model(self.model), "_worldfoundry_token_pruning_runtime", None)
         if isinstance(tp_rt, Mapping):
             report["token_pruning"] = {k: v for k, v in tp_rt.items() if not str(k).startswith("_")}
         return report

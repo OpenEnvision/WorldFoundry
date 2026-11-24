@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 
@@ -28,7 +29,7 @@ def test_lingbot_map_catalog_aliases_are_registered():
 
 
 def test_lingbot_map_pipeline_records_and_saves_result(tmp_path: Path):
-    pipe = LingBotMapPipeline(representation_model=_FakeLingBotMapRepresentation(), device="cpu")
+    pipe = LingBotMapPipeline(representation_model=cast(Any, _FakeLingBotMapRepresentation()), device="cpu")
 
     result = pipe(
         images=[np.zeros((4, 4, 3), dtype=np.uint8)] * 2,
@@ -37,6 +38,9 @@ def test_lingbot_map_pipeline_records_and_saves_result(tmp_path: Path):
         return_dict=True,
     )
 
-    assert result["artifact_path"] == str(tmp_path / "out.npz")
+    assert result["artifact_path"] == str(tmp_path / "lingbot_map_point_cloud.ply")
+    assert result["point_cloud_path"] == str(tmp_path / "lingbot_map_point_cloud.ply")
+    assert str(tmp_path / "out.npz") in result["saved_files"]
     assert Path(result["artifact_path"]).is_file()
+    assert (tmp_path / "out.npz").is_file()
     assert pipe.memory_module.select(prefer_type="lingbot_map_result") is not None

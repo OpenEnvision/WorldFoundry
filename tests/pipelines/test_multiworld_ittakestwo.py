@@ -175,7 +175,8 @@ def test_model_registry_contains_multiworld_ittakestwo() -> None:
 
     assert model.family == "video_generation"
     assert model.has_loader is True
-    assert model.has_infer is False
+    assert model.has_infer is True
+    assert model.runner_target == "worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner"
 
 
 def test_multiworld_synthesis_uses_native_runtime(monkeypatch, tmp_path: Path) -> None:
