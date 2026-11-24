@@ -52,6 +52,8 @@ def main() -> int:
     device = torch.device(f"cuda:{local_rank}" if degree > 1 else args.device)
     if device.type != "cuda" or not torch.cuda.is_available():
         parser.error("HyperFlow inference requires CUDA.")
+    if device.index is None:
+        device = torch.device("cuda", torch.cuda.current_device())
     backend = resolve_attention_backend(args.attention_backend, gpus=degree)
     torch.cuda.set_device(device)
     logging.basicConfig(level=logging.INFO if rank == 0 else logging.WARNING)

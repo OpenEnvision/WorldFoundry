@@ -433,3 +433,48 @@ def test_local_mux_retains_video_frames_and_stereo_audio(tmp_path: Path) -> None
         assert len(list(container.decode(video=0))) == 3
         assert container.streams.audio[0].codec_context.sample_rate == 32000
         assert container.streams.audio[0].codec_context.layout.name == "stereo"
+
+
+def test_generate_main_normalizes_unindexed_cuda_device(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from worldfoundry.synthesis.visual_generation.hyperflow import generate
+
+    set_devices: list[torch.device] = []
+    infer_devices: list[torch.device] = []
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "current_device", lambda: 0)
+    monkeypatch.setattr(torch.cuda, "set_device", lambda dev: set_devices.append(torch.device(dev)))
+    monkeypatch.setattr(media_module, "prepare_media", lambda **kwargs: "prepared")
+    monkeypatch.setattr(
+        implementation,
+        "run_inference",
+        lambda *args, **kwargs: (infer_devices.append(kwargs["device"]) or ("v", "a")),
+    )
+    monkeypatch.setattr(media_module, "write_video_audio", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.variants.hyperflow.attention.resolve_attention_backend",
+        lambda backend, gpus=1: backend,
+    )
+    monkeypatch.setenv("WORLD_SIZE", "1")
+    monkeypatch.setenv("RANK", "0")
+    monkeypatch.setenv("LOCAL_RANK", "0")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "generate",
+            "--model",
+            str(tmp_path / "model"),
+            "--weights",
+            str(tmp_path / "weights.safetensors"),
+            "--prompt",
+            "A fox",
+            "--output",
+            str(tmp_path / "out.mp4"),
+            "--device",
+            "cuda",
+        ],
+    )
+
+    assert generate.main() == 0
+    assert set_devices == [torch.device("cuda", 0)]
+    assert infer_devices == [torch.device("cuda", 0)]
