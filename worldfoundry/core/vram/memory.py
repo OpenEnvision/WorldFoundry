@@ -17,7 +17,7 @@ the module on GPU until the next explicit unload.
 from __future__ import annotations
 
 import logging
-from typing import cast
+from typing import Any, cast
 
 import torch
 
@@ -175,8 +175,8 @@ def get_cuda_free_memory_gb(device=None) -> float:
         device = _default_gpu_device()
 
     memory_stats = torch.cuda.memory_stats(device)
-    bytes_active = memory_stats["active_bytes.all.current"]
-    bytes_reserved = memory_stats["reserved_bytes.all.current"]
+    bytes_active = memory_stats.get("active_bytes.all.current", 0)
+    bytes_reserved = memory_stats.get("reserved_bytes.all.current", 0)
     bytes_free_cuda, _ = torch.cuda.mem_get_info(device)
     bytes_inactive_reserved = bytes_reserved - bytes_active
     bytes_total_available = bytes_free_cuda + bytes_inactive_reserved
@@ -425,7 +425,8 @@ def activation_budget_bytes(device: torch.device) -> int:
         index = device.index if device.index is not None else torch.cuda.current_device()
         free, _ = torch.cuda.mem_get_info(index)
         total = torch.cuda.get_device_properties(index).total_memory
-        fraction = torch.cuda.get_per_process_memory_fraction(index)  # ty: ignore[unresolved-attribute] - LTX runtime Torch supports this API; host 2.5 stubs do not.
+        # Older Torch stubs omit the API supplied by the LTX CUDA runtime.
+        fraction = cast(Any, torch.cuda).get_per_process_memory_fraction(index)
         available = max(0, int(fraction * total) - int(torch.cuda.memory_reserved(index)))
         return min(int(free), available)
     if device.type == "mps" and torch.backends.mps.is_available():
