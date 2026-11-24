@@ -13,6 +13,7 @@ frame).  :class:`FinalLayer` unpatchifies back to ``B C T H W``.
 """
 
 from functools import partial
+from typing import Any
 
 import torch
 from einops import rearrange, repeat
@@ -23,6 +24,10 @@ from worldfoundry.core.attention import (
     get_cu_seqlens,
     get_nd_rotary_pos_embed,
     scaled_dot_product_attention,
+)
+from worldfoundry.core.kernels.diffusion import (
+    fused_layer_norm_scale_shift,
+    residual_gate_add,
 )
 from worldfoundry.core.nn import (
     DiTModulation,
@@ -148,6 +153,8 @@ class MMDoubleStreamBlockComponent(torch.nn.Module):
             torch.nn.GELU(approximate="tanh"),
             torch.nn.Linear(hidden_size * mlp_width_ratio, hidden_size),
         )
+        self._fused_ops: bool = False
+        self._fuse_fp8_ffn: bool = False
 
     def forward(self, hidden_states, conditioning, freqs_cis=None, token_replace_vec=None, tr_token=None):
         """Return ``((q,k,v), attn/ff gates, token-replace gates)`` for joint attention."""
@@ -211,6 +218,59 @@ class MMDoubleStreamBlockComponent(torch.nn.Module):
         hidden_states = hidden_states + apply_gate(x, mod2_gate, tr_mod2_gate, tr_token)
         return hidden_states
 
+    def _project_qkv_accelerated(self, hidden_states, conditioning, *, runtime: Any):
+        """Fused AdaLN (+ optional rowwise FP8 quant) and QKV projection for SOL-Engine path."""
+        from .original_acceleration import run_adaln_linear
+
+        mod1_shift, mod1_scale, mod1_gate, mod2_shift, mod2_scale, mod2_gate = self.mod(conditioning).chunk(6, dim=-1)
+        if self._fused_ops and not self.training and not torch.is_grad_enabled():
+            qkv = run_adaln_linear(
+                hidden_states,
+                mod1_scale,
+                mod1_shift,
+                self.to_qkv,
+                eps=float(self.norm1.eps),
+                runtime=runtime,
+            )
+        else:
+            norm_hidden_states = modulate(self.norm1(hidden_states), shift=mod1_shift, scale=mod1_scale)
+            qkv = self.to_qkv(norm_hidden_states)
+        return qkv, (mod1_gate, mod2_shift, mod2_scale, mod2_gate)
+
+    def _process_ff_accelerated(self, hidden_states, attn_output, mod, *, runtime: Any):
+        """Fused attention residual + AdaLN + optional FP8 GELU-tanh FFN + residual gate."""
+        from .original_acceleration import (
+            fused_hunyuan_residual_gate_layernorm_scale_shift,
+            run_fused_fp8_gelu_down_proj,
+        )
+
+        mod1_gate, mod2_shift, mod2_scale, mod2_gate = mod
+        attn_proj = self.to_out(attn_output)
+        if self._fused_ops and not self.training and not torch.is_grad_enabled():
+            hidden_states, norm2_mod = fused_hunyuan_residual_gate_layernorm_scale_shift(
+                hidden_states,
+                attn_proj,
+                mod1_gate,
+                mod2_scale,
+                mod2_shift,
+                eps=float(self.norm2.eps),
+            )
+            if runtime is not None and not torch.compiler.is_compiling():
+                runtime.adaln_calls += 1
+            if self._fuse_fp8_ffn:
+                ff_out = run_fused_fp8_gelu_down_proj(self.ff[0](norm2_mod), self.ff[2], runtime=runtime)
+            else:
+                ff_out = self.ff(norm2_mod)
+            return residual_gate_add(hidden_states, ff_out, mod2_gate.unsqueeze(1))
+
+        hidden_states = hidden_states + apply_gate(attn_proj, mod1_gate)
+        norm2_mod = modulate(self.norm2(hidden_states), shift=mod2_shift, scale=mod2_scale)
+        if self._fuse_fp8_ffn:
+            ff_out = run_fused_fp8_gelu_down_proj(self.ff[0](norm2_mod), self.ff[2], runtime=runtime)
+        else:
+            ff_out = self.ff(norm2_mod)
+        return hidden_states + apply_gate(ff_out, mod2_gate)
+
 
 class MMDoubleStreamBlock(torch.nn.Module):
     """Dual-stream MM-DiT block: separate AdaLN/QKV, joint attention, separate FFN."""
@@ -220,6 +280,7 @@ class MMDoubleStreamBlock(torch.nn.Module):
         self.component_a = MMDoubleStreamBlockComponent(hidden_size, heads_num, mlp_width_ratio)
         self.component_b = MMDoubleStreamBlockComponent(hidden_size, heads_num, mlp_width_ratio)
         self.attention_backend: str | None = "torch"
+        self._fused_ops: bool = False
 
     def set_attention_backend(self, backend: str | None) -> None:
         """Bind the request-scoped attention backend for joint MM-DiT attention."""
@@ -274,6 +335,172 @@ class MMDoubleStreamBlock(torch.nn.Module):
 
         hidden_states_a = self.component_a.process_ff(hidden_states_a, attn_output_a, mod_a, mod_tr, tr_token)
         hidden_states_b = self.component_b.process_ff(hidden_states_b, attn_output_b, mod_b)
+        return hidden_states_a, hidden_states_b
+
+    def _forward_accelerated(
+        self,
+        hidden_states_a,
+        hidden_states_b,
+        conditioning,
+        freqs_cis,
+        *,
+        runtime: Any,
+        unmasked: bool,
+        use_sol_attn: bool,
+        sink_tokens: int,
+        sink_start: int | None,
+        sp_enabled: bool,
+        sp_group: Any,
+        sp_size: int,
+        sp_rank: int,
+        cu_seqlens=None,
+        max_seqlen: int | None = None,
+    ):
+        """SOL-Engine accelerated joint attention + fused AdaLN/FP8 FFN path."""
+        from .original_acceleration import (
+            fused_hunyuan_double_qkv_rmsnorm_rope,
+            fused_hunyuan_qkv_rmsnorm_rope,
+            run_maskless_joint_attention,
+            run_sp_maskless_joint_attention,
+        )
+
+        qkv_a, mod_a = self.component_a._project_qkv_accelerated(hidden_states_a, conditioning, runtime=runtime)
+        qkv_b, mod_b = self.component_b._project_qkv_accelerated(hidden_states_b, conditioning, runtime=runtime)
+        image_length = int(qkv_a.shape[1])
+        heads = self.component_a.heads_num
+        qw_a = self.component_a.norm_q.weight
+        kw_a = self.component_a.norm_k.weight
+        qw_b = self.component_b.norm_q.weight
+        kw_b = self.component_b.norm_k.weight
+        can_fuse_qkv = (
+            self._fused_ops
+            and not self.training
+            and not torch.is_grad_enabled()
+            and qw_a is not None
+            and kw_a is not None
+            and qw_b is not None
+            and kw_b is not None
+        )
+
+        if sp_enabled:
+            if can_fuse_qkv:
+                assert qw_a is not None and kw_a is not None and qw_b is not None and kw_b is not None
+                q_a, k_a, v_a = fused_hunyuan_qkv_rmsnorm_rope(
+                    qkv_a,
+                    qw_a,
+                    kw_a,
+                    freqs_cis,
+                    num_heads=heads,
+                    rope_len=image_length,
+                    eps=float(self.component_a.norm_q.eps),
+                )
+                q_b, k_b, v_b = fused_hunyuan_qkv_rmsnorm_rope(
+                    qkv_b,
+                    qw_b,
+                    kw_b,
+                    None,
+                    num_heads=heads,
+                    rope_len=0,
+                    eps=float(self.component_b.norm_q.eps),
+                )
+                if runtime is not None and not torch.compiler.is_compiling():
+                    runtime.qkv_rmsnorm_rope_calls += 2
+            else:
+                q_a, k_a, v_a = rearrange(qkv_a, "B L (K H D) -> K B L H D", K=3, H=heads)
+                q_a = self.component_a.norm_q(q_a)
+                k_a = self.component_a.norm_k(k_a)
+                if freqs_cis is not None:
+                    q_a, k_a = apply_rotary_emb(q_a, k_a, freqs_cis, head_first=False)
+                q_b, k_b, v_b = rearrange(qkv_b, "B L (K H D) -> K B L H D", K=3, H=heads)
+                q_b = self.component_b.norm_q(q_b)
+                k_b = self.component_b.norm_k(k_b)
+
+            attn_a_4d, attn_b_4d = run_sp_maskless_joint_attention(
+                q_a,
+                k_a,
+                v_a,
+                q_b,
+                k_b,
+                v_b,
+                sp_group=sp_group,
+                sp_size=sp_size,
+                sp_rank=sp_rank,
+                use_sol_attn=use_sol_attn,
+                dense_backend=runtime.dense_backend,
+                sol_cfg=runtime.config.sol_attn,
+                sink_tokens=sink_tokens,
+                sink_start=sink_start,
+                runtime=runtime,
+            )
+            attn_output_a = attn_a_4d.reshape(attn_a_4d.shape[0], attn_a_4d.shape[1], -1)
+            attn_output_b = attn_b_4d.reshape(attn_b_4d.shape[0], attn_b_4d.shape[1], -1)
+        else:
+            if can_fuse_qkv:
+                assert qw_a is not None and kw_a is not None and qw_b is not None and kw_b is not None
+                q, k, v = fused_hunyuan_double_qkv_rmsnorm_rope(
+                    qkv_a,
+                    qkv_b,
+                    qw_a,
+                    kw_a,
+                    qw_b,
+                    kw_b,
+                    freqs_cis,
+                    num_heads=heads,
+                    eps=float(self.component_a.norm_q.eps),
+                )
+                if runtime is not None and not torch.compiler.is_compiling():
+                    runtime.qkv_rmsnorm_rope_calls += 1
+            else:
+                q_a, k_a, v_a = rearrange(qkv_a, "B L (K H D) -> K B L H D", K=3, H=heads)
+                q_a = self.component_a.norm_q(q_a)
+                k_a = self.component_a.norm_k(k_a)
+                if freqs_cis is not None:
+                    q_a, k_a = apply_rotary_emb(q_a, k_a, freqs_cis, head_first=False)
+                q_b, k_b, v_b = rearrange(qkv_b, "B L (K H D) -> K B L H D", K=3, H=heads)
+                q_b = self.component_b.norm_q(q_b)
+                k_b = self.component_b.norm_k(k_b)
+                q = torch.cat((q_a, q_b), dim=1)
+                k = torch.cat((k_a, k_b), dim=1)
+                v = torch.cat((v_a, v_b), dim=1)
+
+            if unmasked:
+                attn_4d = run_maskless_joint_attention(
+                    q,
+                    k,
+                    v,
+                    use_sol_attn=use_sol_attn,
+                    dense_backend=runtime.dense_backend,
+                    sol_cfg=runtime.config.sol_attn,
+                    sink_tokens=sink_tokens,
+                    sink_start=sink_start,
+                    runtime=runtime,
+                )
+                attn_output = attn_4d.reshape(attn_4d.shape[0], attn_4d.shape[1], -1)
+            else:
+                attn_output = flattened_attention(
+                    q,
+                    k,
+                    v,
+                    cu_seqlens_q=cu_seqlens,
+                    cu_seqlens_k=cu_seqlens,
+                    max_seqlen_q=max_seqlen,
+                    max_seqlen_k=max_seqlen,
+                    backend=runtime.dense_backend,
+                )
+                if runtime is not None and not torch.compiler.is_compiling():
+                    if runtime.dense_backend == "flash_attention_3":
+                        runtime.fa3_calls += 1
+                    else:
+                        runtime.torch_sdpa_calls += 1
+            attn_output_a = attn_output[:, :image_length]
+            attn_output_b = attn_output[:, image_length:]
+
+        hidden_states_a = self.component_a._process_ff_accelerated(
+            hidden_states_a, attn_output_a, mod_a, runtime=runtime
+        )
+        hidden_states_b = self.component_b._process_ff_accelerated(
+            hidden_states_b, attn_output_b, mod_b, runtime=runtime
+        )
         return hidden_states_a, hidden_states_b
 
 
@@ -340,7 +567,12 @@ class MMSingleStreamBlock(torch.nn.Module):
             torch.nn.GELU(approximate="tanh"),
             torch.nn.Linear(hidden_size * mlp_width_ratio, hidden_size, bias=False),
         )
+        self.linear1: torch.nn.Module | None = None
+        self._qkv_out_features: int = hidden_size * 3
+        self._mlp_hidden_dim: int = hidden_size * mlp_width_ratio
         self.attention_backend: str | None = "torch"
+        self._fused_ops: bool = False
+        self._fuse_fp8_ffn: bool = False
 
     def set_attention_backend(self, backend: str | None) -> None:
         """Bind the request-scoped attention backend for single-stream MM-DiT attention."""
@@ -376,7 +608,13 @@ class MMSingleStreamBlock(torch.nn.Module):
             prefix_scale=tr_mod_scale,
             prefix_length=tr_token,
         )
-        qkv = self.to_qkv(norm_hidden_states)
+        if self.linear1 is not None:
+            proj = self.linear1(norm_hidden_states)
+            qkv = proj[..., : self._qkv_out_features]
+            mlp_in = proj[..., self._qkv_out_features :]
+        else:
+            qkv = self.to_qkv(norm_hidden_states)
+            mlp_in = None
 
         q, k, v = rearrange(qkv, "B L (K H D) -> K B L H D", K=3, H=self.heads_num)
 
@@ -412,7 +650,162 @@ class MMSingleStreamBlock(torch.nn.Module):
             )
 
         hidden_states = hidden_states + apply_gate(self.to_out(attn_output), mod_gate, tr_mod_gate, tr_token)
-        hidden_states = hidden_states + apply_gate(self.ff(norm_hidden_states), mod_gate, tr_mod_gate, tr_token)
+        mlp_out = self.ff[2](self.ff[1](mlp_in)) if mlp_in is not None else self.ff(norm_hidden_states)
+        hidden_states = hidden_states + apply_gate(mlp_out, mod_gate, tr_mod_gate, tr_token)
+        return hidden_states
+
+    def _forward_accelerated(
+        self,
+        hidden_states,
+        conditioning,
+        freqs_cis=None,
+        *,
+        txt_len: int = 256,
+        runtime: Any,
+        unmasked: bool,
+        use_sol_attn: bool,
+        sink_tokens: int,
+        sink_start: int | None,
+        sp_enabled: bool,
+        sp_group: Any,
+        sp_size: int,
+        sp_rank: int,
+        cu_seqlens=None,
+        max_seqlen: int | None = None,
+    ):
+        """SOL-Engine accelerated single-stream block with fused linear1, Triton RoPE, and FP8 FFN."""
+        from .original_acceleration import (
+            fused_hunyuan_dual_residual_gate_add,
+            fused_hunyuan_qkv_rmsnorm_rope,
+            run_adaln_linear,
+            run_fused_fp8_gelu_down_proj,
+            run_maskless_joint_attention,
+            run_sp_maskless_joint_attention,
+        )
+
+        mod_shift, mod_scale, mod_gate = self.mod(conditioning).chunk(3, dim=-1)
+        img_len = int(hidden_states.shape[1]) - int(txt_len)
+        use_fused = self._fused_ops and not self.training and not torch.is_grad_enabled()
+
+        if self.linear1 is not None:
+            if use_fused:
+                proj = run_adaln_linear(
+                    hidden_states,
+                    mod_scale,
+                    mod_shift,
+                    self.linear1,
+                    eps=float(self.norm.eps),
+                    runtime=runtime,
+                )
+            else:
+                norm_hidden_states = modulate(self.norm(hidden_states), shift=mod_shift, scale=mod_scale)
+                proj = self.linear1(norm_hidden_states)
+            qkv = proj[..., : self._qkv_out_features]
+            mlp_in = proj[..., self._qkv_out_features :]
+        else:
+            if use_fused:
+                norm_hidden_states = fused_layer_norm_scale_shift(
+                    hidden_states,
+                    mod_scale.unsqueeze(1),
+                    mod_shift.unsqueeze(1),
+                    eps=float(self.norm.eps),
+                )
+                if runtime is not None and not torch.compiler.is_compiling():
+                    runtime.adaln_calls += 1
+            else:
+                norm_hidden_states = modulate(self.norm(hidden_states), shift=mod_shift, scale=mod_scale)
+            assert self.to_qkv is not None
+            qkv = self.to_qkv(norm_hidden_states)
+            mlp_in = self.ff[0](norm_hidden_states)
+
+        if use_fused and self.norm_q.weight is not None and self.norm_k.weight is not None:
+            q, k, v = fused_hunyuan_qkv_rmsnorm_rope(
+                qkv,
+                self.norm_q.weight,
+                self.norm_k.weight,
+                freqs_cis,
+                num_heads=self.heads_num,
+                rope_len=img_len,
+                eps=float(self.norm_q.eps),
+            )
+            if runtime is not None and not torch.compiler.is_compiling():
+                runtime.qkv_rmsnorm_rope_calls += 1
+        else:
+            q, k, v = rearrange(qkv, "B L (K H D) -> K B L H D", K=3, H=self.heads_num)
+            q = self.norm_q(q)
+            k = self.norm_k(k)
+            if freqs_cis is not None:
+                q_a, q_b = q[:, :img_len, :, :], q[:, img_len:, :, :]
+                k_a, k_b = k[:, :img_len, :, :], k[:, img_len:, :, :]
+                q_a, k_a = apply_rotary_emb(q_a, k_a, freqs_cis, head_first=False)
+                q = torch.cat((q_a, q_b), dim=1)
+                k = torch.cat((k_a, k_b), dim=1)
+
+        if sp_enabled:
+            attn_img_4d, attn_txt_4d = run_sp_maskless_joint_attention(
+                q[:, :img_len],
+                k[:, :img_len],
+                v[:, :img_len],
+                q[:, img_len:],
+                k[:, img_len:],
+                v[:, img_len:],
+                sp_group=sp_group,
+                sp_size=sp_size,
+                sp_rank=sp_rank,
+                use_sol_attn=use_sol_attn,
+                dense_backend=runtime.dense_backend,
+                sol_cfg=runtime.config.sol_attn,
+                sink_tokens=sink_tokens,
+                sink_start=sink_start,
+                runtime=runtime,
+            )
+            attn_output = torch.cat((attn_img_4d, attn_txt_4d), dim=1).reshape(
+                hidden_states.shape[0], hidden_states.shape[1], -1
+            )
+        elif unmasked:
+            attn_4d = run_maskless_joint_attention(
+                q,
+                k,
+                v,
+                use_sol_attn=use_sol_attn,
+                dense_backend=runtime.dense_backend,
+                sol_cfg=runtime.config.sol_attn,
+                sink_tokens=sink_tokens,
+                sink_start=sink_start,
+                runtime=runtime,
+            )
+            attn_output = attn_4d.reshape(attn_4d.shape[0], attn_4d.shape[1], -1)
+        else:
+            attn_output = flattened_attention(
+                q,
+                k,
+                v,
+                cu_seqlens_q=cu_seqlens,
+                cu_seqlens_k=cu_seqlens,
+                max_seqlen_q=max_seqlen,
+                max_seqlen_k=max_seqlen,
+                backend=runtime.dense_backend,
+            )
+            if runtime is not None and not torch.compiler.is_compiling():
+                if runtime.dense_backend == "flash_attention_3":
+                    runtime.fa3_calls += 1
+                else:
+                    runtime.torch_sdpa_calls += 1
+
+        attn_proj = self.to_out(attn_output)
+        if self._fuse_fp8_ffn:
+            mlp_proj = run_fused_fp8_gelu_down_proj(mlp_in, self.ff[2], runtime=runtime)
+        else:
+            mlp_proj = self.ff[2](self.ff[1](mlp_in))
+
+        if use_fused:
+            out = fused_hunyuan_dual_residual_gate_add(hidden_states, attn_proj, mlp_proj, mod_gate)
+            if runtime is not None and not torch.compiler.is_compiling():
+                runtime.dual_res_gate_calls += 1
+            return out
+
+        hidden_states = hidden_states + apply_gate(attn_proj, mod_gate)
+        hidden_states = hidden_states + apply_gate(mlp_proj, mod_gate)
         return hidden_states
 
 
@@ -466,6 +859,24 @@ class HunyuanVideoDiT(torch.nn.Module):
         self.heads_num = 24
         self.rope_dim_list = [16, 56, 56]
         self.attention_backend: str | None = "torch"
+        self._sol_runtime: Any = None
+
+    def enable_sol_acceleration(self, config: Any = "l4_sol_full") -> Any:
+        """Install and return a SOL-Engine acceleration runtime for this transformer."""
+        from .original_acceleration import apply_hunyuan13b_acceleration
+
+        return apply_hunyuan13b_acceleration(self, config)
+
+    def sol_acceleration_receipt(self) -> dict[str, Any] | None:
+        """Return the active SOL-Engine execution receipt, or ``None`` when unaccelerated."""
+        if self._sol_runtime is None:
+            return None
+        return self._sol_runtime.receipt()
+
+    def close_sol_acceleration(self) -> None:
+        """Release SOL-Engine CUDA Graphs and cached state safely (required before NCCL teardown)."""
+        if self._sol_runtime is not None and callable(getattr(self._sol_runtime, "close", None)):
+            self._sol_runtime.close()
 
     def set_attention_backend(self, backend: str | None) -> None:
         """Bind the request-scoped attention provider on all double and single blocks."""
@@ -514,6 +925,26 @@ class HunyuanVideoDiT(torch.nn.Module):
         txt = self.txt_in(prompt_emb, t, text_mask)
         img_seq_len = img.shape[1]
         txt_seq_len = txt.shape[1]
+
+        if self._sol_runtime is not None:
+            img = self._sol_runtime.run_transformer_stack(
+                img=img,
+                txt=txt,
+                vec=vec,
+                freqs_cos=freqs_cos,
+                freqs_sin=freqs_sin,
+                text_mask=text_mask,
+                grid_thw=(T // 1, H // 2, W // 2),
+                step_index=kwargs.get("step_index"),
+                total_steps=kwargs.get("total_steps"),
+                request_id=kwargs.get("request_id"),
+                branch=str(kwargs.get("branch", "positive")),
+                external_piecewise_graph=kwargs.get("piecewise_graph"),
+            )
+            img = self.final_layer(img, vec)
+            img = self.unpatchify(img, T=T // 1, H=H // 2, W=W // 2)
+            return img
+
         cu_seqlens = get_cu_seqlens(text_mask, img_seq_len)
         max_seqlen = img_seq_len + txt_seq_len
 

@@ -83,17 +83,87 @@ def _resolve_compute_dtype(model: torch.nn.Module, fallback: torch.dtype) -> tor
     return fallback
 
 
+def _normalize_graph_report(report: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """Return a JSON-safe CUDA Graph report guaranteed to carry top-level ``capture_failed``."""
+    if report is None:
+        return None
+    normalized = dict(report)
+    if "capture_failed" not in normalized:
+        segments = normalized.get("segments")
+        if isinstance(segments, Mapping):
+            normalized["capture_failed"] = sum(
+                int(seg.get("capture_failed", 0)) for seg in segments.values() if isinstance(seg, Mapping)
+            )
+        else:
+            normalized["capture_failed"] = 0
+    return normalized
+
+
 class HunyuanVideoDenoiser(GraphWrappedDenoiserMixin):
-    """Original HunyuanVideo T2V denoiser with embedded guidance and optional CUDA Graph."""
+    """Original HunyuanVideo T2V denoiser with embedded guidance, SOL-Engine, and CUDA Graph."""
 
     def __init__(self, model: HunyuanVideoDiT, *, enable_cuda_graph: bool | str = False) -> None:
         self.model = model
         self._rope: dict[tuple[tuple[int, ...], torch.device], tuple[torch.Tensor, torch.Tensor]] = {}
+        graph_arg = _normalize_cuda_graph_arg(enable_cuda_graph)
+        sol_runtime = getattr(model, "_sol_runtime", None)
+        if sol_runtime is not None:
+            # Whole-network CUDA Graph conflicts with dynamic text compaction / TeaCache /
+            # Sol-Attn step gating; always route SOL-accelerated models through piecewise capture.
+            if graph_arg is True:
+                graph_arg = "piecewise"
+            # Reuse the runtime's existing PiecewiseBlockGraphRunner instead of allocating a duplicate pool.
+            if graph_arg == "piecewise" and getattr(sol_runtime, "piecewise_graph", None) is not None:
+                graph_arg = False
         self._init_graph_runner(
             model,
-            enabled=_normalize_cuda_graph_arg(enable_cuda_graph),
+            enabled=graph_arg,
             extra_key=f"hunyuan:{type(model).__module__}.{type(model).__qualname__}",
         )
+
+    def close(self) -> None:
+        """Release all CUDA Graph pools and SOL-Engine caches safely before process teardown."""
+        if self._graph_runner is not None:
+            self._graph_runner.invalidate()
+        if self._piecewise_graph is not None:
+            self._piecewise_graph.invalidate()
+        if callable(getattr(self.model, "close_sol_acceleration", None)):
+            self.model.close_sol_acceleration()
+
+    def graph_report(self) -> Mapping[str, Any] | None:
+        report = super().graph_report()
+        if report is not None:
+            return _normalize_graph_report(report)
+        sol_runtime = getattr(self.model, "_sol_runtime", None)
+        if sol_runtime is not None:
+            sol_receipt = sol_runtime.receipt()
+            return _normalize_graph_report(sol_receipt.get("cuda_graph"))
+        return None
+
+    def acceleration_receipt(self) -> dict[str, Any]:
+        """Return auditable SOL-Engine and CUDA Graph telemetry for this denoiser."""
+        sol_runtime = getattr(self.model, "_sol_runtime", None)
+        active_graph = _normalize_graph_report(self.graph_report())
+        if sol_runtime is not None:
+            receipt = dict(sol_runtime.receipt())
+            fallbacks = list(receipt.get("fallbacks", ()))
+            if active_graph is not None:
+                receipt["cuda_graph"] = active_graph
+                capture_failed = int(active_graph.get("capture_failed", 0))
+                if capture_failed > 0:
+                    entry = f"cuda_graph_capture_failed={capture_failed}"
+                    if entry not in fallbacks:
+                        fallbacks.append(entry)
+            receipt["fallbacks"] = fallbacks
+            return receipt
+        fallbacks = []
+        if active_graph is not None and int(active_graph.get("capture_failed", 0)) > 0:
+            fallbacks.append(f"cuda_graph_capture_failed={int(active_graph['capture_failed'])}")
+        return {
+            "engine": "worldfoundry-hunyuan13b-dense",
+            "cuda_graph": active_graph,
+            "fallbacks": fallbacks,
+        }
 
     def __call__(self, model_input: DenoiserInput) -> DenoiserOutput:
         shape_key = tuple(model_input.latents.shape[2:])
@@ -110,7 +180,16 @@ class HunyuanVideoDenoiser(GraphWrappedDenoiserMixin):
             self._rope[cache_key] = freqs
         cos, sin = freqs
         compute_dtype = _resolve_compute_dtype(self.model, model_input.latents.dtype)
-        extra = {"piecewise_graph": self._piecewise_graph} if self._piecewise_graph is not None else {}
+        extra: dict[str, Any] = {"piecewise_graph": self._piecewise_graph} if self._piecewise_graph is not None else {}
+        if getattr(self.model, "_sol_runtime", None) is not None:
+            extra.update(
+                {
+                    "step_index": model_input.step_index,
+                    "total_steps": model_input.total_steps,
+                    "request_id": model_input.request_id,
+                    "branch": model_input.branch,
+                }
+            )
         with torch.autocast(
             device_type=model_input.latents.device.type,
             dtype=compute_dtype,
@@ -299,19 +378,44 @@ def _resolve_graph_arg(context: ComponentBuildContext) -> bool | str:
 
 
 def build_hunyuan_video_denoiser(context: ComponentBuildContext) -> HunyuanVideoDenoiser:
+    sol_config = context.component_options.get(
+        "sol_acceleration",
+        context.component_options.get(
+            "sol_profile",
+            context.policy.options.get("sol_acceleration", context.policy.options.get("sol_profile")),
+        ),
+    )
+    want_fuse_qkv = bool(context.component_options.get("fuse_qkv", context.policy.options.get("fuse_qkv", False)))
+
+    def _post_load_hunyuan(loaded: torch.nn.Module) -> None:
+        if not isinstance(loaded, HunyuanVideoDiT):
+            return
+        if sol_config is not None and sol_config is not False:
+            loaded.enable_sol_acceleration(sol_config)
+        elif want_fuse_qkv:
+            from ..networks.hunyuan_video.original_acceleration import fuse_hunyuan13b_projections
+
+            fuse_hunyuan13b_projections(loaded, release_originals=True)
+
     model = NativeModuleLoader().load(
         ModuleLoadSpec(
             module_class=HunyuanVideoDiT,
             state_dict_converter=_original_state_dict,
             layer_container="double_blocks",
             compile_regions=("double_blocks", "single_blocks"),
+            post_load_hook=_post_load_hunyuan if (sol_config or want_fuse_qkv) else None,
         ),
         context.require_checkpoint("weights"),
         context.policy,
     )
     if not isinstance(model, HunyuanVideoDiT):
         raise TypeError(f"expected HunyuanVideoDiT, got {type(model).__name__}")
-    return HunyuanVideoDenoiser(model, enable_cuda_graph=_resolve_graph_arg(context))
+    graph_arg = _resolve_graph_arg(context)
+    if getattr(model, "_sol_runtime", None) is not None and graph_arg is True:
+        # Whole-network capture conflicts with dynamic TeaCache/Sol-Attn step gating;
+        # route through PiecewiseBlockGraphRunner instead.
+        graph_arg = "piecewise"
+    return HunyuanVideoDenoiser(model, enable_cuda_graph=graph_arg)
 
 
 def build_hunyuan_video_i2v_denoiser(context: ComponentBuildContext) -> HunyuanVideoI2VDenoiser:
