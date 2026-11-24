@@ -205,3 +205,54 @@ def test_multistage_rejects_incomplete_stage_denoiser_bundle() -> None:
             device="cpu",
             dtype=torch.float32,
         )
+
+
+@pytest.mark.unit
+def test_multistage_injects_request_id_and_finalizes_feature_caches_on_success_and_error() -> None:
+    runner = _runner([])
+    seen_ids: list[str] = []
+    ended: list[tuple[str, type[BaseException] | None]] = []
+
+    class TrackingDenoiser:
+        def __init__(self, *, fail_on_step: int | None = None) -> None:
+            self.fail_on_step = fail_on_step
+
+        def __call__(self, inputs: MultiModalDenoiserInput) -> MultiModalDenoiserOutput:
+            req_id = inputs.conditioning.get("request_id")
+            assert isinstance(req_id, str) and req_id.strip()
+            seen_ids.append(req_id)
+            if self.fail_on_step is not None and inputs.step_index == self.fail_on_step:
+                raise RuntimeError("injected stage failure")
+            return MultiModalDenoiserOutput(
+                samples={k: torch.zeros_like(v.latent) for k, v in inputs.modalities.items()}
+            )
+
+        def end_feature_cache_request(self, request_id: str, *, error: BaseException | None = None) -> None:
+            ended.append((request_id, None if error is None else type(error)))
+
+    runner.components = replace(runner.components, denoiser=TrackingDenoiser())
+    runner.run(_request(7))
+    assert len(seen_ids) == 3
+    assert len(set(seen_ids)) == 1
+    assert ended == [(seen_ids[0], None)]
+
+    # Explicit request_id from request.inputs is honored across stages and cleanup.
+    seen_ids.clear()
+    ended.clear()
+    explicit_req = DiffusionRequest(
+        prompt="A scene.",
+        sampling=SamplingConfig(num_inference_steps=3, seed=7),
+        inputs={"request_id": "req-explicit-123"},
+    )
+    runner.run(explicit_req)
+    assert seen_ids == ["req-explicit-123"] * 3
+    assert ended == [("req-explicit-123", None)]
+
+    # Errors still invoke end_feature_cache_request with the original exception type.
+    seen_ids.clear()
+    ended.clear()
+    runner.components = replace(runner.components, denoiser=TrackingDenoiser(fail_on_step=1))
+    with pytest.raises(RuntimeError, match="injected stage failure"):
+        runner.run(_request(7))
+    assert len(ended) == 1
+    assert ended[0] == (seen_ids[0], RuntimeError)
