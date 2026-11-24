@@ -17,8 +17,9 @@ import os
 
 import decord
 import torch
-import torchvision
 from PIL import Image
+
+from worldfoundry.core.media.codecs.video import read_video_torchvision
 
 
 def load_video_from_path(video: str, use_audio_in_video: bool = False):
@@ -26,7 +27,7 @@ def load_video_from_path(video: str, use_audio_in_video: bool = False):
         video_path = video
     else:
         raise ValueError(f"video path {video} not exists")
-    video, _audio, info = torchvision.io.read_video(
+    video, _audio, info = read_video_torchvision(
         video_path,
         0.0,
         None,

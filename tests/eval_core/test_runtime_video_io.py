@@ -63,7 +63,7 @@ def test_torchvision_writer_falls_back_for_newer_pyav_pict_type(monkeypatch, tmp
         encoded["fps"] = fps
         encoded["crf"] = crf
 
-    monkeypatch.setattr(torchvision.io, "write_video", incompatible_torchvision_writer)
+    monkeypatch.setattr(torchvision.io, "write_video", incompatible_torchvision_writer, raising=False)
     monkeypatch.setattr(video_io, "save_video_h264", fallback_writer)
     output_path = tmp_path / "output.mp4"
 
@@ -71,3 +71,20 @@ def test_torchvision_writer_falls_back_for_newer_pyav_pict_type(monkeypatch, tmp
 
     np.testing.assert_array_equal(encoded.pop("frames"), frames.astype(np.uint8))
     assert encoded == {"path": output_path, "fps": 16, "crf": int(options.get("crf", 18))}
+
+
+def test_read_video_torchvision_falls_back_when_torchvision_reader_absent(monkeypatch, tmp_path) -> None:
+    pytest.importorskip("av")
+    torch = pytest.importorskip("torch")
+    frames = np.full((3, 16, 16, 3), 120, dtype=np.uint8)
+    video_path = tmp_path / "clip.mp4"
+    video_io.save_video_h264(frames, video_path, fps=12)
+
+    monkeypatch.delattr(torchvision.io, "read_video", raising=False)
+
+    video, audio, info = video_io.read_video_torchvision(video_path, pts_unit="sec", output_format="TCHW")
+    assert isinstance(video, torch.Tensor)
+    assert video.dtype == torch.uint8
+    assert tuple(video.shape) == (3, 3, 16, 16)
+    assert isinstance(audio, torch.Tensor)
+    assert abs(float(info["video_fps"]) - 12.0) < 0.5

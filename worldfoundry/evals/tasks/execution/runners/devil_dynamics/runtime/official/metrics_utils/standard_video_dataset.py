@@ -4,8 +4,9 @@ import pdb
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
-from torchvision.io import read_video
 from torchvision.transforms import Compose, Resize
+
+from worldfoundry.core.media.codecs.video import read_video_torchvision as read_video
 
 
 def change_fps(video_tensor, fps, target_fps):

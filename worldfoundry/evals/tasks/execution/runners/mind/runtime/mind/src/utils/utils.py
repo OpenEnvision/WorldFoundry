@@ -155,7 +155,10 @@ def expand_to_batch_dim(tensor, batch_size):
 
 # legacy code, preserve
 import av  # noqa: E402 - PyAV keeps its upstream load order after OpenCV and Torchvision.
-from torchvision.io import read_video  # noqa: E402 - Legacy video loaders keep their upstream imports.
+
+from worldfoundry.core.media.codecs.video import (  # noqa: E402 - Follows upstream load order.
+    read_video_torchvision as read_video,
+)
 
 
 def load_sample_video(video_path, mark_time, total_time, max_time=None) -> torch.Tensor:

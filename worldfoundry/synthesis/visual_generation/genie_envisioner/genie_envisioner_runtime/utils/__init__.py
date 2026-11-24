@@ -6,8 +6,9 @@ from datetime import datetime
 
 import torch
 import torch.distributed as dist
-import torchvision
 from einops import rearrange
+
+from worldfoundry.core.media.codecs.video import write_video_torchvision
 
 
 class Tee:
@@ -51,7 +52,7 @@ def save_video(tensor, save_path, fps=30):
     """
     tensor = ((tensor + 1) / 2 * 255).to(torch.uint8)
     tensor = rearrange(tensor, "c t h w -> t h w c")
-    torchvision.io.write_video(save_path, tensor, fps=fps)
+    write_video_torchvision(save_path, tensor, fps=fps)
 
 
 def zero_rank_print(s):

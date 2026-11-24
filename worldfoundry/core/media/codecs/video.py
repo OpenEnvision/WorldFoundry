@@ -955,6 +955,89 @@ def save_image_or_video_tensor(
     return path_text
 
 
+def read_video_torchvision(
+    filename: str | Path,
+    start_pts: int | float = 0,
+    end_pts: int | float | None = None,
+    pts_unit: str = "pts",
+    output_format: str = "THWC",
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Read video frames with a ``torchvision.io.read_video``-compatible signature."""
+
+    try:
+        import torchvision.io
+    except (ImportError, AttributeError, RuntimeError):
+        torchvision_read_video = None
+    else:
+        torchvision_read_video = getattr(torchvision.io, "read_video", None)
+
+    if torchvision_read_video is not None:
+        return torchvision_read_video(
+            str(filename),
+            start_pts=start_pts,
+            end_pts=end_pts,
+            pts_unit=pts_unit,
+            output_format=output_format,
+        )
+
+    import av
+    import numpy as np
+    import torch
+
+    if output_format not in {"THWC", "TCHW"}:
+        raise ValueError(f"output_format must be 'THWC' or 'TCHW', got {output_format!r}")
+
+    frames: list[np.ndarray] = []
+    audio_chunks: list[np.ndarray] = []
+    info: dict[str, Any] = {}
+    with av.open(str(filename)) as container:
+        if container.streams.video:
+            stream = container.streams.video[0]
+            if stream.average_rate is not None:
+                info["video_fps"] = float(stream.average_rate)
+            elif stream.guessed_rate is not None:
+                info["video_fps"] = float(stream.guessed_rate)
+            for frame in container.decode(video=0):
+                pts_val = frame.time if pts_unit == "sec" else frame.pts
+                if pts_val is not None:
+                    if start_pts and pts_val < start_pts:
+                        continue
+                    if end_pts is not None and pts_val > end_pts:
+                        break
+                frames.append(frame.to_ndarray(format="rgb24"))
+        if container.streams.audio:
+            audio_stream = container.streams.audio[0]
+            if audio_stream.rate is not None:
+                info["audio_fps"] = int(audio_stream.rate)
+            container.seek(0)
+            for frame in container.decode(audio=0):
+                pts_val = frame.time if pts_unit == "sec" else frame.pts
+                if pts_val is not None:
+                    if start_pts and pts_val < start_pts:
+                        continue
+                    if end_pts is not None and pts_val > end_pts:
+                        break
+                arr = frame.to_ndarray()
+                if frame.format.is_packed and frame.layout.nb_channels > 1:
+                    arr = arr.reshape(-1, frame.layout.nb_channels).T
+                elif arr.ndim == 1:
+                    arr = arr[None, :]
+                audio_chunks.append(arr.astype(np.float32, copy=False))
+
+    if frames:
+        video_tensor = torch.from_numpy(np.stack(frames, axis=0)).to(torch.uint8)
+    else:
+        video_tensor = torch.empty((0, 0, 0, 3), dtype=torch.uint8)
+    if output_format == "TCHW":
+        video_tensor = video_tensor.permute(0, 3, 1, 2).contiguous()
+
+    if audio_chunks:
+        audio_tensor = torch.from_numpy(np.concatenate(audio_chunks, axis=-1))
+    else:
+        audio_tensor = torch.empty((1, 0), dtype=torch.float32)
+    return video_tensor, audio_tensor, info
+
+
 def write_video_torchvision(
     filename: str | Path,
     video_array: Any,
@@ -1145,6 +1228,7 @@ __all__ = [
     "probe_video_metadata",
     "read_image_as_video_tensor",
     "read_video",
+    "read_video_torchvision",
     "read_video_window_rgb",
     "resize_video_tensor_to_resolution",
     "sample_video_frames",

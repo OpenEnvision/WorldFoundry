@@ -5,9 +5,10 @@ from glob import glob
 
 import numpy as np
 import torch
-import torchvision
 from PIL import Image
 from torch.nn import functional as F
+
+from worldfoundry.core.media.codecs.video import read_video_torchvision, write_video_torchvision
 
 
 def create_folder(path, verbose=False, exist_ok=True, safe=True):
@@ -35,7 +36,7 @@ def read_video(path, start_step=0, time_steps=None, channels="first", exts=("jpg
 
 
 def read_video_from_file(path, start_step, time_steps, channels, resolution):
-    video, _, _ = torchvision.io.read_video(path, output_format="TCHW", pts_unit="sec")
+    video, _, _ = read_video_torchvision(path, output_format="TCHW", pts_unit="sec")
     if time_steps is None:
         time_steps = len(video) - start_step
     video = video[start_step : start_step + time_steps]
@@ -90,7 +91,7 @@ def write_video_to_file(video, path, channels):
     if channels == "first":
         video = video.permute(0, 2, 3, 1)
     video = (video.cpu() * 255.0).to(torch.uint8)
-    torchvision.io.write_video(path, video, 24, "h264", options={"pix_fmt": "yuv420p", "crf": "23"})
+    write_video_torchvision(path, video, 24, "h264", options={"pix_fmt": "yuv420p", "crf": "23"})
     return video
 
 
