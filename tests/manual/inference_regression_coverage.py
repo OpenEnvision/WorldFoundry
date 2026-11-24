@@ -292,8 +292,12 @@ def main() -> int:
                 raise ValueError("Diff base must resolve to a commit")
             verify_committed_inputs(root, matrix, head)
             changed = impact.changed_paths(root, base, head)
+            retirements = impact.retirement_proofs(root, changed, base=base, head=head)
+            retired_paths = {proof["path"] for proof in retirements}
+            changed = [path for path in changed if path not in retired_paths]
             revisions = {
                 "base_revision": base,
+                "proven_retirements": retirements,
                 "source_revision": head,
                 "source_tree": impact.revision(root, head + "^{tree}"),
             }

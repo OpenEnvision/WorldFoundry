@@ -17,6 +17,53 @@ impact = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(impact)
 
 
+@pytest.mark.parametrize("change", ["approved", "edited", "restored_source", "restored_binding"])
+def test_retirement_requires_the_approved_git_deletion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    def git(*args: str) -> str:
+        return subprocess.check_output(
+            ["git", "-C", str(tmp_path), "-c", "user.name=Test", "-c", "user.email=test@example.com", *args],
+            text=True,
+        ).strip()
+
+    def commit(label: str) -> str:
+        git("add", "-A")
+        git("commit", "-qm", label)
+        return git("rev-parse", "HEAD")
+
+    git("init", "-q")
+    source = "worldfoundry/retired.py"
+    unrelated = "worldfoundry/unrelated.py"
+    binding = "worldfoundry/data/models/bindings/pipelines/retired.yaml"
+    for path in (source, unrelated, binding):
+        file = tmp_path / path
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text("original\n")
+    base = commit("Initial binding and sources")
+    if change == "edited":
+        (tmp_path / source).write_text("new implementation\n")
+        commit("Edit before retirement")
+    for path in (source, unrelated, binding):
+        (tmp_path / path).unlink()
+    deletion = commit("Retire model")
+    head = deletion
+    if change.startswith("restored"):
+        restored = tmp_path / (source if change == "restored_source" else binding)
+        restored.parent.mkdir(parents=True, exist_ok=True)
+        restored.write_text("new\n")
+        head = commit("Restore a source or binding")
+    monkeypatch.setattr(impact, "_APPROVED_RUNTIME_RETIREMENTS", {"retired": (deletion, (source,))})
+
+    proofs = impact.retirement_proofs(tmp_path, [source, unrelated], base=base, head=head)
+    if change == "approved":
+        assert len(proofs) == 1
+        assert proofs[0]["path"] == source and proofs[0]["removal_revision"] == deletion
+        assert proofs[0]["base_blob"] == git("rev-parse", f"{base}:{source}")
+    else:
+        assert proofs == []
+
+
 @pytest.mark.parametrize(
     "path",
     [

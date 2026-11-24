@@ -520,6 +520,12 @@ Other frozen variant removals still fail. Reintroducing a retired identity
 requires its own checkpoint replay recipe, like a new variant; its historical
 uncovered-gap exception no longer applies.
 
+The planner records exact runtime deletions for these six integrations as
+`cpu_only_changes` when the approved removal is in the candidate history,
+the comparison base has the removed blobs, and both the source paths and
+binding are absent. The registry CPU tests verify the retired public routes.
+Other runtime paths still follow ordinary affected-case selection.
+
 The short matrix also declares separate recipes for all six Kandinsky 6
 checkpoints, both DreamDojo student identities, LingBot-World-V2 1.3B,
 Matrix-Game 4 Egypt and native WonderWorld. These definitions require real

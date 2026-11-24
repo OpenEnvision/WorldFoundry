@@ -50,6 +50,14 @@ def test_studio_controls_match_native_model_routes() -> None:
 
 
 @pytest.mark.parametrize(
+    "model_id",
+    ["egowm", "hunyuanworld-voyager", "hyworld-worldgen", "open-dreamer", "shotstream", "wilddet3d"],
+)
+def test_retired_external_model_has_no_public_route(model_id: str) -> None:
+    assert model_id not in load_model_zoo_registry().keys()
+
+
+@pytest.mark.parametrize(
     "model_id, module, export",
     [
         ("irasim", "worldfoundry.pipelines.component_pipelines", "IRASimPipeline"),

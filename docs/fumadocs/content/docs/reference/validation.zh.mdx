@@ -301,6 +301,10 @@ license-gated 本地检出、无法 vendor 的外部源码检出或仅能从外�
 删除其他冻结变体仍会失败。重新引入已下线身份时，需要像新增变体一样提供独立的 checkpoint 回放配方，
 不能沿用历史未覆盖缺口的豁免。
 
+对于这六项集成，计划器在候选历史含已批准的退役提交、基线文件与该提交移除的 Git 对象一致、
+且当前源码路径和绑定均已删除时记录 `cpu_only_changes`。公开注册表由 CPU 测试核验。
+其余运行时路径仍按常规受影响用例选择。
+
 Runtime profile 按声明的 model ID 和 pipeline binding 识别归属，并纳入 `source_repos[].in_tree_path`，覆盖静态 import 图无法发现的子进程代码。这些声明补充静态依赖；未知路径仍保守扩大选择，受影响的 native 变体没有真实权重回放时仍失败。
 
 `evaluation_only_paths` 逐项登记评测所用的文件。推理 import 或已声明运行时依赖命中这些路径时，仍会选中受影响的案例或变体。

@@ -15,6 +15,59 @@ import subprocess
 from pathlib import Path, PurePosixPath
 from typing import cast
 
+# Runtime sources removed by the approved native model retirements.
+_APPROVED_RUNTIME_RETIREMENTS = {
+    "egowm": (
+        "40ad11315bdedb4f1f48492626fe5343e5770ee3",
+        (
+            "worldfoundry/synthesis/visual_generation/egowm/__init__.py",
+            "worldfoundry/synthesis/visual_generation/egowm/infer.py",
+            "worldfoundry/synthesis/visual_generation/egowm/nav_25dof_stats.json",
+            "worldfoundry/synthesis/visual_generation/egowm/worldfoundry_runtime.py",
+        ),
+    ),
+    "hunyuanworld-voyager": (
+        "356f0f354a8758046e465373403295bfa5393a80",
+        (
+            "worldfoundry/operators/hunyuan_world_voyager_operator.py",
+            "worldfoundry/pipelines/hunyuan_world/pipeline_hunyuan_world_voyager_official.py",
+            "worldfoundry/synthesis/visual_generation/hunyuan_world/voyager_official.py",
+        ),
+    ),
+    "hyworld-worldgen": (
+        "6dc017a663cf05359c318f702bc5e40c4af7b8e5",
+        (
+            "worldfoundry/pipelines/hunyuan_world/pipeline_hy_world_2p0_worldgen.py",
+            "worldfoundry/synthesis/visual_generation/hunyuan_world/hy_world_2p0_worldgen_runtime.py",
+            "worldfoundry/synthesis/visual_generation/hunyuan_world/hy_world_2p0_worldgen_synthesis.py",
+        ),
+    ),
+    "open-dreamer": (
+        "ad47c6b6bc68d18c49603286343efa2a057aa1b9",
+        (
+            "worldfoundry/synthesis/visual_generation/open_dreamer/__init__.py",
+            "worldfoundry/synthesis/visual_generation/open_dreamer/vpt_actions.py",
+            "worldfoundry/synthesis/visual_generation/open_dreamer/worldfoundry_runtime.py",
+        ),
+    ),
+    "shotstream": (
+        "da8fce9ffaf2d06f23286d135837efba1046e8e6",
+        (
+            "worldfoundry/synthesis/visual_generation/shotstream/__init__.py",
+            "worldfoundry/synthesis/visual_generation/shotstream/infer.py",
+            "worldfoundry/synthesis/visual_generation/shotstream/worldfoundry_runtime.py",
+        ),
+    ),
+    "wilddet3d": (
+        "270f31164058b2156f12b5d2808d93756a81953e",
+        (
+            "worldfoundry/synthesis/visual_generation/wilddet3d/infer.py",
+            "worldfoundry/synthesis/visual_generation/wilddet3d/worldfoundry_runtime.py",
+        ),
+    ),
+}
+_RETIREMENT_CONTRACT = "tests/eval_core/test_catalog_integration_status.py"
+
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -786,6 +839,84 @@ def relocation_proofs(
     return proofs
 
 
+def retirement_proofs(
+    source_root: Path,
+    changes: list[str],
+    *,
+    base: str | None,
+    head: str,
+    history_root: Path | None = None,
+) -> list[dict]:
+    """Bind retired runtime paths to approved deletions and the inspected Git diff."""
+    changed = set(changes)
+    if base is None or not any(changed.intersection(paths) for _, paths in _APPROVED_RUNTIME_RETIREMENTS.values()):
+        return []
+    history = history_root or source_root
+    base_commit = revision(history, base + "^{commit}")
+    head_commit = revision(history, head + "^{commit}")
+    if base_commit is None or head_commit is None:
+        raise ValueError("Retirement proof requires pinned Git base and head commits")
+
+    def entries(commit: str, paths: list[str]) -> dict[str, bytes]:
+        output = subprocess.check_output(["git", "-C", str(history), "ls-tree", "-r", "-z", commit, "--", *paths])
+        result = {}
+        for row in output.split(b"\0"):
+            if row:
+                metadata, path = row.split(b"\t", 1)
+                result[path.decode()] = metadata
+        return result
+
+    def ancestor(earlier: str, later: str) -> bool:
+        return (
+            subprocess.run(
+                ["git", "-C", str(history), "merge-base", "--is-ancestor", earlier, later],
+                capture_output=True,
+                check=False,
+            ).returncode
+            == 0
+        )
+
+    proofs = []
+    for model_id, (removal, sources) in _APPROVED_RUNTIME_RETIREMENTS.items():
+        selected = sorted(changed.intersection(sources))
+        if not selected or not ancestor(removal, head_commit) or not ancestor(base_commit, removal + "^"):
+            continue
+        binding = f"worldfoundry/data/models/bindings/pipelines/{model_id}.yaml"
+        before_removal = entries(removal + "^", [binding, *selected])
+        if binding not in before_removal or entries(removal, [binding, *selected]):
+            continue
+        retained = entries(head_commit, [binding, *selected])
+        if binding in retained or os.path.lexists(source_root / binding):
+            continue
+        original = entries(base_commit, selected)
+        for path in selected:
+            blob = original.get(path)
+            if (
+                blob is None
+                or blob != before_removal.get(path)
+                or path in retained
+                or os.path.lexists(source_root / path)
+            ):
+                continue
+            mode, kind, object_id = blob.decode().split()
+            if kind != "blob" or mode not in {"100644", "100755"}:
+                continue
+            proofs.append(
+                {
+                    "kind": "approved_model_retirement",
+                    "model_id": model_id,
+                    "path": path,
+                    "reason": f"Approved native retirement of {model_id}",
+                    "base_blob": object_id,
+                    "removal_revision": removal,
+                    "base_revision": base_commit,
+                    "head_revision": head_commit,
+                    "required_cpu_contracts": [_RETIREMENT_CONTRACT],
+                }
+            )
+    return proofs
+
+
 def committed_case_changes(
     source_root: Path,
     matrix: Path,
@@ -830,7 +961,8 @@ def select_cases(
     changes = sorted({relative_path(path) for path in changes})
     environments = environment_variants(policy)
     evaluation_paths = evaluation_only_paths(policy)
-    for rule in [*policy.get("cpu_only_components", []), *policy.get("relocation_contracts", [])]:
+    retirements = retirement_proofs(source_root, changes, base=base, head=head, history_root=history_root)
+    for rule in [*policy.get("cpu_only_components", []), *policy.get("relocation_contracts", []), *retirements]:
         for contract in rule["required_cpu_contracts"]:
             test = source_root / contract
             if not test.is_file() or test.is_symlink() or not test.resolve().is_relative_to(source_root.resolve()):
@@ -875,6 +1007,7 @@ def select_cases(
         else None
     )
     proven_paths = {path for proof in proofs for path in (proof["old_path"], proof["new_path"]) if path}
+    approved_retirements = {proof["path"]: proof for proof in retirements}
     reasons = {name: [] for name in cases}
     graph_errors = {}
     closures, traces = {}, {}
@@ -934,7 +1067,9 @@ def select_cases(
             declared_cpu = [rule for rule in policy.get("cpu_only_components", []) if path in rule["paths"]]
             if path in proven_paths:
                 continue
-            if declared_cpu:
+            if path in approved_retirements:
+                cpu_only.append(approved_retirements[path])
+            elif declared_cpu:
                 cpu_only.extend(
                     {"path": path, "reason": rule["reason"], "required_cpu_contracts": rule["required_cpu_contracts"]}
                     for rule in declared_cpu
