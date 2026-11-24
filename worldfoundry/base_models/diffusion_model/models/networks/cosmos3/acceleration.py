@@ -631,32 +631,33 @@ def fuse_cosmos3_projections(model: nn.Module, *, release_originals: bool = True
     layers = getattr(model, "layers", ())
     for layer_idx, layer in enumerate(layers):
         attn = getattr(layer, "self_attn", None)
-        if (
-            attn is not None
-            and getattr(attn, "gen_qkv_proj", None) is None
-            and isinstance(getattr(attn, "add_q_proj", None), nn.Linear)
-            and isinstance(getattr(attn, "add_k_proj", None), nn.Linear)
-            and isinstance(getattr(attn, "add_v_proj", None), nn.Linear)
-        ):
-            attn.gen_qkv_proj = _fuse_three_linears(attn.add_q_proj, attn.add_k_proj, attn.add_v_proj)
-            if release_originals:
-                attn.add_q_proj = None
-                attn.add_k_proj = None
-                attn.add_v_proj = None
-            qkv_fused += 1
+        if attn is not None:
+            if getattr(attn, "gen_qkv_proj", None) is not None:
+                qkv_fused += 1
+            elif (
+                isinstance(getattr(attn, "add_q_proj", None), nn.Linear)
+                and isinstance(getattr(attn, "add_k_proj", None), nn.Linear)
+                and isinstance(getattr(attn, "add_v_proj", None), nn.Linear)
+            ):
+                attn.gen_qkv_proj = _fuse_three_linears(attn.add_q_proj, attn.add_k_proj, attn.add_v_proj)
+                if release_originals:
+                    attn.add_q_proj = None
+                    attn.add_k_proj = None
+                    attn.add_v_proj = None
+                qkv_fused += 1
         for mlp_attr in ("mlp_moe_gen", "mlp"):
             mlp = getattr(layer, mlp_attr, None)
-            if (
-                mlp is not None
-                and getattr(mlp, "gate_up_proj", None) is None
-                and isinstance(getattr(mlp, "gate_proj", None), nn.Linear)
-                and isinstance(getattr(mlp, "up_proj", None), nn.Linear)
-            ):
-                mlp.gate_up_proj = _fuse_two_linears(mlp.gate_proj, mlp.up_proj)
-                if release_originals:
-                    mlp.gate_proj = None
-                    mlp.up_proj = None
-                swiglu_fused += 1
+            if mlp is not None:
+                if getattr(mlp, "gate_up_proj", None) is not None:
+                    swiglu_fused += 1
+                elif isinstance(getattr(mlp, "gate_proj", None), nn.Linear) and isinstance(
+                    getattr(mlp, "up_proj", None), nn.Linear
+                ):
+                    mlp.gate_up_proj = _fuse_two_linears(mlp.gate_proj, mlp.up_proj)
+                    if release_originals:
+                        mlp.gate_proj = None
+                        mlp.up_proj = None
+                    swiglu_fused += 1
         if release_originals and (layer_idx + 1) % 8 == 0 and torch.cuda.is_available():
             torch.cuda.empty_cache()
     if release_originals and torch.cuda.is_available():
@@ -701,6 +702,9 @@ def quantize_cosmos3_step_selective(
         nonlocal replaced, skipped
         for name, child in list(parent.named_children()):
             full_name = f"{prefix}.{name}" if prefix else name
+            if isinstance(child, (StepSelectiveFloat8Linear, StepSelectiveNVFP4Linear)):
+                replaced += 1
+                continue
             if isinstance(child, nn.Linear):
                 if (
                     _is_excluded(full_name)

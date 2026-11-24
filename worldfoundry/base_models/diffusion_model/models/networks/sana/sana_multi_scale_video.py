@@ -804,7 +804,7 @@ class SanaMSVideo(Sana):
             x.shape[-1] // self.patch_size[2],
         )
 
-        data_info = kwargs.get("data_info", {})
+        data_info = kwargs.pop("data_info", None) or {}
         if data_info.get("image_vae_embeds", None) is not None:
             x = torch.cat([x, data_info["image_vae_embeds"].to(self.dtype)], dim=1)
         if data_info.get("image_embeds", None) is not None:
@@ -896,7 +896,7 @@ class SanaMSVideo(Sana):
             x.shape[-1] // self.patch_size[2],
         )
 
-        data_info = kwargs.get("data_info", {})
+        data_info = kwargs.pop("data_info", None) or {}
         if data_info.get("image_vae_embeds", None) is not None:
             x = torch.cat([x, data_info["image_vae_embeds"].to(self.dtype)], dim=1)
         if data_info.get("image_embeds", None) is not None:

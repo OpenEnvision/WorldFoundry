@@ -119,6 +119,16 @@ def prepare_sana_block_input(blocks: nn.ModuleList, value: torch.Tensor) -> torc
     return value
 
 
+def _contains_tensor(obj: object) -> bool:
+    if isinstance(obj, torch.Tensor):
+        return True
+    if isinstance(obj, dict):
+        return any(_contains_tensor(k) or _contains_tensor(v) for k, v in obj.items())
+    if isinstance(obj, (list, tuple, set)):
+        return any(_contains_tensor(item) for item in obj)
+    return False
+
+
 def run_sana_blocks(blocks: nn.ModuleList, value: torch.Tensor, *args, **kwargs) -> torch.Tensor:
     """One block-stack seam for stateless image/video graphs, request caches, and piecewise CUDA Graphs."""
     cache = kwargs.pop("feature_cache", None)
@@ -138,6 +148,8 @@ def run_sana_blocks(blocks: nn.ModuleList, value: torch.Tensor, *args, **kwargs)
     if use_piecewise:
         # Piecewise CUDA Graph captures tensor and tuple-of-tensor inputs while
         # keeping non-tensor metadata (such as THW tuple) in the segment key.
+        # Fall back to eager if any constant container embeds an untracked tensor
+        # (prevents GPU-CPU repr() syncs and stale captured tensor pointers).
         for item in args:
             if isinstance(item, torch.Tensor):
                 arg_specs.append(("tensor", len(flat_tensors)))
@@ -146,22 +158,30 @@ def run_sana_blocks(blocks: nn.ModuleList, value: torch.Tensor, *args, **kwargs)
                 start = len(flat_tensors)
                 flat_tensors.extend(item)
                 arg_specs.append(("tensor_tuple", (start, len(flat_tensors))))
+            elif _contains_tensor(item):
+                use_piecewise = False
+                break
             else:
                 arg_specs.append(("const", item))
 
-        for k in sorted(kwargs):
-            v = kwargs[k]
-            if isinstance(v, torch.Tensor):
-                kw_specs.append((k, "tensor", len(flat_tensors)))
-                flat_tensors.append(v)
-            elif isinstance(v, tuple) and v and all(isinstance(elem, torch.Tensor) for elem in v):
-                start = len(flat_tensors)
-                flat_tensors.extend(v)
-                kw_specs.append((k, "tensor_tuple", (start, len(flat_tensors))))
-            else:
-                kw_specs.append((k, "const", v))
+        if use_piecewise:
+            for k in sorted(kwargs):
+                v = kwargs[k]
+                if isinstance(v, torch.Tensor):
+                    kw_specs.append((k, "tensor", len(flat_tensors)))
+                    flat_tensors.append(v)
+                elif isinstance(v, tuple) and v and all(isinstance(elem, torch.Tensor) for elem in v):
+                    start = len(flat_tensors)
+                    flat_tensors.extend(v)
+                    kw_specs.append((k, "tensor_tuple", (start, len(flat_tensors))))
+                elif _contains_tensor(v):
+                    use_piecewise = False
+                    break
+                else:
+                    kw_specs.append((k, "const", v))
 
-        seg_name = f"sana_blocks:{tuple(arg_specs)}:{tuple(kw_specs)}"
+        if use_piecewise:
+            seg_name = f"sana_blocks:{tuple(arg_specs)}:{tuple(kw_specs)}"
 
     def _run_stack_eager(hidden: torch.Tensor, *stack_args) -> torch.Tensor:
         for block in blocks:

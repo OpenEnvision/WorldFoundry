@@ -45,6 +45,7 @@ from worldfoundry.base_models.diffusion_model.models.networks.cosmos3.accelerati
     cosmos3_runtime_receipt,
     cosmos3_sol_profile,
     fuse_cosmos3_projections,
+    quantize_cosmos3_step_selective,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.cosmos3.fused_ops import (
     cosmos3_fa3_attention,
@@ -1600,3 +1601,52 @@ def test_lingbot_regression_gpu_moe_safety_batched_cfg_and_nonbinary_mask() -> N
     assert rt_b2["fallbacks"] == []
     assert rt_b2["runtime"]["fa3_calls"] > 0
     assert rt_b2["runtime"]["easycache_branches"]["batched_cfg"]["hits"] > 0
+
+
+def test_cosmos3_idempotent_reapply_counts_and_sana_data_info_piecewise_seg_key() -> None:
+    # 1. Re-applying Cosmos3 projection fusion and step-selective quantization preserves exact counts.
+    torch.manual_seed(29)
+    model = _tiny_cosmos3(torch.device("cpu"), num_layers=4, dtype=torch.float32)
+    first_fusion = fuse_cosmos3_projections(model, release_originals=True)
+    second_fusion = fuse_cosmos3_projections(model, release_originals=True)
+    assert first_fusion == {"gen_qkv_fused": 4, "swiglu_gate_up_fused": 8}
+    assert second_fusion == first_fusion
+
+    first_q = quantize_cosmos3_step_selective(model, mode="fp8", min_features=64, exclude_edge_blocks=False)
+    second_q = quantize_cosmos3_step_selective(model, mode="fp8", min_features=64, exclude_edge_blocks=False)
+    assert first_q["quantized_linears"] > 0
+    assert second_q["quantized_linears"] == first_q["quantized_linears"]
+
+    # 2. SANA Video forward pops data_info so piecewise CUDA Graph segment keys never stringify CUDA tensors.
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        sana = _tiny_sana_video(device, dtype=torch.bfloat16)
+        accelerate_sana_video(sana, "sol_graph")
+        x = torch.randn(1, 16, 2, 16, 16, device=device, dtype=torch.bfloat16)
+        t = torch.tensor([500.0], device=device, dtype=torch.bfloat16)
+        y = torch.randn(1, 1, 16, 64, device=device, dtype=torch.bfloat16)
+        mask = torch.ones(1, 16, dtype=torch.long, device=device)
+        data_info = {
+            "img_hw": torch.tensor([[256.0, 256.0]], device=device),
+            "aspect_ratio": torch.tensor([1.0], device=device),
+        }
+        with torch.inference_mode():
+            for step in range(4):
+                out = sana(
+                    x + 0.01 * step,
+                    t - 10.0 * step,
+                    y,
+                    mask=mask,
+                    data_info=data_info,
+                    feature_cache_step=step,
+                    feature_cache_total_steps=4,
+                )
+                assert torch.isfinite(out).all()
+        rt = sana_runtime_receipt(sana)
+        pg = rt["runtime"]["piecewise_graph"]
+        segs = pg["segments"]
+        assert len(segs) == 1
+        seg_key = next(iter(segs.keys()))
+        assert "data_info" not in seg_key and "tensor(" not in seg_key
+        assert pg["capture"] >= 1
+        assert pg["request_window"]["replay"] >= 1
