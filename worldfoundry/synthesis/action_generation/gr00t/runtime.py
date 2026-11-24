@@ -328,7 +328,10 @@ def _resolve_observation(
         if joint_state is None:
             joint_state = gr00t_observation.get("proprio")  # Fallback for older naming conventions
         if isinstance(joint_state, Mapping):
-            state.update(joint_state)
+            import numpy as np
+
+            for key, value in joint_state.items():
+                state[str(key)] = np.asarray(value, dtype=np.float32)
 
     # Construct the final observation dictionary in the format expected by GR00T
     return (

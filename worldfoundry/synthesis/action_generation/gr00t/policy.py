@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import torch
 
-from worldfoundry.core.io.paths import hfd_root_path
+from worldfoundry.core.io.paths import checkpoint_root_candidates, hfd_root_path
 
 # isort: split
 from .preprocessing.embodiment import FINETUNE_ONLY_TAGS, POSTTRAIN_TAGS, EmbodimentTag
@@ -44,14 +44,17 @@ if TYPE_CHECKING:
     from .preprocessing.base import BaseProcessor
 
 
-def _local_hfd_candidates(repo_id: str) -> list[Path]:
-    roots: list[Path] = [hfd_root_path()]
+def _local_hfd_candidates(repo_id: str, *, model_dir: Path | None = None) -> list[Path]:
+    roots: list[Path] = [hfd_root_path(), *checkpoint_root_candidates()]
+    if model_dir is not None:
+        resolved_model = model_dir.expanduser().resolve()
+        roots.extend([resolved_model.parent, resolved_model.parent.parent])
 
     candidates: list[Path] = []
     seen: set[Path] = set()
     slugs = (repo_id.replace("/", "--"), repo_id.replace("/", "__"))
     for base in roots:
-        base = base.resolve()
+        base = base.expanduser().resolve()
         if base in seen:
             continue
         seen.add(base)
@@ -60,8 +63,8 @@ def _local_hfd_candidates(repo_id: str) -> list[Path]:
     return candidates
 
 
-def _local_hfd_repo(repo_id: str) -> Path | None:
-    for candidate in _local_hfd_candidates(repo_id):
+def _local_hfd_repo(repo_id: str, *, model_dir: Path | None = None) -> Path | None:
+    for candidate in _local_hfd_candidates(repo_id, model_dir=model_dir):
         if (candidate / "config.json").is_file() and any(candidate.glob("*.safetensors")):
             return candidate
     return None
@@ -77,9 +80,9 @@ def _local_backbone_kwargs(model_dir: Path) -> dict[str, Any]:
         return {}
     if not isinstance(model_name, str) or "/" not in model_name:
         return {}
-    local_dir = _local_hfd_repo(model_name)
+    local_dir = _local_hfd_repo(model_name, model_dir=model_dir)
     if local_dir is None:
-        checked = "\n".join(f"  - {path}" for path in _local_hfd_candidates(model_name))
+        checked = "\n".join(f"  - {path}" for path in _local_hfd_candidates(model_name, model_dir=model_dir))
         raise FileNotFoundError(
             f"GR00T requires local backbone '{model_name}' for in-tree inference. "
             "Expected a config.json and at least one *.safetensors file in one of:\n"
