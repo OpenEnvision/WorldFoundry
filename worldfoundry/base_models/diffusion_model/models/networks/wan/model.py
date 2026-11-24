@@ -119,7 +119,19 @@ class AttentionModule(nn.Module):
                     )
                 ]
             )
+        if getattr(self, "_worldfoundry_force_dense", False):
+            return flash_attention(
+                q=q,
+                k=k,
+                v=v,
+                num_heads=self.num_heads,
+                compatibility_mode=self.compatibility_mode,
+                backend="torch",
+            )
         options = getattr(self, "_worldfoundry_attention_options", None)
+        sink_override = getattr(self, "_worldfoundry_sol_sink_tokens", None)
+        if sink_override is not None and self.attention_backend == "sol_attn":
+            options = {**(options or {}), "sink_tokens": int(sink_override)}
         x = flash_attention(
             q=q,
             k=k,
@@ -214,7 +226,8 @@ def apply_wan_qk_norm_rope(
                 record_compiled_fused_rope_graph_trace,
             )
 
-            record_compiled_fused_rope_graph_trace(runtime_state)
+            receipt_token = getattr(attention, "_worldfoundry_fused_rope_token", None)
+            record_compiled_fused_rope_graph_trace(receipt_token if isinstance(receipt_token, str) else runtime_state)
             return fused_call()
         receipt: dict[str, Any] = {}
         with kernel_dispatch_receipt_scope(receipt):
@@ -784,6 +797,10 @@ class WanModel(torch.nn.Module):
     copying patchify / RoPE / timestep / unpatchify.
     """
 
+    # Whole-stack residual caches (TeaCache / MagCache / AdaCache / TaylorSeer)
+    # broadcast rank-0 skip decisions across Ulysses SP ranks in forward().
+    _worldfoundry_supports_sp_synced_cache: bool = True
+
     def __init__(
         self,
         dim: int,
@@ -1193,6 +1210,9 @@ class WanModel(torch.nn.Module):
         feature_cache_total_steps: int | None = None,
         cross_attention_kv: tuple[tuple[torch.Tensor, ...], ...] | None = None,
         request_batch_sizes: tuple[int, ...] = (),
+        _worldfoundry_piecewise_graph: Any = None,
+        _worldfoundry_token_pruning_step: tuple[int, int | None, str, str] | None = None,
+        _worldfoundry_sol_step_index: int | None = None,
         **kwargs,
     ):
         """Denoise packed latents: timestep → condition → patchify → blocks → head.
@@ -1332,6 +1352,55 @@ class WanModel(torch.nn.Module):
             **kwargs,
         )
 
+        sol_schedule = getattr(self, "_worldfoundry_sol_schedule", None)
+        sol_force_dense = bool(
+            isinstance(sol_schedule, dict)
+            and int(sol_schedule.get("dense_steps", 0)) > 0
+            and _worldfoundry_sol_step_index is not None
+            and int(_worldfoundry_sol_step_index) < int(sol_schedule["dense_steps"])
+        )
+        tile_inv_perm: torch.Tensor | None = None
+        tile_sink_tokens: int | None = None
+        if (
+            isinstance(sol_schedule, dict)
+            and sol_schedule.get("tile_3d") is not None
+            and not sol_force_dense
+            and x.shape[1] == f * h * w
+            and t_mod.ndim != 4
+            and not self.training
+            and not torch.is_grad_enabled()
+        ):
+            tf, th, tw = (int(v) for v in sol_schedule["tile_3d"])
+            f_full, h_full, w_full = (f // tf) * tf, (h // th) * th, (w // tw) * tw
+            if f_full > 0 and h_full > 0 and w_full > 0:
+                perm_cache: dict[Any, tuple[torch.Tensor, torch.Tensor, int]] = self.__dict__.setdefault(
+                    "_worldfoundry_tile_perm_cache", {}
+                )
+                cache_key = (f, h, w, tf, th, tw, x.device)
+                cached_perm = perm_cache.get(cache_key)
+                if cached_perm is None:
+                    grid_idx = torch.arange(f * h * w, device=x.device, dtype=torch.long).view(f, h, w)
+                    core = (
+                        grid_idx[:f_full, :h_full, :w_full]
+                        .view(f_full // tf, tf, h_full // th, th, w_full // tw, tw)
+                        .permute(0, 2, 4, 1, 3, 5)
+                        .reshape(-1)
+                    )
+                    mask = torch.zeros((f, h, w), dtype=torch.bool, device=x.device)
+                    mask[:f_full, :h_full, :w_full] = True
+                    rem = grid_idx[~mask]
+                    perm_t = torch.cat((core, rem), dim=0) if rem.numel() > 0 else core
+                    inv_t = torch.empty_like(perm_t)
+                    inv_t[perm_t] = torch.arange(perm_t.numel(), device=x.device, dtype=torch.long)
+                    sink_tok = int(f * h * w - f_full * h_full * w_full)
+                    if len(perm_cache) >= 8:
+                        perm_cache.clear()
+                    cached_perm = (perm_t, inv_t, sink_tok)
+                    perm_cache[cache_key] = cached_perm
+                perm_t, tile_inv_perm, tile_sink_tokens = cached_perm
+                x = x.index_select(1, perm_t)
+                freqs = freqs.index_select(0, perm_t)
+
         sequence_parallel_state = getattr(
             self,
             "_worldfoundry_sequence_parallel",
@@ -1361,6 +1430,8 @@ class WanModel(torch.nn.Module):
                 )
                 if t_mod.ndim == 4:
                     t_mod = torch.nn.functional.pad(t_mod, (0, 0, 0, 0, 0, padding))
+                if tile_sink_tokens is not None:
+                    tile_sink_tokens += int(padding)
             x = sequence_parallel_chunk(x, dim=1)
             if t_mod.ndim == 4:
                 t_mod = sequence_parallel_chunk(t_mod, dim=1)
@@ -1376,7 +1447,7 @@ class WanModel(torch.nn.Module):
             block_kwargs["_worldfoundry_inplace_residual"] = True
         if getattr(self, "_worldfoundry_approximate_attention", None) is not None:
             block_kwargs["_worldfoundry_sparse_grid"] = (f, h, w)
-        if bool(getattr(self, "_worldfoundry_fused_rope", False)):
+        if bool(getattr(self, "_worldfoundry_fused_rope", False)) and tile_inv_perm is None:
             block_kwargs["_worldfoundry_rope_grid"] = (f, h, w)
             block_kwargs["_worldfoundry_rope_table"] = self.fused_rope_table(
                 device=x.device,
@@ -1424,6 +1495,239 @@ class WanModel(torch.nn.Module):
                 hidden = run_transformer_block(block_id, hidden)
             return hidden
 
+        piecewise_eligible = (
+            _worldfoundry_piecewise_graph is not None
+            and not self.training
+            and not torch.is_grad_enabled()
+            and x.device.type == "cuda"
+            and probe_observer is None
+            and memory_context is None
+            and not kwargs
+        )
+
+        piecewise_rope_table = block_kwargs.get("_worldfoundry_rope_table")
+        piecewise_has_rope_table = isinstance(piecewise_rope_table, torch.Tensor)
+        piecewise_xkv_count = sum(len(entry) for entry in cross_attention_kv) if cross_attention_kv is not None else 0
+        piecewise_seg_name = (
+            f"wan_blocks_g{f}x{h}x{w}_r{int(piecewise_has_rope_table)}_xkv{piecewise_xkv_count}"
+            f"_ip{int(inplace_residual)}_rb{len(request_batch_sizes)}"
+            f"_sd{int(sol_force_dense)}_st{int(tile_inv_perm is not None)}"
+        )
+
+        def run_transformer_blocks_maybe_graphed(block_input: torch.Tensor) -> torch.Tensor:
+            tp_cfg = getattr(self, "_worldfoundry_token_pruning_config", None)
+            tp_rt = getattr(self, "_worldfoundry_token_pruning_runtime", None)
+            if (
+                tp_cfg is not None
+                and tp_rt is not None
+                and not self.training
+                and not torch.is_grad_enabled()
+                and sequence_parallel_state is None
+                and not request_batch_sizes
+                and probe_observer is None
+                and memory_context is None
+                and not kwargs
+                and tp_cfg.keep_ratio < 1.0
+            ):
+                num_blocks = len(self.blocks)
+                start_blk = int(tp_cfg.start_block)
+                end_blk = num_blocks + int(tp_cfg.end_block) if int(tp_cfg.end_block) <= 0 else int(tp_cfg.end_block)
+                if _worldfoundry_token_pruning_step is not None:
+                    cur_step, tot_steps, req_key, branch_key = _worldfoundry_token_pruning_step
+                else:
+                    cur_step = 0 if feature_cache_step is None else int(feature_cache_step)
+                    tot_steps = feature_cache_total_steps
+                    req_key = ""
+                    branch_key = f"ctx:{id(context)}"
+                in_prune_window = cur_step >= int(tp_cfg.dense_first_steps) and (
+                    tot_steps is None or cur_step < int(tot_steps) - int(tp_cfg.dense_last_steps)
+                )
+                if in_prune_window:
+                    from worldfoundry.core.acceleration.token_pruning import TokenPruner
+
+                    pruner_key = (req_key, branch_key, tuple(block_input.shape))
+                    pruners: dict[Any, Any] = tp_rt["pruners"]
+                    pruner = pruners.get(pruner_key)
+                    if pruner is None:
+                        if len(pruners) >= 8:
+                            pruners.clear()
+                        pruner = TokenPruner(tp_cfg.keep_ratio, method=tp_cfg.method)
+                        pruners[pruner_key] = pruner
+
+                    def _run_range(
+                        h_in: torch.Tensor,
+                        b_start: int,
+                        b_end: int,
+                        freqs_sub: torch.Tensor,
+                        t_mod_sub: torch.Tensor,
+                        *,
+                        strip_fused_rope: bool,
+                        seg_tag: str,
+                    ) -> torch.Tensor:
+                        sub_kwargs = (
+                            {
+                                k: v
+                                for k, v in block_kwargs.items()
+                                if k not in {"_worldfoundry_rope_table", "_worldfoundry_rope_grid"}
+                            }
+                            if strip_fused_rope
+                            else block_kwargs
+                        )
+                        if not piecewise_eligible:
+                            h_cur = h_in
+                            for bid in range(b_start, b_end):
+                                ck = (
+                                    dict(sub_kwargs, _worldfoundry_cross_kv=cross_attention_kv[bid])
+                                    if cross_attention_kv is not None
+                                    else sub_kwargs
+                                )
+                                h_cur = self.blocks[bid](h_cur, context, t_mod_sub, freqs_sub, **ck)
+                                h_cur = self.after_transformer_block(h_cur, bid, token_state)
+                            return h_cur
+                        sub_rope_tbl = sub_kwargs.get("_worldfoundry_rope_table")
+                        sub_has_rope = isinstance(sub_rope_tbl, torch.Tensor)
+                        static_sub = {k: v for k, v in sub_kwargs.items() if k != "_worldfoundry_rope_table"}
+                        sub_xkv: list[torch.Tensor] = []
+                        sub_arities: list[int] = []
+                        if cross_attention_kv is not None:
+                            for bid in range(b_start, b_end):
+                                entry = cross_attention_kv[bid]
+                                sub_arities.append(len(entry))
+                                sub_xkv.extend(entry)
+
+                        def _seg_fn(
+                            h_arg: torch.Tensor,
+                            ctx_arg: torch.Tensor,
+                            tm_arg: torch.Tensor,
+                            fr_arg: torch.Tensor,
+                            *extras: torch.Tensor,
+                        ) -> torch.Tensor:
+                            cur = 0
+                            lk = dict(static_sub)
+                            if sub_has_rope:
+                                lk["_worldfoundry_rope_table"] = extras[cur]
+                                cur += 1
+                            h_cur = h_arg
+                            for offset, bid in enumerate(range(b_start, b_end)):
+                                ck = lk
+                                if sub_arities:
+                                    ar = sub_arities[offset]
+                                    ck = dict(lk, _worldfoundry_cross_kv=extras[cur : cur + ar])
+                                    cur += ar
+                                h_cur = self.blocks[bid](h_cur, ctx_arg, tm_arg, fr_arg, **ck)
+                                h_cur = self.after_transformer_block(h_cur, bid, token_state)
+                            return h_cur
+
+                        s_name = f"{piecewise_seg_name}_{seg_tag}_{b_start}_{b_end}_L{h_in.shape[1]}"
+                        _worldfoundry_piecewise_graph.get_or_register_segment(
+                            s_name, _seg_fn, extra_key=f"wan_tp:{id(self)}:{s_name}"
+                        )
+                        extra_list: list[torch.Tensor] = []
+                        if sub_has_rope:
+                            extra_list.append(sub_rope_tbl)
+                        extra_list.extend(sub_xkv)
+                        return _worldfoundry_piecewise_graph.run_segment(
+                            s_name, h_in, context, t_mod_sub, freqs_sub, *extra_list
+                        )
+
+                    hidden = _run_range(block_input, 0, start_blk, freqs, t_mod, strip_fused_rope=False, seg_tag="head")
+                    pruned_hidden, prune_state = pruner.prune(hidden, key=pruner_key, seq_dim=1)
+                    if prune_state is not None:
+                        freqs_mid = freqs.index_select(0, prune_state.indices)
+                        t_mod_mid = t_mod.index_select(1, prune_state.indices) if t_mod.ndim == 4 else t_mod
+                        mid_sink_saved: list[tuple[Any, Any]] = []
+                        if tile_sink_tokens is not None:
+                            for bid in range(start_blk, end_blk):
+                                attn_mod = getattr(getattr(self.blocks[bid], "self_attn", None), "attn", None)
+                                if attn_mod is not None:
+                                    mid_sink_saved.append(
+                                        (attn_mod, getattr(attn_mod, "_worldfoundry_sol_sink_tokens", None))
+                                    )
+                                    attn_mod._worldfoundry_sol_sink_tokens = None
+                        try:
+                            mid_out = _run_range(
+                                pruned_hidden,
+                                start_blk,
+                                end_blk,
+                                freqs_mid,
+                                t_mod_mid,
+                                strip_fused_rope=True,
+                                seg_tag="mid",
+                            )
+                        finally:
+                            for attn_mod, prev_sink in mid_sink_saved:
+                                attn_mod._worldfoundry_sol_sink_tokens = prev_sink
+                        hidden = pruner.restore(mid_out, prune_state, key=pruner_key)
+                        tp_rt["pruned_calls"] = int(tp_rt["pruned_calls"]) + 1
+                    else:
+                        mid_out = _run_range(
+                            hidden, start_blk, end_blk, freqs, t_mod, strip_fused_rope=False, seg_tag="mid_dense"
+                        )
+                        hidden = pruner.restore(mid_out, None, key=pruner_key)
+                        tp_rt["dense_calls"] = int(tp_rt["dense_calls"]) + 1
+                    return _run_range(hidden, end_blk, num_blocks, freqs, t_mod, strip_fused_rope=False, seg_tag="tail")
+                tp_rt["dense_calls"] = int(tp_rt["dense_calls"]) + 1
+
+            if not piecewise_eligible:
+                return run_transformer_blocks(block_input)
+            # Pass every dynamic tensor (hidden, context, t_mod, freqs, optional
+            # fused RoPE table, optional per-block static cross-KV tensors) as
+            # explicit positional arguments so InferenceCUDAGraphRunner copies
+            # them into static capture buffers across prompts, branches & steps.
+            static_block_kwargs = {
+                key: value for key, value in block_kwargs.items() if key != "_worldfoundry_rope_table"
+            }
+            flat_cross_kv: list[torch.Tensor] = []
+            cross_kv_arities: list[int] = []
+            if cross_attention_kv is not None:
+                for entry in cross_attention_kv:
+                    cross_kv_arities.append(len(entry))
+                    flat_cross_kv.extend(entry)
+
+            def _graphed_stack(
+                hidden_in: torch.Tensor,
+                context_in: torch.Tensor,
+                t_mod_in: torch.Tensor,
+                freqs_in: torch.Tensor,
+                *extra_tensors: torch.Tensor,
+            ) -> torch.Tensor:
+                cursor = 0
+                local_kwargs = dict(static_block_kwargs)
+                if piecewise_has_rope_table:
+                    local_kwargs["_worldfoundry_rope_table"] = extra_tensors[cursor]
+                    cursor += 1
+                hidden = hidden_in
+                for block_id, block in enumerate(self.blocks):
+                    call_kwargs = local_kwargs
+                    if cross_kv_arities:
+                        arity = cross_kv_arities[block_id]
+                        call_kwargs = dict(
+                            local_kwargs,
+                            _worldfoundry_cross_kv=extra_tensors[cursor : cursor + arity],
+                        )
+                        cursor += arity
+                    hidden = block(hidden, context_in, t_mod_in, freqs_in, **call_kwargs)
+                    hidden = self.after_transformer_block(hidden, block_id, token_state)
+                return hidden
+
+            _worldfoundry_piecewise_graph.get_or_register_segment(
+                piecewise_seg_name,
+                _graphed_stack,
+                extra_key=f"wan_piecewise:{id(self)}:{piecewise_seg_name}",
+            )
+            extra_args: list[torch.Tensor] = []
+            if piecewise_has_rope_table:
+                extra_args.append(piecewise_rope_table)
+            extra_args.extend(flat_cross_kv)
+            return _worldfoundry_piecewise_graph.run_segment(
+                piecewise_seg_name,
+                block_input,
+                context,
+                t_mod,
+                freqs,
+                *extra_args,
+            )
+
         def run_taylor_phase_block(block_id, hidden, cached_phases):
             """Execute/replay the raw phases required by BlockTaylorSeer."""
 
@@ -1447,44 +1751,89 @@ class WanModel(torch.nn.Module):
             )
             return hidden, phase_outputs
 
-        if feature_cache is None:
-            x = run_transformer_blocks(x)
-        else:
-            block_input = x
-            phase_cache_runner = getattr(feature_cache, "run_phase_blocks", None)
-            block_cache_runner = getattr(feature_cache, "run_blocks", None)
-            if callable(phase_cache_runner):
-                x = phase_cache_runner(
-                    int(feature_cache_step),
-                    block_input,
-                    run_transformer_block,
-                    run_taylor_phase_block,
-                    block_count=len(self.blocks),
-                    total_steps=feature_cache_total_steps,
-                )
-            elif callable(block_cache_runner):
-                x = block_cache_runner(
-                    int(feature_cache_step),
-                    block_input,
-                    run_transformer_block,
-                    block_count=len(self.blocks),
-                    total_steps=feature_cache_total_steps,
-                )
+        sol_attn_modules = (
+            [
+                block.self_attn.attn
+                for block in self.blocks
+                if hasattr(block, "self_attn") and hasattr(block.self_attn, "attn")
+            ]
+            if (sol_force_dense or tile_sink_tokens is not None)
+            else []
+        )
+        for mod in sol_attn_modules:
+            if sol_force_dense:
+                mod._worldfoundry_force_dense = True
+            if tile_sink_tokens is not None:
+                mod._worldfoundry_sol_sink_tokens = tile_sink_tokens
+        try:
+            if feature_cache is None:
+                x = run_transformer_blocks_maybe_graphed(x)
             else:
-                signal_kind = str(getattr(feature_cache, "signal_kind", "timestep-modulation"))
-                if signal_kind == "time-embedding":
-                    cache_signal = t
-                elif signal_kind == "timestep-modulation":
-                    cache_signal = t_mod
+                block_input = x
+                phase_cache_runner = getattr(feature_cache, "run_phase_blocks", None)
+                block_cache_runner = getattr(feature_cache, "run_blocks", None)
+                if callable(phase_cache_runner):
+                    x = phase_cache_runner(
+                        int(feature_cache_step),
+                        block_input,
+                        run_transformer_block,
+                        run_taylor_phase_block,
+                        block_count=len(self.blocks),
+                        total_steps=feature_cache_total_steps,
+                    )
+                elif callable(block_cache_runner):
+                    x = block_cache_runner(
+                        int(feature_cache_step),
+                        block_input,
+                        run_transformer_block,
+                        block_count=len(self.blocks),
+                        total_steps=feature_cache_total_steps,
+                    )
                 else:
-                    raise ValueError(f"unsupported Wan feature-cache signal kind: {signal_kind!r}")
-                residual = feature_cache.run(
-                    int(feature_cache_step),
-                    cache_signal,
-                    lambda: run_transformer_blocks(block_input) - block_input,
-                    total_steps=feature_cache_total_steps,
-                )
-                x = block_input + residual
+                    signal_kind = str(getattr(feature_cache, "signal_kind", "timestep-modulation"))
+                    if signal_kind == "time-embedding":
+                        cache_signal = t
+                    elif signal_kind == "timestep-modulation":
+                        cache_signal = t_mod
+                    else:
+                        raise ValueError(f"unsupported Wan feature-cache signal kind: {signal_kind!r}")
+                    if sequence_parallel_state is not None:
+                        import torch.distributed as dist
+
+                        from worldfoundry.core.distributed.sequence_parallel.runtime import (
+                            get_sequence_parallel_group,
+                        )
+
+                        if dist.is_initialized():
+                            sp_group = get_sequence_parallel_group()
+                            if sp_group is not None and dist.get_world_size(sp_group) > 1:
+                                # Broadcast the cache probe signal from SP group rank 0 so every
+                                # sequence-parallel rank observes bitwise-identical cache decisions
+                                # and either enters or skips Ulysses collectives together.
+                                cache_signal = cache_signal.contiguous()
+                                src_global = dist.get_global_rank(sp_group, 0)
+                                dist.broadcast(cache_signal, src=src_global, group=sp_group)
+                    ran_dense = [False]
+
+                    def _dense_residual() -> torch.Tensor:
+                        ran_dense[0] = True
+                        return run_transformer_blocks_maybe_graphed(block_input) - block_input
+
+                    residual = feature_cache.run(
+                        int(feature_cache_step),
+                        cache_signal,
+                        _dense_residual,
+                        total_steps=feature_cache_total_steps,
+                    )
+                    if piecewise_eligible and not ran_dense[0]:
+                        _worldfoundry_piecewise_graph.record_skip(piecewise_seg_name)
+                    x = block_input + residual
+        finally:
+            for mod in sol_attn_modules:
+                if sol_force_dense:
+                    mod._worldfoundry_force_dense = False
+                if tile_sink_tokens is not None:
+                    mod._worldfoundry_sol_sink_tokens = None
 
         if sequence_parallel_state is not None:
             from worldfoundry.core.distributed.sequence_parallel.runtime import (
@@ -1493,6 +1842,9 @@ class WanModel(torch.nn.Module):
 
             x = sequence_parallel_all_gather(x, dim=1)
             x = x[:, :sequence_parallel_length]
+
+        if tile_inv_perm is not None:
+            x = x.index_select(1, tile_inv_perm)
 
         x, auxiliary = self.finalize_token_sequence(x, token_state, **kwargs)
         if request_batch_sizes:

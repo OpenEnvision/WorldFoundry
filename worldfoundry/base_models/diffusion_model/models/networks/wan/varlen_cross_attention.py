@@ -53,8 +53,24 @@ class CachedTextCrossAttentionMixin:
                 crossattn_cache["is_init"] = True
                 k = self.norm_k(self.k(context)).view(b, -1, n, d)
                 v = self.v(context).view(b, -1, n, d)
-                crossattn_cache["k"] = k
-                crossattn_cache["v"] = v
+                existing_k = crossattn_cache.get("k")
+                existing_v = crossattn_cache.get("v")
+                if (
+                    isinstance(existing_k, Tensor)
+                    and isinstance(existing_v, Tensor)
+                    and existing_k.shape == k.shape
+                    and existing_v.shape == v.shape
+                    and existing_k.device == k.device
+                    and existing_v.device == v.device
+                    and existing_k.dtype == k.dtype
+                    and existing_v.dtype == v.dtype
+                ):
+                    existing_k.copy_(k)
+                    existing_v.copy_(v)
+                    k, v = existing_k, existing_v
+                else:
+                    crossattn_cache["k"] = k
+                    crossattn_cache["v"] = v
             else:
                 k = crossattn_cache["k"]
                 v = crossattn_cache["v"]

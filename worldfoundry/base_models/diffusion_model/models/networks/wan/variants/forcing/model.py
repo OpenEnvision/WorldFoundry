@@ -23,14 +23,15 @@ __all__ = ["WanModel"]
 
 
 def sinusoidal_embedding_1d(dim, position):
-    """Classic sinusoidal features for 1-D timestep / position ids."""
+    """Classic sinusoidal features for 1-D timestep / position ids (CUDA-graph safe)."""
     # preprocess
     assert dim % 2 == 0
     half = dim // 2
     position = position.type(torch.float64)
 
-    # calculation
-    sinusoid = torch.outer(position, torch.pow(10000, -torch.arange(half).to(position).div(half)))
+    # calculation — build arange directly on position.device to avoid H2D copies during graph capture
+    freqs = torch.pow(10000.0, -torch.arange(half, device=position.device, dtype=torch.float64).div(half))
+    sinusoid = torch.outer(position, freqs)
     x = torch.cat([torch.cos(sinusoid), torch.sin(sinusoid)], dim=1)
     return x
 

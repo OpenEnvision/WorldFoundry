@@ -563,9 +563,14 @@ class InferenceFlowMatchScheduler:
             )
             self.sigmas = shift_flow_sigmas(unshifted, self.shift)
         self.timesteps = self.sigmas * self.num_timesteps
+        self._device_timesteps_cache: dict[torch.device, Tensor] = {}
+        self._device_sigmas_cache: dict[tuple[torch.device, torch.dtype], Tensor] = {}
 
     def _indices(self, timestep: Tensor, device: torch.device) -> Tensor:
-        timesteps = self.timesteps.to(device=device, dtype=torch.float64)
+        timesteps = self._device_timesteps_cache.get(device)
+        if timesteps is None:
+            timesteps = self.timesteps.to(device=device, dtype=torch.float64)
+            self._device_timesteps_cache[device] = timesteps
         values = timestep.reshape(-1).to(device=device, dtype=torch.float64)
         return torch.argmin(
             (timesteps.unsqueeze(0) - values.unsqueeze(1)).abs(),
@@ -574,7 +579,12 @@ class InferenceFlowMatchScheduler:
 
     def sigma_at(self, timestep: Tensor, reference: Tensor) -> Tensor:
         indices = self._indices(timestep, reference.device)
-        values = self.sigmas.to(device=reference.device, dtype=reference.dtype)[indices]
+        key = (reference.device, reference.dtype)
+        sigmas = self._device_sigmas_cache.get(key)
+        if sigmas is None:
+            sigmas = self.sigmas.to(device=reference.device, dtype=reference.dtype)
+            self._device_sigmas_cache[key] = sigmas
+        values = sigmas[indices]
         return _broadcast_sigma(values, reference)
 
     def add_noise(self, original_samples: Tensor, noise: Tensor, timestep: Tensor) -> Tensor:

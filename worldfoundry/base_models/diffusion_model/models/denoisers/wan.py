@@ -49,105 +49,26 @@ from .graph_wrapped import (
     FeatureCacheDenoiserMixin,
     GraphWrappedDenoiserMixin,
     acceleration_runtime_call,
+    resolve_cuda_graph_mode,
     resolve_cuda_graph_option,
     validate_cuda_graph_options,
 )
-
-WAN21_T2V_1P3B_CONFIG = {
-    "has_image_input": False,
-    "patch_size": (1, 2, 2),
-    "in_dim": 16,
-    "dim": 1536,
-    "ffn_dim": 8960,
-    "freq_dim": 256,
-    "text_dim": 4096,
-    "out_dim": 16,
-    "num_heads": 12,
-    "num_layers": 30,
-    "eps": 1e-6,
-}
-
-WAN21_T2V_14B_CONFIG = {
-    **WAN21_T2V_1P3B_CONFIG,
-    "dim": 5120,
-    "ffn_dim": 13824,
-    "num_heads": 40,
-    "num_layers": 40,
-}
-
-WAN22_T2V_A14B_CONFIG = dict(WAN21_T2V_14B_CONFIG)
-
-WAN21_I2V_14B_CONFIG = {
-    **WAN21_T2V_14B_CONFIG,
-    "has_image_input": True,
-    "in_dim": 36,
-}
-
-# Some Wan2.1 research checkpoints (for example WoW 1.3B) train the
-# first-frame VAE condition without adding the CLIP cross-attention branch.
-# This is still the canonical Wan graph: only its explicit conditioning roles
-# differ from the released 14B I2V checkpoint.
-WAN21_VAE_I2V_1P3B_CONFIG = {
-    **WAN21_T2V_1P3B_CONFIG,
-    "in_dim": 36,
-    "require_vae_embedding": True,
-    "require_clip_embedding": False,
-}
-
-# Wan2.2 A14B I2V conditions the latent stream with the VAE mask/latent
-# tensor but does not own the Wan2.1 CLIP image branch.  Keeping that split in
-# one canonical graph is required by Fun-Control and FantasyWorld releases.
-WAN22_I2V_A14B_CONFIG = {
-    **WAN21_T2V_14B_CONFIG,
-    "has_image_input": False,
-    "in_dim": 36,
-    "require_vae_embedding": True,
-    "require_clip_embedding": False,
-}
-
-WAN22_TI2V_5B_CONFIG = {
-    "has_image_input": False,
-    "patch_size": (1, 2, 2),
-    "in_dim": 48,
-    "dim": 3072,
-    "ffn_dim": 14336,
-    "freq_dim": 256,
-    "text_dim": 4096,
-    "out_dim": 48,
-    "num_heads": 24,
-    "num_layers": 30,
-    "eps": 1e-6,
-    "per_token_timestep": True,
-}
-
-# Self-Forcing's generator is the Wan2.1 T2V 1.3B geometry on the causal
-# Self-Forcing graph, with global attention (no local window or sink).
-SELF_FORCING_WAN21_T2V_1P3B_CONFIG = {
-    "model_type": "t2v",
-    "patch_size": (1, 2, 2),
-    "text_len": 512,
-    "in_dim": 16,
-    "dim": 1536,
-    "ffn_dim": 8960,
-    "freq_dim": 256,
-    "text_dim": 4096,
-    "out_dim": 16,
-    "num_heads": 12,
-    "num_layers": 30,
-    "local_attn_size": -1,
-    "sink_size": 0,
-    "qk_norm": True,
-    "cross_attn_norm": True,
-    "eps": 1e-6,
-}
-
-# Approximate long-rollout preset, after FlashDreams' Self-Forcing
-# ``sink5-window7-rerope`` pipeline: the first five latent frames stay in the
-# cache as a static sink, a rolling window holds the seven newest (the recent
-# four plus the current block of three), and RoPE positions are cache slots.
-SELF_FORCING_LONG_ROLLOUT_KV_WINDOW = "sink5-window7-rerope"
-SELF_FORCING_LONG_ROLLOUT_SINK_FRAMES = 5
-SELF_FORCING_LONG_ROLLOUT_WINDOW_FRAMES = 7
+from .wan_configs import (
+    SELF_FORCING_LONG_ROLLOUT_KV_WINDOW,
+    SELF_FORCING_LONG_ROLLOUT_SINK_FRAMES,
+    SELF_FORCING_LONG_ROLLOUT_WINDOW_FRAMES,
+    SELF_FORCING_WAN21_T2V_1P3B_CONFIG,
+    SKYREELS_V2_DF_1P3B_CONFIG,
+    SKYREELS_V3_R2V_14B_CONFIG,
+    WAN21_I2V_14B_CONFIG,
+    WAN21_T2V_1P3B_CONFIG,
+    WAN21_T2V_14B_CONFIG,
+    WAN21_VAE_I2V_1P3B_CONFIG,
+    WAN22_I2V_A14B_CONFIG,
+    WAN22_T2V_A14B_CONFIG,
+    WAN22_TI2V_5B_CONFIG,
+    WAN_CIVITAI_CONFIGS_BY_HASH,
+)
 
 _WAN_DENOISER_OPTION_KEYS = frozenset(
     {
@@ -245,78 +166,6 @@ def _merge_wan_peft_adapter(model: torch.nn.Module, adapter_path: Path) -> None:
     merged = merge_peft_adapter(loaded)
     if merged is not model:
         raise RuntimeError("PEFT merge did not return the loaded Wan base model")
-
-
-SKYREELS_V2_DF_1P3B_CONFIG = {
-    **WAN21_T2V_1P3B_CONFIG,
-    "inject_sample_info": True,
-}
-
-SKYREELS_V3_R2V_14B_CONFIG = {
-    "has_image_input": False,
-    "patch_size": (1, 2, 2),
-    "in_dim": 16,
-    "dim": 5120,
-    "ffn_dim": 13824,
-    "freq_dim": 256,
-    "text_dim": 4096,
-    "out_dim": 16,
-    "num_heads": 40,
-    "num_layers": 40,
-    "eps": 1e-6,
-}
-
-
-WAN_CIVITAI_CONFIGS_BY_HASH = {
-    "9269f8db9040a9d860eaca435be61814": WAN21_T2V_1P3B_CONFIG,
-    "aafcfd9672c3a2456dc46e1cb6e52c70": WAN21_T2V_14B_CONFIG,
-    "6bfcfb3b342cb286ce886889d519a77e": WAN21_I2V_14B_CONFIG,
-    "6d6ccde6845b95ad9114ab993d917893": {
-        **WAN21_T2V_1P3B_CONFIG,
-        "has_image_input": True,
-        "in_dim": 36,
-    },
-    "349723183fc063b2bfc10bb2835cf677": {
-        **WAN21_T2V_1P3B_CONFIG,
-        "has_image_input": True,
-        "in_dim": 48,
-    },
-    "efa44cddf936c70abd0ea28b6cbe946c": {
-        **WAN21_T2V_14B_CONFIG,
-        "has_image_input": True,
-        "in_dim": 48,
-    },
-    "3ef3b1f8e1dab83d5b71fd7b617f859f": {
-        **WAN21_I2V_14B_CONFIG,
-        "has_image_pos_emb": True,
-    },
-    "70ddad9d3a133785da5ea371aae09504": {
-        **WAN21_T2V_1P3B_CONFIG,
-        "has_image_input": True,
-        "in_dim": 48,
-        "has_ref_conv": True,
-    },
-    "26bde73488a92e64cc20b0a7485b9e5b": {
-        **WAN21_T2V_14B_CONFIG,
-        "has_image_input": True,
-        "in_dim": 48,
-        "has_ref_conv": True,
-    },
-    "ac6a5aa74f4a0aab6f64eb9a72f19901": {
-        **WAN21_T2V_1P3B_CONFIG,
-        "has_image_input": True,
-        "in_dim": 32,
-        "add_control_adapter": True,
-        "in_dim_control_adapter": 24,
-    },
-    "b61c605c2adbd23124d152ed28e049ae": {
-        **WAN21_T2V_14B_CONFIG,
-        "has_image_input": True,
-        "in_dim": 32,
-        "add_control_adapter": True,
-        "in_dim_control_adapter": 24,
-    },
-}
 
 
 def infer_native_wan_transformer_config(
@@ -533,10 +382,26 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         channel_condition_key: str | None = None,
         manage_autocast: bool = True,
         inplace_residual: bool = False,
-        enable_cuda_graph: bool = False,
+        enable_cuda_graph: bool | str = False,
         teacache_threshold: float | None = None,
         feature_cache_config: WanFeatureCacheConfig | None = None,
     ) -> None:
+        if isinstance(enable_cuda_graph, str):
+            normalized_graph_mode = enable_cuda_graph.strip().casefold()
+            if normalized_graph_mode in {"off", "none", "false", "disabled"}:
+                graph_runner_mode: bool | str = False
+            elif normalized_graph_mode in {"whole", "full", "true"}:
+                graph_runner_mode = True
+            elif normalized_graph_mode == "piecewise":
+                graph_runner_mode = "piecewise"
+            else:
+                raise ValueError(
+                    f"unsupported Wan enable_cuda_graph {enable_cuda_graph!r}; "
+                    "expected bool, 'off', 'whole', or 'piecewise'"
+                )
+        else:
+            graph_runner_mode = bool(enable_cuda_graph)
+        graph_enabled = graph_runner_mode is not False
         if not isinstance(manage_autocast, bool):
             raise TypeError("Wan manage_autocast must be a bool")
         if not isinstance(inplace_residual, bool):
@@ -552,7 +417,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         self.model = model
         self._prepare_cross_kv = bool(
             getattr(model, "_worldfoundry_static_cross_kv", None) is not None
-            and (enable_cuda_graph or getattr(model, "_worldfoundry_compile_config", {}).get("scope") == "regional")
+            and (graph_enabled or getattr(model, "_worldfoundry_compile_config", {}).get("scope") == "regional")
         )
         if self._prepare_cross_kv:
             from ...optimizations.static_cross_kv import StaticCrossKVProcessor
@@ -617,9 +482,14 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         }
         self._feature_cache_epoch_counter = 0
         self._optimization_request_windows: dict[str, dict[str, object]] = {}
+        sol_sched = getattr(model, "_worldfoundry_sol_schedule", None)
+        if graph_runner_mode is True and isinstance(sol_sched, dict) and int(sol_sched.get("dense_steps", 0)) > 0:
+            # Step-scheduled Sol-Attn switches between dense warmup steps and sparse steps;
+            # piecewise graph mode captures and replays a dedicated graph for each phase.
+            graph_runner_mode = "piecewise"
         self._init_graph_runner(
             model,
-            enabled=enable_cuda_graph,
+            enabled=graph_runner_mode,
             extra_key=f"wan:{type(model).__module__}.{type(model).__qualname__}",
         )
 
@@ -1170,6 +1040,17 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
                 model_kwargs["cross_attention_kv"] = tuple(
                     block.cross_attn.get_processor().prepare(block.cross_attn, context) for block in self.model.blocks
                 )
+            if getattr(self, "_piecewise_graph", None) is not None:
+                model_kwargs["_worldfoundry_piecewise_graph"] = self._piecewise_graph
+            if getattr(self.model, "_worldfoundry_token_pruning_config", None) is not None:
+                model_kwargs["_worldfoundry_token_pruning_step"] = (
+                    int(model_input.step_index),
+                    None if model_input.total_steps is None else int(model_input.total_steps),
+                    str(model_input.request_id or ""),
+                    str(model_input.branch or "positive"),
+                )
+            if getattr(self.model, "_worldfoundry_sol_schedule", None) is not None:
+                model_kwargs["_worldfoundry_sol_step_index"] = int(model_input.step_index)
             sample = self._run_network(
                 x=model_latents,
                 timestep=timestep,
@@ -1414,10 +1295,18 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             compiled_qkv_executed = (
                 int(qkv_fusion.get("lifetime_compiled_graph_traces", 0)) > 0 and compile_request_calls > 0
             )
+            graph_replayed = graph is not None and int(graph.get("replay", 0)) > 0
+            graph_qkv_executed = graph_replayed and (
+                int(qkv_fusion.get("lifetime_eager_projection_calls", 0)) > 0
+                or int(qkv_fusion.get("lifetime_compiled_graph_traces", 0)) > 0
+            )
+            if graph_qkv_executed and int(qkv_fusion["eager_projection_calls"]) <= 0:
+                effective["fuse_qkv_runtime"] = "cuda-graph-replayed"
             if (
                 int(qkv_fusion["fused_blocks"]) > 0
                 and int(qkv_fusion["eager_projection_calls"]) <= 0
                 and not compiled_qkv_executed
+                and not graph_qkv_executed
             ):
                 fallback = "fuse_qkv: merged projections were installed but no forward execution receipt was recorded"
                 if fallback not in fallbacks:
@@ -1434,6 +1323,13 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
 
             fused_rope = fused_rope_runtime_report(fused_rope_state)
             effective["fused_rope_runtime"] = fused_rope["effective"]
+            if (
+                graph is not None
+                and int(graph.get("replay", 0)) > 0
+                and int(fused_rope["eager_calls"]) <= 0
+                and int(getattr(fused_rope_state, "lifetime_provider_calls", 0)) > 0
+            ):
+                effective["fused_rope_runtime"] = "cuda-graph-replayed"
             eager_failures = sum(
                 int(fused_rope[name])
                 for name in (
@@ -2343,11 +2239,14 @@ class SelfForcingWanDenoiser:
         timestep_shift: float = 5.0,
         compute_dtype: torch.dtype = torch.bfloat16,
         kv_window: str | None = None,
+        enable_cuda_graph: bool = False,
     ) -> None:
         """Wrap ``model`` with ``block_size``-frame blocks over a ``cache_frames``-frame global cache.
 
         ``kv_window`` selects the rolling long-rollout cache instead; ``cache_frames``
-        then does not apply.
+        then does not apply. When ``enable_cuda_graph`` is True, a resident KV buffer
+        pool preserves static device pointers across rollouts so chunk-slot CUDA Graphs
+        captured through :class:`PiecewiseBlockGraphRunner` replay without recapture.
         """
         if min(int(block_size), int(cache_frames)) <= 0:
             raise ValueError("Self-Forcing block_size and cache_frames must be positive")
@@ -2362,6 +2261,13 @@ class SelfForcingWanDenoiser:
         self.cache_frames = int(cache_frames)
         self.kv_window = kv_window
         self.compute_dtype = compute_dtype
+        self.enable_cuda_graph = bool(enable_cuda_graph)
+        self._graph_kv_pool: dict[tuple[Any, ...], dict[str, Any]] = {}
+        self._piecewise_graph: Any = None
+        if self.enable_cuda_graph:
+            from worldfoundry.core.execution.graphs.piecewise_graph import PiecewiseBlockGraphRunner
+
+            self._piecewise_graph = PiecewiseBlockGraphRunner(warmup=1, max_graphs_per_segment=8, clone_outputs=True)
         self.training_schedule = InferenceFlowMatchScheduler(
             num_inference_steps=1000,
             shift=float(timestep_shift),
@@ -2405,20 +2311,75 @@ class SelfForcingWanDenoiser:
                 "local_attention_frames": cache_frames,
                 "sink_frames": SELF_FORCING_LONG_ROLLOUT_SINK_FRAMES,
             }
+        geometry = CausalVideoCacheGeometry(
+            batch_size=batch_size,
+            total_frames=cache_frames,
+            frame_tokens=frame_sequence_length,
+            frames_per_block=self.block_size,
+            num_layers=int(self.model.num_layers),
+            num_heads=num_heads,
+            head_dim=int(self.model.dim) // num_heads,
+            **window,
+        )
+        reset_host = getattr(self.model, "reset_causal_host_cache", None)
+        if callable(reset_host):
+            reset_host()
+        if self.enable_cuda_graph and torch.device(device).type == "cuda":
+            pool_key = (
+                geometry,
+                str(torch.device(device)),
+                dtype,
+            )
+            pooled = self._graph_kv_pool.get(pool_key)
+            if pooled is None:
+                pooled = allocate_causal_video_cache(geometry, device=device, dtype=dtype)
+                self._graph_kv_pool[pool_key] = pooled
+            else:
+                for layer in pooled["kv_cache"]:
+                    layer["k"].zero_()
+                    layer["v"].zero_()
+                    layer["global_end_index"].zero_()
+                    layer["local_end_index"].zero_()
+                for layer in pooled["crossattn_cache"]:
+                    layer["is_init"] = False
+                    if "k" in layer:
+                        layer["k"].zero_()
+                    if "v" in layer:
+                        layer["v"].zero_()
+                pooled["active_block"] = -1
+                pooled["committed_blocks"] = 0
+                pooled["committed_frames"] = 0
+            return pooled
         return allocate_causal_video_cache(
-            CausalVideoCacheGeometry(
-                batch_size=batch_size,
-                total_frames=cache_frames,
-                frame_tokens=frame_sequence_length,
-                frames_per_block=self.block_size,
-                num_layers=int(self.model.num_layers),
-                num_heads=num_heads,
-                head_dim=int(self.model.dim) // num_heads,
-                **window,
-            ),
+            geometry,
             device=device,
             dtype=dtype,
         )
+
+    def runtime_optimization_report(self) -> dict[str, Any]:
+        """Expose piecewise chunk CUDA Graph, quantization, and fusion telemetry."""
+        from worldfoundry.core.acceleration.quantization.linear import quantization_runtime_report
+
+        from ...optimizations.qkv_fusion import qkv_fusion_report
+
+        quant = quantization_runtime_report(self.model)
+        qkv = qkv_fusion_report(self.model)
+        return {
+            "requested": {
+                "cuda_graph": self.enable_cuda_graph,
+                "rope_precision": getattr(self.model, "_worldfoundry_rope_precision", "fp64"),
+            },
+            "effective": {
+                "cuda_graph": "piecewise-chunk-graph" if self._piecewise_graph is not None else "disabled",
+                "quantization": None if quant is None else quant.get("effective"),
+                "fuse_qkv": None if qkv is None else qkv.get("execution"),
+            },
+            "runtime": {
+                "cuda_graph": self._piecewise_graph.report() if self._piecewise_graph is not None else None,
+                "quantization": quant,
+                "qkv_fusion": qkv,
+            },
+        }
 
     def __call__(self, model_input: DenoiserInput) -> DenoiserOutput:
         """Denoise one latent block, or commit it to the cache, and return its x0 prediction."""
@@ -2432,20 +2393,104 @@ class SelfForcingWanDenoiser:
         timestep = model_input.timestep.reshape(-1)
         if timestep.numel() != 1:
             raise ValueError("Self-Forcing applies one timestep to every frame of a block")
-        noisy = model_input.latents.to(dtype=self.compute_dtype)
+        noisy = model_input.latents.to(dtype=self.compute_dtype).contiguous()
         batch, _, frames, height, width = noisy.shape
-        frame_timesteps = timestep.to(device=noisy.device, dtype=torch.float32).expand(batch, frames)
+        frame_timesteps = timestep.to(device=noisy.device, dtype=torch.float32).expand(batch, frames).contiguous()
         current_start = int(conditioning.get("current_start", 0))
-        flow = self.model(
-            noisy,
-            t=frame_timesteps,
-            context=context,
-            seq_len=frames * height * width // 4,
-            kv_cache=cache["kv_cache"],
-            crossattn_cache=cache["crossattn_cache"],
-            current_start=current_start,
-            cache_start=current_start,
-        )
+        seq_len = frames * height * width // 4
+        kv_cache = cache["kv_cache"]
+        crossattn_cache = cache["crossattn_cache"]
+        cross_ready = bool(crossattn_cache) and all(bool(entry.get("is_init")) for entry in crossattn_cache)
+
+        # Graph capture runs on steady cross-cache-ready passes (34 of 35 passes per rollout).
+        # Step 0 initializes crossattn_cache eagerly (allocating static K/V buffers reused thereafter).
+        if (
+            self._piecewise_graph is not None
+            and cross_ready
+            and noisy.device.type == "cuda"
+            and not torch.is_grad_enabled()
+        ):
+            # Capture/replay each chunk slot's exact static KV-write + KV-read slice.
+            layer0 = kv_cache[0]
+            kv_cap = int(layer0["k"].shape[1])
+            frame_seqlen = height * width // 4
+            num_new_tokens = frames * frame_seqlen
+            current_end = current_start + num_new_tokens
+            mirror = getattr(self.model, "_worldfoundry_kv_host_mirror", {})
+            mirror_key = (id(kv_cache), layer0["k"].data_ptr())
+            prev_global_end, prev_local_end = mirror.get(mirror_key, (0, 0))
+            self_attn0 = self.model.blocks[0].self_attn
+            local_attn = int(self_attn0.local_attn_size)
+            sink_tokens = int(self_attn0.sink_size) * frame_seqlen
+            relative_rope = bool(getattr(self_attn0, "kv_cache_relative_rope", False))
+            if local_attn != -1 and current_end > prev_global_end and num_new_tokens + prev_local_end > kv_cap:
+                num_evicted = num_new_tokens + prev_local_end - kv_cap
+                num_rolled = prev_local_end - num_evicted - sink_tokens
+                next_local_end = prev_local_end + current_end - prev_global_end - num_evicted
+            else:
+                num_evicted = 0
+                num_rolled = 0
+                next_local_end = prev_local_end + current_end - prev_global_end
+            local_start_index = next_local_end - num_new_tokens
+            if relative_rope:
+                # Cache-relative RoPE depends only on local KV window geometry, keeping
+                # graph count O(1) across arbitrarily long streaming rollouts.
+                seg_name = f"rel_ls{local_start_index}_le{next_local_end}_ev{num_evicted}_rl{num_rolled}_q{seq_len}"
+            else:
+                # Absolute RoPE depends on chunk start frame + local KV slice; step 0 and
+                # subsequent denoise/commit steps of the same chunk share one segment.
+                start_f = current_start // frame_seqlen if frame_seqlen > 0 else current_start
+                seg_name = (
+                    f"abs_f{start_f}_ls{local_start_index}_le{next_local_end}_ev{num_evicted}_rl{num_rolled}_q{seq_len}"
+                )
+
+            def _make_segment_fn(
+                slot_start: int,
+                slot_seq_len: int,
+                slot_prev_global: int,
+                slot_prev_local: int,
+            ):
+                def _run_slot(x_in: torch.Tensor, t_in: torch.Tensor, ctx_in: torch.Tensor) -> torch.Tensor:
+                    # Restore pre-call host mirror inside capture/warmup so replay matches the slot.
+                    self.model.__dict__.setdefault("_worldfoundry_kv_host_mirror", {})[mirror_key] = (
+                        slot_prev_global,
+                        slot_prev_local,
+                    )
+                    return self.model(
+                        x_in,
+                        t=t_in,
+                        context=ctx_in,
+                        seq_len=slot_seq_len,
+                        kv_cache=kv_cache,
+                        crossattn_cache=crossattn_cache,
+                        current_start=slot_start,
+                        cache_start=slot_start,
+                    )
+
+                return _run_slot
+
+            self._piecewise_graph.get_or_register_segment(
+                seg_name,
+                _make_segment_fn(current_start, seq_len, prev_global_end, prev_local_end),
+                extra_key=f"sf:{seg_name}:{layer0['k'].data_ptr()}:{crossattn_cache[0]['k'].data_ptr()}",
+            )
+            flow = self._piecewise_graph.run_segment(seg_name, noisy, frame_timesteps, context)
+            # Advance host mirror after graph replay (matches non-graphed semantics).
+            self.model.__dict__.setdefault("_worldfoundry_kv_host_mirror", {})[mirror_key] = (
+                current_end,
+                next_local_end,
+            )
+        else:
+            flow = self.model(
+                noisy,
+                t=frame_timesteps,
+                context=context,
+                seq_len=seq_len,
+                kv_cache=kv_cache,
+                crossattn_cache=crossattn_cache,
+                current_start=current_start,
+                cache_start=current_start,
+            )
         if not isinstance(flow, torch.Tensor):
             raise TypeError("Self-Forcing network must return a tensor")
         x0 = self.training_schedule.flow_to_x0(
@@ -2470,7 +2515,7 @@ def build_self_forcing_wan21_denoiser(
     from ..networks.wan.variants.forcing.self_forcing import CausalWanModel
 
     options = context.component_options
-    unknown = sorted(set(options) - {"block_size", "cache_frames", "timestep_shift"})
+    unknown = sorted(set(options) - {"block_size", "cache_frames", "timestep_shift", "cuda_graph", "rope_precision"})
     if unknown:
         raise ValueError(f"unsupported Self-Forcing denoiser options: {unknown}")
     block_size = int(options.get("block_size", 3))
@@ -2494,6 +2539,12 @@ def build_self_forcing_wan21_denoiser(
         raise ValueError(
             f"unsupported Self-Forcing kv_window {kv_window!r}; expected {SELF_FORCING_LONG_ROLLOUT_KV_WINDOW!r}"
         )
+    enable_cuda_graph = resolve_cuda_graph_option(context)
+    rope_precision = (
+        str(options.get("rope_precision", context.policy.options.get("rope_precision", "fp64"))).strip().casefold()
+    )
+    if rope_precision not in {"fp32", "fp64"}:
+        raise ValueError("Self-Forcing rope_precision must be 'fp32' or 'fp64'")
     model = NativeModuleLoader().load(
         ModuleLoadSpec(
             module_class=CausalWanModel,
@@ -2506,6 +2557,7 @@ def build_self_forcing_wan21_denoiser(
         context.policy,
     )
     model.num_frame_per_block = block_size
+    model._worldfoundry_rope_precision = rope_precision
     return SelfForcingWanDenoiser(
         model,
         block_size=block_size,
@@ -2513,6 +2565,7 @@ def build_self_forcing_wan21_denoiser(
         timestep_shift=float(options.get("timestep_shift", 5.0)),
         compute_dtype=context.policy.dtype,
         kv_window=kv_window,
+        enable_cuda_graph=enable_cuda_graph,
     )
 
 
@@ -2694,11 +2747,6 @@ def _build_wan_denoiser(
     )
     if rms_norm_precision not in {"fp32", "input"}:
         raise ValueError("Wan rms_norm_precision must be 'fp32' or 'input'")
-    if fused_rope and rope_precision != "fp32":
-        raise ValueError(
-            "Wan fused_rope currently supports rope_precision='fp32' only; "
-            "use fused_rope=False for the exact fp64 RoPE path"
-        )
     if fused_rope and rms_norm_precision == "input":
         raise ValueError(
             "Wan fused_rope currently requires rms_norm_precision='fp32'; "
@@ -2754,7 +2802,10 @@ def _build_wan_denoiser(
 
     load_policy = acceleration_policy(context)
     execution_options = dict(load_policy.options)
-    execution_options["cuda_graph"] = resolve_cuda_graph_option(context)
+    resolved_cuda_graph_mode = resolve_cuda_graph_mode(context)
+    execution_options["cuda_graph"] = (
+        "piecewise" if resolved_cuda_graph_mode == "piecewise" else (resolved_cuda_graph_mode == "whole")
+    )
     for name in (
         "static_cross_kv",
         "compile_scope",
@@ -2831,7 +2882,7 @@ def _build_wan_denoiser(
         channel_condition_key=channel_condition_key,
         manage_autocast=context.purpose is not BuildPurpose.TRAINING,
         inplace_residual=inplace_residual,
-        enable_cuda_graph=resolve_cuda_graph_option(context),
+        enable_cuda_graph=resolve_cuda_graph_mode(context),
         feature_cache_config=feature_cache_config,
     )
 

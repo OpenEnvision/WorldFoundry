@@ -53,7 +53,40 @@ class NativeSelfForcingPipeline(NativeVisualDiffusionPipeline):
     DEFAULT_FPS = 16
     DEFAULT_NEGATIVE_PROMPT = ""
     DEFAULT_SCHEDULER_OPTIONS: Mapping[str, object] = {"shift": 5.0}
-    RUNTIME_POLICY_OPTION_KEYS = (*NativeVisualDiffusionPipeline.RUNTIME_POLICY_OPTION_KEYS, "kv_window")
+    RUNTIME_POLICY_OPTION_KEYS = (
+        *NativeVisualDiffusionPipeline.RUNTIME_POLICY_OPTION_KEYS,
+        "kv_window",
+        "overlap_vae_decode",
+        "vae_streaming_compile",
+    )
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        model_path: str | Mapping[str, Any] | None = None,
+        required_components: Mapping[str, Any] | None = None,
+        device: str = "cuda",
+        model_id: str | None = None,
+        **kwargs: Any,
+    ):
+        vae_streaming_compile = bool(kwargs.get("vae_streaming_compile", False))
+        overlap_vae_decode = bool(kwargs.get("overlap_vae_decode", False))
+        if isinstance(model_path, Mapping):
+            if model_path.get("vae_streaming_compile"):
+                vae_streaming_compile = True
+            if model_path.get("overlap_vae_decode"):
+                overlap_vae_decode = True
+        pipeline = super().from_pretrained(
+            model_path=model_path,
+            required_components=required_components,
+            device=device,
+            model_id=model_id,
+            **kwargs,
+        )
+        if vae_streaming_compile and hasattr(pipeline._codec, "streaming_compile"):
+            pipeline._codec.streaming_compile = True
+        pipeline.overlap_vae_decode = overlap_vae_decode
+        return pipeline
 
     def __init__(
         self,
@@ -68,6 +101,7 @@ class NativeSelfForcingPipeline(NativeVisualDiffusionPipeline):
         self._realtime_prompt = ""
         self._realtime_seed = 0
         self._realtime_options: dict[str, Any] = {}
+        self.overlap_vae_decode: bool = False
 
     @property
     def _window_runner(self) -> AutoregressiveWindowRunner:
@@ -217,6 +251,147 @@ class NativeSelfForcingPipeline(NativeVisualDiffusionPipeline):
                 "chunks_total": stream.total_blocks,
             },
         }
+
+    def stream_realtime_overlapped(
+        self,
+        prompt: str = "",
+        *,
+        images: Any = None,
+        seed: int = 42,
+        max_chunks: int | None = None,
+        **kwargs: Any,
+    ):
+        """Yield decoded uint8 chunks while overlapping chunk ``k`` DiT with chunk ``k-1`` VAE decode.
+
+        Runs DiT on a dedicated non-blocking compute stream and causal VAE decode +
+        async D2H transfer on a separate non-blocking decode stream so neither side
+        hits legacy CUDA Stream-0 implicit synchronization. Chunk 0 is yielded as
+        soon as its decode finishes while Chunk 1 DiT is already in flight on GPU.
+        """
+        cfg = self.configure_realtime(images=images, prompt=prompt, seed=seed, **kwargs)
+        stream = self._realtime_stream
+        if stream is None:
+            raise RuntimeError(f"{self.OWNER} realtime stream failed to initialize.")
+        runner = self._window_runner
+        total_limit = max_chunks if max_chunks is not None else stream.total_blocks
+        is_cuda = runner.device.type == "cuda"
+        # Dedicated non-blocking streams avoid CUDA default-stream (stream 0)
+        # implicit synchronization when concurrent DiT and VAE kernels overlap.
+        entry_stream = torch.cuda.current_stream(runner.device) if is_cuda else None
+        compute_stream = torch.cuda.Stream(device=runner.device) if is_cuda else None
+        decode_stream = torch.cuda.Stream(device=runner.device) if is_cuda else None
+        if is_cuda and entry_stream is not None and compute_stream is not None and decode_stream is not None:
+            init_ev = torch.cuda.Event()
+            init_ev.record(entry_stream)
+            compute_stream.wait_event(init_ev)
+            decode_stream.wait_event(init_ev)
+
+        pending_cpu_uint8: torch.Tensor | None = None
+        pending_event: torch.cuda.Event | None = None
+        pending_meta: dict[str, Any] = {}
+        produced = 0
+
+        def _pixels_to_uint8_gpu(pixels: torch.Tensor) -> torch.Tensor:
+            # Match video_tensor_to_uint8_frames(value_range="-1,1", layout="bcthw")
+            # bitwise on GPU before async D2H to avoid 0.5-level rounding drift.
+            frames_t = pixels[0].permute(1, 2, 3, 0).float()
+            return frames_t.clamp(-1.0, 1.0).add(1.0).mul(127.5).to(torch.uint8).contiguous()
+
+        def _flush_pending():
+            nonlocal pending_cpu_uint8, pending_event
+            if pending_cpu_uint8 is None or pending_event is None:
+                return None
+            pending_event.synchronize()
+            frames_np = pending_cpu_uint8.numpy()
+            pending_meta["wall_ms"] = (time.perf_counter() - pending_meta["chunk_t0"]) * 1000.0
+            payload = {
+                "video": frames_np,
+                "video_chunk": VideoChunk(frames=frames_np, layout="thwc", value_range="0,255"),
+                "realtime_spec": cfg["realtime_spec"],
+                "realtime_metrics": dict(pending_meta),
+            }
+            pending_cpu_uint8 = None
+            pending_event = None
+            return payload
+
+        try:
+            while not stream.done and (total_limit is None or produced < total_limit):
+                first_chunk = stream.completed_blocks == 0
+                t_step0 = time.perf_counter()
+                if is_cuda and compute_stream is not None and decode_stream is not None:
+                    with torch.cuda.stream(compute_stream):
+                        latents = stream.step()
+                        if first_chunk and stream.first_frame_latent is not None:
+                            latents = torch.cat((stream.first_frame_latent, latents), dim=2)
+                        latents_for_decode = latents.clone()
+                        latent_ready = torch.cuda.Event()
+                        latent_ready.record(compute_stream)
+                        latents_for_decode.record_stream(decode_stream)
+
+                    # Chunk k DiT is now queued asynchronously on compute_stream (for
+                    # graphed chunks CPU launch returns in <1ms!). Wait ONLY for chunk
+                    # k-1's decode + async D2H copy on decode_stream and yield immediately.
+                    prev_payload = _flush_pending()
+                    if prev_payload is not None:
+                        yield prev_payload
+
+                    with torch.cuda.stream(decode_stream):
+                        decode_stream.wait_event(latent_ready)
+                        pixels_cur = self._codec.decode_chunk(
+                            latents_for_decode,
+                            state=cast(dict, self._realtime_decode_state),
+                            is_first_chunk=first_chunk,
+                        )
+                        uint8_gpu = _pixels_to_uint8_gpu(pixels_cur)
+                        cpu_buf = torch.empty(uint8_gpu.shape, dtype=torch.uint8, pin_memory=True)
+                        cpu_buf.copy_(uint8_gpu, non_blocking=True)
+                        done_ev = torch.cuda.Event()
+                        done_ev.record(decode_stream)
+                    pending_cpu_uint8 = cpu_buf
+                    pending_event = done_ev
+                    pending_meta = {
+                        "chunk_t0": t_step0,
+                        "chunk_index": stream.completed_blocks,
+                        "chunks_total": stream.total_blocks,
+                        "overlapped": True,
+                    }
+                    # Yield chunk 0 immediately once its decode finishes so chunk 1 DiT
+                    # does not contend for SMs and inflate time-to-first-frame (TTFT).
+                    if first_chunk:
+                        first_payload = _flush_pending()
+                        if first_payload is not None:
+                            yield first_payload
+                else:
+                    latents = stream.step()
+                    if first_chunk and stream.first_frame_latent is not None:
+                        latents = torch.cat((stream.first_frame_latent, latents), dim=2)
+                    pixels_cur = self._codec.decode_chunk(
+                        latents,
+                        state=cast(dict, self._realtime_decode_state),
+                        is_first_chunk=first_chunk,
+                    )
+                    frames_cur = video_tensor_to_uint8_frames(pixels_cur, value_range="-1,1", layout="bcthw")
+                    yield {
+                        "video": frames_cur,
+                        "video_chunk": VideoChunk(frames=frames_cur, layout="thwc", value_range="0,255"),
+                        "realtime_spec": cfg["realtime_spec"],
+                        "realtime_metrics": {
+                            "wall_ms": (time.perf_counter() - t_step0) * 1000.0,
+                            "chunk_index": stream.completed_blocks,
+                            "chunks_total": stream.total_blocks,
+                            "overlapped": False,
+                        },
+                    }
+                produced += 1
+
+            final_payload = _flush_pending()
+            if final_payload is not None:
+                yield final_payload
+            if is_cuda and entry_stream is not None and compute_stream is not None and decode_stream is not None:
+                entry_stream.wait_stream(compute_stream)
+                entry_stream.wait_stream(decode_stream)
+        finally:
+            self.reset_realtime()
 
     def reset_realtime(self) -> None:
         """Close the open rollout and drop its codec history; weights stay resident."""
