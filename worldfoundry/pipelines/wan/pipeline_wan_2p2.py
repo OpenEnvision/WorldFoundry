@@ -3,17 +3,76 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, ClassVar, TypeVar
 
 from ..native_diffusion_video import NativeTextToVideoPipeline
 from .pipeline_wan_2p1_t2v import WAN21_NEGATIVE_PROMPT
+from .wan22_sol_acceleration import (
+    Wan22SolConfig,
+    accelerate_wan22_pipeline,
+    wan22_sol_runtime_report,
+)
+
+_Wan2p2PipelineT = TypeVar("_Wan2p2PipelineT", bound="_Wan2p2SolBasePipeline")
 
 
-class Wan2p2Pipeline(NativeTextToVideoPipeline):
+class _Wan2p2SolBasePipeline(NativeTextToVideoPipeline):
+    """Shared SOL-Engine acceleration surface for Wan2.2 5B and A14B pipelines."""
+
+    DEFAULT_SOL_PRESET: ClassVar[str] = "wan22_5b_sol"
+
+    @classmethod
+    def from_pretrained(
+        cls: type[_Wan2p2PipelineT],
+        model_path: str | Mapping[str, Any] | None = None,
+        required_components: Mapping[str, Any] | None = None,
+        device: str = "cuda",
+        model_id: str | None = None,
+        **kwargs: Any,
+    ) -> _Wan2p2PipelineT:
+        sol_profile = kwargs.pop("sol_profile", None)
+        sol_overrides = kwargs.pop("sol_overrides", None)
+        if sol_overrides is not None and not isinstance(sol_overrides, Mapping):
+            raise TypeError("sol_overrides must be a mapping when provided")
+        if sol_profile is not None:
+            # Ensure resident BF16 weights and FP64 RoPE unless explicitly overridden so
+            # SOL-Engine accelerations (FA3, PISA, EasyCache, compile, CUDA Graph) run cleanly.
+            kwargs.setdefault("torch_dtype", "bfloat16")
+            kwargs.setdefault("dit_weight_dtype", "bfloat16")
+            kwargs.setdefault("offload_mode", "resident")
+            kwargs.setdefault("rope_precision", "fp64")
+        pipeline = super().from_pretrained(
+            model_path=model_path,
+            required_components=required_components,
+            device=device,
+            model_id=model_id,
+            **kwargs,
+        )
+        if sol_profile is not None:
+            extra = dict(sol_overrides) if sol_overrides is not None else {}
+            pipeline.apply_sol_engine(sol_profile, **extra)
+        return pipeline
+
+    def apply_sol_engine(
+        self,
+        config: Wan22SolConfig | str | None = None,
+        **overrides: Any,
+    ) -> dict[str, Any]:
+        """Install the Wan2.2 SOL-Engine acceleration stack on this pipeline."""
+        selected = self.DEFAULT_SOL_PRESET if config is None else config
+        return accelerate_wan22_pipeline(self, selected, **overrides)
+
+    def sol_engine_report(self, request_id: str | None = None) -> dict[str, Any]:
+        """Return the auditable live SOL-Engine runtime optimization report."""
+        return wan22_sol_runtime_report(self, request_id=request_id)
+
+
+class Wan2p2Pipeline(_Wan2p2SolBasePipeline):
     """Wan2.2 TI2V 5B with optional first-frame conditioning."""
 
     MODEL_ID = "wan2.2-ti2v-5b"
     OWNER = "Wan2.2 TI2V 5B"
+    DEFAULT_SOL_PRESET = "wan22_5b_sol"
     CHECKPOINT_ROLES = ("dit", "text-encoder", "tokenizer", "vae")
     # Distilled/accelerated Wan releases are commonly distributed as PEFT
     # LoRAs. Reuse the audited Wan merge path so 4-step adapters remain an
@@ -94,11 +153,12 @@ class Wan2p2Pipeline(NativeTextToVideoPipeline):
         )
 
 
-class Wan2p2T2VA14BPipeline(NativeTextToVideoPipeline):
+class Wan2p2T2VA14BPipeline(_Wan2p2SolBasePipeline):
     """Official Wan2.2 T2V A14B dual-expert generation."""
 
     MODEL_ID = "wan2.2-t2v-a14b"
     OWNER = "Wan2.2 T2V A14B"
+    DEFAULT_SOL_PRESET = "wan22_a14b_sol"
     CHECKPOINT_ROLES = ("high-dit", "low-dit", "text-encoder", "tokenizer", "vae")
     DEFAULT_HEIGHT = 480
     DEFAULT_WIDTH = 832
@@ -115,11 +175,12 @@ class Wan2p2T2VA14BPipeline(NativeTextToVideoPipeline):
     }
 
 
-class Wan2p2I2VA14BPipeline(NativeTextToVideoPipeline):
+class Wan2p2I2VA14BPipeline(_Wan2p2SolBasePipeline):
     """Official Wan2.2 I2V A14B dual-expert generation."""
 
     MODEL_ID = "wan2.2-i2v-a14b"
     OWNER = "Wan2.2 I2V A14B"
+    DEFAULT_SOL_PRESET = "wan22_a14b_sol"
     CHECKPOINT_ROLES = ("high-dit", "low-dit", "text-encoder", "tokenizer", "vae")
     GENERATION_TYPE = "i2v"
     ACCEPTS_IMAGES = True
