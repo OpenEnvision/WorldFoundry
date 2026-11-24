@@ -1314,3 +1314,19 @@ def test_exact_environment_mapping_precedes_shared_metadata_rule(project: tuple[
 def test_environment_ownership_requires_exact_paths_and_variants(mappings: dict[str, list[str]]) -> None:
     with pytest.raises(ValueError, match="Environment ownership"):
         impact.environment_variants({"environment_variants": mappings})
+
+
+@pytest.mark.unit
+def test_openai_clip_scoring_requires_cpu_contracts() -> None:
+    module = "worldfoundry/base_models/perception_core/general_perception/openai_clip_runtime/clip"
+    paths = {f"{module}/{name}.py" for name in ("clip", "model", "simple_tokenizer")}
+    plan = impact.select_cases(
+        TOOLS / "geometry_regression_cases.json",
+        TOOLS / "geometry_regression_dependencies.json",
+        TOOLS.parents[1],
+        sorted(paths),
+    )
+    assert plan["status"] == "no_inference_changes", plan["uncovered_paths"]
+    assert plan["selected_cases"] == []
+    assert {row["path"] for row in plan["cpu_only_changes"]} == paths
+    assert plan["required_cpu_contracts"] == ["tests/evaluation/execution/test_openai_clip_scoring.py"]

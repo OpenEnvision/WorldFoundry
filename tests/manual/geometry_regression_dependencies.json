@@ -1656,6 +1656,17 @@
     },
     {
       "paths": [
+        "worldfoundry/base_models/perception_core/general_perception/openai_clip_runtime/clip/clip.py",
+        "worldfoundry/base_models/perception_core/general_perception/openai_clip_runtime/clip/model.py",
+        "worldfoundry/base_models/perception_core/general_perception/openai_clip_runtime/clip/simple_tokenizer.py"
+      ],
+      "reason": "OpenAI CLIP benchmark image scoring and the shared ViCLIP scoring vocabulary. CPU contracts exercise visual feature arithmetic, lazy scoring import and offline tokenization.",
+      "required_cpu_contracts": [
+        "tests/evaluation/execution/test_openai_clip_scoring.py"
+      ]
+    },
+    {
+      "paths": [
         "worldfoundry/studio/serving/realtime/__init__.py"
       ],
       "reason": "Studio realtime serving layer that no replay case imports; its transport, input and delivery behavior is covered by the Studio realtime CPU contracts.",
