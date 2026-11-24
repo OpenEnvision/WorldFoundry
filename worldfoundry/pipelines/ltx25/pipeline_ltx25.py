@@ -10,7 +10,10 @@ from typing import Any
 
 from worldfoundry.core.execution.deadline import check_deadline
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
-from worldfoundry.synthesis.visual_generation.ltx25 import LTX25DistilledRuntime
+from worldfoundry.synthesis.visual_generation.ltx25 import (
+    LTX25AccelerationConfig,
+    LTX25DistilledRuntime,
+)
 
 
 def _runtime_options(
@@ -122,11 +125,25 @@ class LTX25Pipeline(PipelineABC):
             quantization=options.pop("quantization", None),
             diffvae_optimization=str(options.pop("diffvae_optimization", "chunked_eager")),
             device=device,
+            model_variant=options.pop("model_variant", "distilled"),
+            video_vae_variant=options.pop("video_vae_variant", "auto"),
+            acceleration=options.pop("acceleration", None),
         )
         if options:
             unknown = ", ".join(sorted(options))
             raise TypeError(f"Unknown LTX-2.5 load options: {unknown}")
         return cls(runtime, model_id=resolved_model_id)
+
+    def configure_acceleration(
+        self,
+        acceleration: LTX25AccelerationConfig | Mapping[str, Any] | str | None,
+    ) -> LTX25AccelerationConfig | None:
+        """Configure SOL-Engine acceleration on the underlying LTX-2.5 runtime."""
+        return self.runtime.configure_acceleration(acceleration)
+
+    def acceleration_report(self) -> dict[str, Any]:
+        """Return auditable SOL-Engine receipts for the transformer and VideoVAE."""
+        return self.runtime.acceleration_report()
 
     def preflight(self) -> dict[str, Any]:
         return self.runtime.preflight()
