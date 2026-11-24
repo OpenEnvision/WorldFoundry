@@ -199,6 +199,7 @@ class WorldCamPipeline(PipelineABC):
                 str(path),
                 height=int(height or self.synthesis_model.height),
                 width=int(width or self.synthesis_model.width),
+                center_crop=False,
             )
             video.length = int(conditioning_frames or 65)
             return video

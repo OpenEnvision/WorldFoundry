@@ -83,6 +83,8 @@ class BerniniWorldFoundryPipeline(PipelineABC):
             None,
         )
         model_config = {key: options[key] for key in MODEL_CONFIG_KEYS if key in options}
+        if "shift" not in model_config and options.get("flow_shift") is not None:
+            model_config["shift"] = float(options["flow_shift"])
         return cls(
             BerniniRuntime(
                 model_id=model_id,

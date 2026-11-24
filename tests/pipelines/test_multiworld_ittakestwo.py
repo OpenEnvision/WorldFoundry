@@ -235,3 +235,26 @@ def test_multiworld_synthesis_uses_native_runtime(monkeypatch, tmp_path: Path) -
     assert captured["predict"]["action"] is action
     assert captured["predict"]["show_progress"] is False
     assert result["video"].shape == (3, 8, 8, 3)
+
+
+def test_load_and_preprocess_stereo_views_preserve_square_aspect_without_padding(tmp_path: Path) -> None:
+    from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.utils.environment_observation import (
+        load_and_preprocess_images,
+    )
+
+    stereo_path = tmp_path / "stereo.png"
+    stereo = Image.new("RGB", (960, 480))
+    stereo.paste((200, 40, 20), (0, 0, 480, 480))
+    stereo.paste((20, 40, 200), (480, 0, 960, 480))
+    stereo.save(stereo_path)
+
+    left = load_and_preprocess_images([stereo_path], mode="pad", return_view="left", target_size=224)
+    right = load_and_preprocess_images([stereo_path], mode="pad", return_view="right", target_size=224)
+
+    assert left.shape == (1, 3, 224, 224)
+    assert right.shape == (1, 3, 224, 224)
+    # Row 0 and row 223 must contain image pixels (no 56px white letterbox bars).
+    assert left[0, 2, 0, 0] < 0.2
+    assert left[0, 2, 223, 223] < 0.2
+    assert right[0, 0, 0, 0] < 0.2
+    assert right[0, 0, 223, 223] < 0.2

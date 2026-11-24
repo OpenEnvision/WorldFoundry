@@ -122,7 +122,7 @@ def crop_and_resize(image: Image.Image, height: int, width: int) -> Image.Image:
 class VideoData:
     """Lazy video or image-folder dataset with optional resize."""
 
-    def __init__(self, video_file=None, image_folder=None, height=None, width=None, **kwargs):
+    def __init__(self, video_file=None, image_folder=None, height=None, width=None, center_crop: bool = True, **kwargs):
         """Open exactly one of *video_file* or *image_folder*; raise if both/neither."""
 
         if video_file is not None:
@@ -134,6 +134,7 @@ class VideoData:
         else:
             raise ValueError("Cannot open video or image folder")
         self.length = None
+        self.center_crop = bool(center_crop)
         self.set_shape(height, width)
 
     def raw_data(self):
@@ -172,12 +173,16 @@ class VideoData:
         return height, width
 
     def __getitem__(self, item):
-        """Fetch one PIL frame and crop-resize only when the stored size differs."""
+        """Fetch one PIL frame and resize (with optional center-crop) when the stored size differs."""
 
         frame = self.data.__getitem__(item)
         width, height = frame.size
         if self.height is not None and self.width is not None and (self.height != height or self.width != width):
-            frame = crop_and_resize(frame, self.height, self.width)
+            frame = (
+                crop_and_resize(frame, self.height, self.width)
+                if self.center_crop
+                else frame.resize((self.width, self.height))
+            )
         return frame
 
     def __del__(self):

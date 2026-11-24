@@ -252,7 +252,7 @@ def cosmos25_transfer_2b_recipe() -> NativeDiffusionRecipe:
         ),
         architecture="cosmos-transfer2.5-minimal-v4-lvg-vace-dit",
         minimum_frames=93,
-        use_karras_sigma=True,
+        use_karras_sigma=False,
         zero_pad_image=False,
         conditional_frame_timestep=0.0,
     )

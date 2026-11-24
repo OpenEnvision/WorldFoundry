@@ -14320,7 +14320,7 @@
     "call": {
       "execute": true,
       "overrides": {
-        "validation.sample_count": 1,
+        "validation.sample_count": 4,
         "validation.selection_seed": 42,
         "validation.noise_seed": 42,
         "data.test_index": "recipes/clean-158f-h3/latent-wds/minimax-h3-158f-768p-nomind-v1/test-index.jsonl.gz"

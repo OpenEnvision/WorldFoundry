@@ -93,3 +93,26 @@ def test_solarwm_main_module_import_does_not_dispatch_cli_arguments() -> None:
         check=True,
         timeout=60,
     )
+
+
+def test_solarwm_h3_validation_schedule_requires_dp_wave_divisibility() -> None:
+    import json
+
+    from worldfoundry.synthesis.visual_generation.solarwm.solarwm_runtime.solarwm.backends.minimax_h3.runtime import (
+        _validation_schedule,
+    )
+    from worldfoundry.synthesis.visual_generation.solarwm.solarwm_runtime.solarwm.errors import (
+        BackendContractError,
+    )
+    from worldfoundry.synthesis.visual_generation.solarwm.solarwm_runtime.solarwm.runtime.topology import Topology
+
+    cases = json.loads(
+        Path(__file__).resolve().parents[1].joinpath("manual", "geometry_regression_cases.json").read_text()
+    )
+    sample_count = cases["solarwm-h3-33b-checkpoint-replay"]["call"]["overrides"]["validation.sample_count"]
+    topology = Topology(raw_world_size=8, raw_rank=0, local_world_size=8, local_rank=0, sp_size=2)
+
+    assert sample_count == 4
+    assert _validation_schedule({"sample_count": sample_count}, topology) == (4, 1)
+    with pytest.raises(BackendContractError, match="complete logical-DP waves"):
+        _validation_schedule({"sample_count": 1}, topology)

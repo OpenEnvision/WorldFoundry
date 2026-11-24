@@ -95,3 +95,37 @@ def test_distributed_failure_keeps_the_worker_diagnostic(monkeypatch: pytest.Mon
             ulysses_size=2,
             overrides={},
         )
+
+
+def test_renderer_load_forwards_default_and_custom_flow_shift(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from worldfoundry.pipelines.bernini.pipeline_bernini import BerniniWorldFoundryPipeline
+
+    captured: list[dict[str, Any]] = []
+
+    class _FakeRendererPipeline:
+        @classmethod
+        def from_pretrained(cls, config_dir: str, **kwargs: Any) -> object:
+            captured.append({"config_dir": config_dir, **kwargs})
+            return object()
+
+    monkeypatch.setattr(BerniniRuntime, "requirement_report", lambda _self: {"ready": True, "missing": []})
+    monkeypatch.setitem(
+        sys.modules,
+        "worldfoundry.synthesis.visual_generation.bernini.inference.pipeline",
+        SimpleNamespace(BerniniPipeline=_FakeRendererPipeline, BerniniRendererPipeline=_FakeRendererPipeline),
+    )
+    (tmp_path / "config.json").write_text("{}")
+
+    default_runtime = BerniniRuntime(model_id="bernini-r-1.3b", checkpoint_path=tmp_path, device="cuda")
+    default_runtime._load_pipeline()
+    custom_pipe = BerniniWorldFoundryPipeline.from_pretrained(
+        model_path=str(tmp_path), model_id="bernini-r-14b", device="cuda", flow_shift=7.5
+    )
+    custom_pipe.runtime._load_pipeline()
+
+    assert captured[0]["shift"] == 5.0
+    assert captured[0]["load_ckpt_weights"] is False
+    assert captured[1]["shift"] == 7.5
+    assert captured[1]["lazy_expert_loading"] is True

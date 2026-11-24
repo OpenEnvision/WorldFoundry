@@ -203,7 +203,7 @@ MODEL_CONFIG_DEFAULTS = {
     "interpolate_src_id": True,
     "max_trained_src_id": 5,
 }
-MODEL_CONFIG_KEYS = frozenset(MODEL_CONFIG_DEFAULTS)
+MODEL_CONFIG_KEYS = frozenset(MODEL_CONFIG_DEFAULTS) | {"shift"}
 
 # Moving the largest model stage still needs working space for activations and
 # CUDA kernels.  This is deliberately a reserve, not a claimed exact peak.
@@ -497,10 +497,15 @@ class BerniniRuntime:
         self.variant = VARIANTS[model_id]
         self.device = device
         self.model_config = dict(MODEL_CONFIG_DEFAULTS)
-        unknown_config = set(model_config or ()) - MODEL_CONFIG_KEYS
+        raw_config = dict(model_config or {})
+        if "shift" not in raw_config and raw_config.get("flow_shift") is not None:
+            raw_config["shift"] = float(raw_config.pop("flow_shift"))
+        else:
+            raw_config.pop("flow_shift", None)
+        unknown_config = set(raw_config) - MODEL_CONFIG_KEYS
         if unknown_config:
             raise ValueError(f"Unsupported Bernini model config keys: {sorted(unknown_config)}")
-        self.model_config.update(dict(model_config or {}))
+        self.model_config.update(raw_config)
         self.checkpoint_path = self._resolve_checkpoint(checkpoint_path)
         self._pipeline: Any = None
 
@@ -674,8 +679,10 @@ class BerniniRuntime:
         pipeline_cls = BerniniPipeline if self.variant.family == "planner_renderer" else BerniniRendererPipeline
         load_options = dict(self.model_config)
         if self.variant.family == "renderer":
-            # Public Bernini-R repos already contain transformer/transformer_2.
+            # Public Bernini-R repos already contain transformer/transformer_2,
+            # and upstream CLI passes flow_shift (default 5.0) as shift.
             load_options["load_ckpt_weights"] = False
+            load_options.setdefault("shift", COMMON_DEFAULTS["flow_shift"])
         if self.variant.model_id == "bernini-r-14b":
             # The two 14B experts cannot coexist in this cgroup. Load the
             # active expert directly onto CUDA and replace it at the scheduler

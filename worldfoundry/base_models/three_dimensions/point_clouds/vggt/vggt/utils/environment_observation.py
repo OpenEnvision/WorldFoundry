@@ -107,13 +107,15 @@ def _open_rgb(path: str | Path) -> Image.Image:
 
 
 def _select_view(img: Image.Image, view: ViewMode) -> tuple[Image.Image, tuple[int, int]]:
-    """Crop left/right stereo halves; return the *original* size for letterbox FOV."""
+    """Crop left/right stereo halves; return the post-crop size for undistorted resize."""
 
     width, height = img.size
     if view == "left":
-        return img.crop((0, 0, width // 2, height)), (width, height)
+        cropped = img.crop((0, 0, width // 2, height))
+        return cropped, cropped.size
     if view == "right":
-        return img.crop((width // 2, 0, width, height)), (width, height)
+        cropped = img.crop((width // 2, 0, width, height))
+        return cropped, cropped.size
     return img, (width, height)
 
 
@@ -152,8 +154,7 @@ def load_and_preprocess_images(
             white.
         mode: ``"crop"`` or ``"pad"`` after the 14-aligned resize.
         return_view: ``"full"``, or ``"left"`` / ``"right"`` half of a
-            side-by-side stereo frame (crop uses the *original* size so
-            the 14-grid stays consistent).
+            side-by-side stereo frame (resized using the post-crop size).
         target_size: Long-side target in pixels.
 
     Returns:
