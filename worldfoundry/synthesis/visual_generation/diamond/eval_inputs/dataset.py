@@ -141,4 +141,13 @@ class Dataset(StateDictMixin, torch.utils.data.Dataset):
 
     def load_from_default_path(self) -> None:
         if self._default_path.is_file():
-            self.load_state_dict(torch.load(self._default_path, weights_only=True))
+            from worldfoundry.core.model_loading.checkpoints.file import load_torch_checkpoint
+
+            self.load_state_dict(
+                load_torch_checkpoint(
+                    self._default_path,
+                    map_location="cpu",
+                    weights_only=True,
+                    allow_unsafe_pickle_fallback=True,
+                )
+            )

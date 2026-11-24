@@ -316,3 +316,26 @@ def test_csgo_requirements_remain_variant_specific(tmp_path: Path) -> None:
     missing = runtime.missing_requirements(**kwargs)
     assert len(missing) == 1
     assert missing[0]["path"] == options["actions_path"]
+
+
+def test_dataset_save_and_load_round_trip_with_numpy_state(tmp_path: Path) -> None:
+    import numpy as np
+
+    from worldfoundry.synthesis.visual_generation.diamond.eval_inputs.dataset import Dataset
+
+    dataset = Dataset(tmp_path / "pong_1000")
+    dataset.num_episodes = 2
+    dataset.num_steps = 10
+    dataset.start_idx = np.array([0, 5], dtype=np.int64)
+    dataset.lengths = np.array([5, 5], dtype=np.int64)
+    dataset.save_to_default_path()
+
+    reloaded = Dataset(tmp_path / "pong_1000")
+    reloaded.load_from_default_path()
+
+    assert reloaded.num_episodes == 2
+    assert reloaded.num_steps == 10
+    assert reloaded.start_idx is not None
+    assert reloaded.lengths is not None
+    np.testing.assert_array_equal(reloaded.start_idx, np.array([0, 5], dtype=np.int64))
+    np.testing.assert_array_equal(reloaded.lengths, np.array([5, 5], dtype=np.int64))

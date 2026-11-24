@@ -154,3 +154,28 @@ def test_generic_runtime_artifact_collection_does_not_include_nwm_pngs(tmp_path:
     produced.parent.mkdir(parents=True)
     produced.write_bytes(b"png")
     assert WorldModelRuntimeSynthesis._resolve_produced_artifact(tmp_path / "prediction.mp4") is None
+
+
+def test_nwm_build_command_forwards_vae_path_and_resolves_local_sd_vae(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import worldfoundry.synthesis.visual_generation.nwm.isolated_nwm_infer as infer_mod
+
+    command = runtime.build_command(
+        {
+            "python": "/env/python",
+            "output_dir": "/out",
+            "options": {"exp": "nwm.yaml", "datasets": "recon", "eval_type": "time", "vae_path": "/local/sd-vae"},
+        }
+    )
+    assert command[-2:] == ["--vae_path", "/local/sd-vae"]
+
+    vae_dir = tmp_path / "stabilityai--sd-vae-ft-ema"
+    vae_dir.mkdir()
+    monkeypatch.setenv("WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT", str(tmp_path))
+    monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path / "empty_hfd"))
+    monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(tmp_path / "empty_ckpt"))
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "empty_hf"))
+
+    assert infer_mod._resolve_vae_source(None) == str(vae_dir.resolve())
+    assert infer_mod._resolve_vae_source(str(tmp_path / "explicit-vae")) == str((tmp_path / "explicit-vae").resolve())

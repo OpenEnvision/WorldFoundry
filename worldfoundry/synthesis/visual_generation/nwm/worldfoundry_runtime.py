@@ -59,6 +59,9 @@ def build_command(context):
         "--gt",
         str(options.get("gt", 0)),
     ]
+    vae_path = _option(options, "vae_path", "sd_vae")
+    if vae_path is not None:
+        args.extend(["--vae_path", vae_path])
     if options.get("seed") is not None:
         args.extend(["--seed", str(options["seed"])])
     return package_module_command(

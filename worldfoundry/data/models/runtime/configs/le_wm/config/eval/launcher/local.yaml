@@ -1,2 +1,4 @@
+# @package _global_
 # Local evaluation runs in-process; no Hydra launcher plugin is required.
-{}
+
+cache_dir: null

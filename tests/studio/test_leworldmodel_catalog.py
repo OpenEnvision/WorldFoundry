@@ -111,3 +111,30 @@ def test_leworldmodel_eval_config_composes_with_dynamic_cache_dir(tmp_path, monk
     assert cfg.eval.num_eval == 1
     assert cfg.eval.eval_budget == 25
     assert cfg.eval.goal_offset_steps == 5
+
+
+def test_leworldmodel_eval_config_composes_without_cache_dir(tmp_path, monkeypatch) -> None:
+    from omegaconf import OmegaConf
+
+    from worldfoundry.synthesis.visual_generation.le_wm.infer import _assign_portable_public_paths, _load_config
+
+    monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(tmp_path / "checkpoints"))
+    args = Namespace(
+        config_dir=str(runtime.CONFIG_DIR),
+        config_name="pusht",
+        policy="random",
+        cache_dir=None,
+        seed=42,
+        dataset_name="${WORLDFOUNDRY_CKPT_DIR}/leworldmodel/pusht_worldfoundry_smoke.h5",
+        num_eval=1,
+        eval_budget=25,
+        goal_offset_steps=5,
+        img_size=None,
+    )
+
+    cfg = _load_config(args)
+    assert cfg.cache_dir is None
+    public_cfg = OmegaConf.create(OmegaConf.to_container(cfg, resolve=False))
+    _assign_portable_public_paths(public_cfg, cfg)
+    assert public_cfg.cache_dir is None
+    assert "cache_dir: null" in OmegaConf.to_yaml(public_cfg)

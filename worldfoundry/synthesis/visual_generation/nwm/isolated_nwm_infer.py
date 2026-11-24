@@ -10,6 +10,7 @@ torch.backends.cudnn.allow_tf32 = True
 
 import argparse  # noqa: E402 - Follows module-level setup, as upstream.
 import os  # noqa: E402 - Follows module-level setup, as upstream.
+from pathlib import Path  # noqa: E402 - Follows module-level setup, as upstream.
 
 import numpy as np  # noqa: E402 - Follows module-level setup, as upstream.
 from diffusers.models import AutoencoderKL  # noqa: E402 - Follows module-level setup, as upstream.
@@ -17,6 +18,10 @@ from PIL import Image  # noqa: E402 - Follows module-level setup, as upstream.
 
 from worldfoundry.core.distributed.collectives import (  # noqa: E402 - Follows module-level setup, as upstream.
     metric_sync as dist,
+)
+from worldfoundry.core.io.paths import (  # noqa: E402 - Follows module-level setup, as upstream.
+    resolve_local_hf_model_path,
+    resolve_worldfoundry_path,
 )
 from worldfoundry.synthesis.visual_generation.nwm import misc  # noqa: E402 - Follows module-level setup, as upstream.
 from worldfoundry.synthesis.visual_generation.nwm.config_paths import (  # noqa: E402 - Follows module-level setup, as upstream.
@@ -66,6 +71,21 @@ def build_eval_input_dataset(config, dataset_name, eval_type, predefined_index=T
     )
 
     return dataset
+
+
+def _resolve_vae_source(vae_path: str | None = None) -> str:
+    """Resolve the SD-VAE directory locally when available, keeping the Hub id fallback."""
+    if vae_path:
+        return str(resolve_worldfoundry_path(vae_path))
+    try:
+        return str(resolve_local_hf_model_path("stabilityai/sd-vae-ft-ema"))
+    except FileNotFoundError:
+        regression_root = os.environ.get("WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT")
+        if regression_root:
+            candidate = Path(regression_root).expanduser() / "stabilityai--sd-vae-ft-ema"
+            if candidate.is_dir():
+                return str(candidate.resolve())
+        return "stabilityai/sd-vae-ft-ema"
 
 
 @torch.no_grad()
@@ -167,6 +187,21 @@ def write_prediction_frames(output_dir, idxs, sec, x_pred_pixels):
         save_image(image_file, x_pred_pixels[batch_idx], True)
 
 
+def _resolve_vae_source(vae_path: str | None = None) -> str:
+    """Resolve the SD-VAE directory locally when available, keeping the Hub id fallback."""
+    if vae_path:
+        return str(resolve_worldfoundry_path(vae_path))
+    try:
+        return str(resolve_local_hf_model_path("stabilityai/sd-vae-ft-ema"))
+    except FileNotFoundError:
+        regression_root = os.environ.get("WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT")
+        if regression_root:
+            candidate = Path(regression_root).expanduser() / "stabilityai--sd-vae-ft-ema"
+            if candidate.is_dir():
+                return str(candidate.resolve())
+        return "stabilityai/sd-vae-ft-ema"
+
+
 @torch.no_grad()
 def main(args):
     _, _, device, _ = dist.init_distributed()
@@ -214,7 +249,7 @@ def main(args):
         model.to(device)
         model = torch.compile(model)
         diffusion = create_diffusion(str(250))
-        vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-ema").to(device)
+        vae = AutoencoderKL.from_pretrained(_resolve_vae_source(getattr(args, "vae_path", None))).to(device)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[device], find_unused_parameters=False)
         model_lst = (model, diffusion, vae)
 
@@ -304,6 +339,7 @@ if __name__ == "__main__":
     # Rollout Evaluation Args
     parser.add_argument("--rollout_fps_values", type=str, default="1,4", help="")
     parser.add_argument("--gt", type=int, default=0, help="set to 1 to produce ground truth evaluation set")
+    parser.add_argument("--vae_path", type=str, default=None, help="optional local sd-vae-ft-ema directory")
     args = parser.parse_args()
 
     args.rollout_fps_values = [int(fps) for fps in args.rollout_fps_values.split(",")]
