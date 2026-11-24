@@ -200,17 +200,32 @@ class _FusedQKVLinear(nn.Linear):
 def project_fused_qkv(
     projection: nn.Module,
     input: torch.Tensor,
+    *,
+    fusion_state: QKVFusionState | None = None,
+    receipt_token: str | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Use workload dispatch when available, otherwise a packed projection.
 
     Generic quantization can replace the dense fused Linear after installation.
     Those wrappers intentionally keep their existing packed kernel; this helper
-    lets every Wan processor share the same compatibility behavior.
+    lets every Wan processor share the same compatibility behavior and keeps
+    projection telemetry accurate when ``projection`` is quantized.
     """
 
     project = getattr(projection, "project_qkv", None)
     if callable(project):
         return project(input)
+    state = fusion_state if fusion_state is not None else getattr(projection, "_worldfoundry_qkv_fusion_state", None)
+    token = receipt_token if receipt_token is not None else getattr(projection, "_worldfoundry_qkv_receipt_token", None)
+    if isinstance(state, QKVFusionState):
+        if torch.compiler.is_compiling():
+            if isinstance(token, str):
+                _record_compiled_qkv_graph_trace(token, 0)
+        else:
+            state.eager_projection_calls += 1
+            state.request_eager_projection_calls += 1
+            state.eager_packed_projection_calls += 1
+            state.request_eager_packed_projection_calls += 1
     packed = projection(input)
     if not isinstance(packed, torch.Tensor) or packed.shape[:-1] != input.shape[:-1]:
         raise RuntimeError("fused Wan qkv projection must preserve leading dimensions")
@@ -274,7 +289,12 @@ def _fused_self_attention_forward(
         apply_wan_qk_norm_rope,
     )
 
-    q, k, v = project_fused_qkv(self.qkv, x)
+    q, k, v = project_fused_qkv(
+        self.qkv,
+        x,
+        fusion_state=getattr(self, "_worldfoundry_qkv_fusion_state", None),
+        receipt_token=getattr(self, "_worldfoundry_qkv_receipt_token", None),
+    )
     q, k = apply_wan_qk_norm_rope(
         self,
         q,
@@ -323,6 +343,8 @@ def _fuse_one(module: nn.Module, state: QKVFusionState) -> None:
     # Drop the originals so their weights are freed and no stale path remains.
     del module.q, module.k, module.v
     module._qkv_fused = True
+    module._worldfoundry_qkv_fusion_state = state
+    module._worldfoundry_qkv_receipt_token = fused._worldfoundry_qkv_receipt_token
     if not preserve_projection_dispatch:
         module.forward = types.MethodType(_fused_self_attention_forward, module)
 

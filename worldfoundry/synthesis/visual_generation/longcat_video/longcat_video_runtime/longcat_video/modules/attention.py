@@ -82,12 +82,14 @@ class Attention(nn.Module):
                 q = rearrange(q, "B H S D -> B S H D").contiguous()
                 k = rearrange(k, "B H S D -> B S H D").contiguous()
                 v = rearrange(v, "B H S D -> B S H D").contiguous()
-                x, *_ = flash_attn_func(
+                x = flash_attn_func(
                     q,
                     k,
                     v,
                     softmax_scale=self.scale,
                 )
+                if isinstance(x, tuple):
+                    x = x[0]
                 x = rearrange(x, "B S H D -> B H S D")
         elif self.enable_flashattn2:
             try:
@@ -278,7 +280,9 @@ class MultiHeadCrossAttention(nn.Module):
                     cu_seqlens_k=torch.tensor([0] + kv_seqlen, device=q.device).cumsum(0).to(torch.int32),  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                     max_seqlen_q=N,
                     max_seqlen_k=max(kv_seqlen),
-                )[0]
+                )
+                if isinstance(x, tuple):
+                    x = x[0]
         elif self.enable_flashattn2:
             try:
                 from flash_attn import flash_attn_varlen_func

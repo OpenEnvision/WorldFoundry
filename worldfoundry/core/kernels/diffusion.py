@@ -1223,10 +1223,16 @@ def _eligible_hidden_qk_rmsnorm_rope_3d(
     hidden_size = q.shape[-1] if q.ndim == 3 else 0
     head_dim = hidden_size // int(num_heads) if num_heads else 0
     frames, height, width = (int(value) for value in grid_size)
+    freqs_ok = (
+        freqs.dtype in {torch.float32, torch.float64}
+        and freqs.ndim == 3
+        and freqs.shape[-1] == 2
+        and freqs.shape[1] == head_dim // 2
+    ) or (freqs.dtype == torch.complex128 and freqs.ndim == 2 and freqs.shape[1] == head_dim // 2)
     return (
         _inference_only(q, k, q_weight, k_weight, freqs)
         and _same_cuda_device(q, k, q_weight, k_weight, freqs)
-        and all(_triton_device_supported(tensor) for tensor in (q, k, q_weight, k_weight, freqs))
+        and all(_triton_device_supported(tensor) for tensor in (q, k, q_weight, k_weight))
         and q.dtype in _FLOAT_DTYPES
         and k.dtype == q.dtype
         and q_weight.dtype == q.dtype
@@ -1234,21 +1240,16 @@ def _eligible_hidden_qk_rmsnorm_rope_3d(
         and q.ndim == 3
         and k.shape == q.shape
         and q.numel() > 0
-        and _regular_contiguous(q)
-        and _regular_contiguous(k)
-        and hidden_size <= 4096
+        and q.stride(-1) == 1
+        and k.stride(-1) == 1
+        and q_weight.is_contiguous()
+        and k_weight.is_contiguous()
+        and hidden_size <= 8192
         and hidden_size % int(num_heads) == 0
         and head_dim >= 6
         and head_dim % 2 == 0
         and q_weight.shape == k_weight.shape == (hidden_size,)
-        # Triton consumes an explicit float32 cosine/sine table.  Complex
-        # tensors are deliberately excluded because the shared capability
-        # gate does not support complex dtypes; fp64 remains on the exact
-        # portable path instead of being silently truncated in the kernel.
-        and freqs.dtype == torch.float32
-        and freqs.ndim == 3
-        and freqs.shape[-1] == 2
-        and freqs.shape[1] == head_dim // 2
+        and freqs_ok
         and frames > 0
         and height > 0
         and width > 0
@@ -1539,7 +1540,62 @@ def _register_kernels() -> None:
 
 _register_kernels()
 
+
+@torch.library.custom_op("worldfoundry::apply_real_rope_bshd", mutates_args=(), device_types="cuda")
+def _apply_real_rope_bshd_op(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+    from worldfoundry.core.kernels.triton_diffusion import apply_real_rope_bshd as _triton_apply_real_rope
+
+    return _triton_apply_real_rope(x, cos, sin)
+
+
+@_apply_real_rope_bshd_op.register_fake
+def _apply_real_rope_bshd_fake(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+    del cos, sin
+    return torch.empty_like(x)
+
+
+def apply_real_rope_bshd(
+    x: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+) -> torch.Tensor:
+    """Apply real-valued ``(cos, sin)`` RoPE to ``[B, S, H, D]`` with Triton fast path.
+
+    Keeps FP64/FP32 rotary arithmetic in registers on CUDA to eliminate global-memory
+    FP64 intermediates while remaining compile- and CUDA-Graph-safe via a registered
+    ``torch.library.custom_op``.
+    """
+    seq_len = int(cos.shape[1])
+    target = x[:, :seq_len]
+    if target.numel() == 0:
+        return x.clone()
+    if (
+        target.device.type == "cuda"
+        and cos.device == target.device
+        and sin.device == target.device
+        and cos.ndim == 4
+        and sin.shape == cos.shape
+        and cos.shape[0] == 1
+        and cos.shape[2] == 1
+        and cos.shape[3] == target.shape[-1] // 2
+        and target.stride(-1) == 1
+        and target.ndim == 4
+        and target.shape[-1] % 2 == 0
+        and _inference_only(target)
+        and _triton_device_supported(target)
+    ):
+        rotated = _apply_real_rope_bshd_op(target, cos, sin)
+    else:
+        x_pairs = target.to(cos.dtype).reshape(target.shape[0], seq_len, target.shape[2], target.shape[3] // 2, 2)
+        x0, x1 = x_pairs.unbind(-1)
+        rotated = torch.stack((x0 * cos - x1 * sin, x0 * sin + x1 * cos), dim=-1).flatten(-2).to(x.dtype)
+    if seq_len == x.shape[1]:
+        return rotated
+    return torch.cat((rotated, x[:, seq_len:]), dim=1)
+
+
 __all__ = [
+    "apply_real_rope_bshd",
     "clear_kernel_dispatch_cache",
     "group_norm_silu",
     "hidden_qk_rmsnorm_rope_3d",

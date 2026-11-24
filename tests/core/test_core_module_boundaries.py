@@ -102,10 +102,14 @@ def test_control_plane_imports_remain_lightweight() -> None:
             """
 import sys
 import worldfoundry.core
+import worldfoundry.core.acceleration
+import worldfoundry.core.acceleration.profiles
+import worldfoundry.core.acceleration.sol_engine
 import worldfoundry.core.attention
 import worldfoundry.core.configuration
 import worldfoundry.core.io
 import worldfoundry.core.nn
+import worldfoundry.core.nn.transformer.contracts
 import worldfoundry.core.utils
 from worldfoundry.core.execution import inference, process, realtime, runtime_cache
 from worldfoundry.core.platform import compile_cache

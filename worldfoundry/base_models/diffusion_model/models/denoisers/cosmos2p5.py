@@ -18,6 +18,7 @@ from ...contracts import DenoiserInput, DenoiserOutput
 from ...loaders import ModuleLoadSpec, NativeModuleLoader
 from ..networks.cosmos2p5.model import Cosmos25Transfer3DModel, Cosmos25Transformer3DModel
 from .cosmos2p5_parallel import validate_cosmos_parallel_policy
+from .graph_wrapped import GraphWrappedDenoiserMixin, resolve_cuda_graph_option
 
 _KEY_REPLACEMENTS = {
     "adaln_modulation_self_attn.1": "norm1.linear_1",
@@ -99,11 +100,16 @@ COSMOS25_TRANSFER_2B_CONFIG = {
 }
 
 
-class Cosmos25Denoiser:
+class Cosmos25Denoiser(GraphWrappedDenoiserMixin):
     """Predict 2.5 DiT adapter that returns a velocity-style ``DenoiserOutput``."""
 
-    def __init__(self, model: Cosmos25Transformer3DModel) -> None:
+    def __init__(self, model: Cosmos25Transformer3DModel, *, enable_cuda_graph: bool = False) -> None:
         self.model = model
+        self._init_graph_runner(
+            model,
+            enabled=enable_cuda_graph,
+            extra_key=f"cosmos25:{type(model).__module__}.{type(model).__qualname__}",
+        )
 
     def __call__(self, model_input: DenoiserInput) -> DenoiserOutput:
         values = model_input.conditioning
@@ -136,7 +142,7 @@ class Cosmos25Denoiser:
             indicator = condition_indicator[:, 0, :, 0, 0]
             timestep = indicator * (conditional_timestep / 1000.0) + (1 - indicator) * timestep
         padding_mask = values.get("padding_mask")
-        prediction = self.model(
+        prediction = self._run_network(
             model_latents.to(model_dtype),
             timestep.to(model_dtype),
             context.to(model_dtype),
@@ -250,6 +256,7 @@ def _build(context: ComponentBuildContext, config: Mapping[str, object]) -> Cosm
                     torch.nn.RMSNorm: AutoWrappedModule,
                 },
                 layer_container="transformer_blocks",
+                compile_regions=("transformer_blocks",),
             ),
             context.require_checkpoint("weights"),
             load_policy,
@@ -263,7 +270,7 @@ def _build(context: ComponentBuildContext, config: Mapping[str, object]) -> Cosm
             with contextlib.suppress(Exception):
                 parallel.close()
         raise
-    return Cosmos25Denoiser(model)
+    return Cosmos25Denoiser(model, enable_cuda_graph=resolve_cuda_graph_option(context) if parallel is None else False)
 
 
 def build_cosmos25_2b_denoiser(context: ComponentBuildContext) -> Cosmos25Denoiser:

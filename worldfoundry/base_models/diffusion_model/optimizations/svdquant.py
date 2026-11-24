@@ -21,7 +21,8 @@ def prepare_svdquant(model, options, policy):
         raise ValueError("SVDQuant artifact paths must exactly match eligible native projections")
     for path, source in selected:
         validate_svdquant_state(source, states[path])
-    seams = {"diffusion.approximation", "diffusion.precision_cache"}
+    allow_compose = bool(policy is not None and policy.options.get("allow_approximate_composition", False))
+    seams = set() if allow_compose else {"diffusion.approximation", "diffusion.precision_cache"}
     seams.update(f"diffusion.projection.{path}" for path, _ in selected)
     if any(".cross_attn.k" in path or ".cross_attn.v" in path for path, _ in selected):
         seams.add("wan.cross_attention.projections")

@@ -31,6 +31,16 @@ if TYPE_CHECKING:
     from worldfoundry.core.platform.compile_cache import CompilePolicy
 
 
+def _cuda_graph_enabled(raw: object) -> bool:
+    """Return True when a ``cuda_graph`` policy option enables graph capture."""
+
+    if raw is None or raw is False:
+        return False
+    if isinstance(raw, str):
+        return raw.strip().casefold() not in {"", "off", "none", "false", "disabled"}
+    return bool(raw)
+
+
 def _compile_policy_from_runtime(policy: RuntimePolicy) -> tuple[CompilePolicy, dict[str, Any]]:
     """Resolve the public compile knobs and external CUDA-Graph interaction."""
 
@@ -44,7 +54,7 @@ def _compile_policy_from_runtime(policy: RuntimePolicy) -> tuple[CompilePolicy, 
         raise TypeError("compile_options must be a mapping")
     compile_options = dict(raw_options)
     configured_mode = policy.options.get("compile_mode")
-    cuda_graph = bool(policy.options.get("cuda_graph", False))
+    cuda_graph = _cuda_graph_enabled(policy.options.get("cuda_graph", False))
     regional = policy.options.get("compile_scope") == "regional"
     if compile_options and configured_mode is not None:
         raise ValueError("compile_mode and compile_options are mutually exclusive in torch.compile")
@@ -223,7 +233,10 @@ class NativeModuleLoader:
             raise ValueError("compile_scope must be 'full' or 'regional'")
         if (
             policy.options.get("static_cross_kv")
-            and (policy.options.get("cuda_graph") or (policy.compile and compile_scope == "regional"))
+            and (
+                _cuda_graph_enabled(policy.options.get("cuda_graph"))
+                or (policy.compile and compile_scope == "regional")
+            )
             and (policy.offload.mode is not OffloadMode.NONE or policy.options.get("device_map"))
         ):
             raise ValueError("static cross-KV with Graph/regional compile requires resident unsharded weights")
@@ -407,7 +420,13 @@ class NativeModuleLoader:
                 "sequence_parallel",
                 policy.options.get("sp_degree", False),
             )
-            if sequence_parallel_value:
+            has_sp_targets = bool(sequence_parallel_value) and any(
+                type(child).__name__ == "SelfAttention"
+                and hasattr(child, "set_processor")
+                and hasattr(child, "get_processor")
+                for child in module.modules()
+            )
+            if sequence_parallel_value and has_sp_targets:
                 if isinstance(sequence_parallel_value, bool):
                     import torch.distributed as dist
 
@@ -418,31 +437,14 @@ class NativeModuleLoader:
                     sequence_parallel_degree = int(dist.get_world_size())
                 else:
                     sequence_parallel_degree = int(sequence_parallel_value)
-                # Do not use a blanket incompatibility list. Fused 3D RoPE is
-                # safe because its kernel accepts the SP rank's global
-                # sequence_offset and padded-token boundary. The remaining
-                # combinations each lack a distinct correctness mechanism.
+                supports_sp_synced_cache = bool(getattr(module, "_worldfoundry_supports_sp_synced_cache", False))
                 conflict_reasons = {
-                    "adacache": (
-                        "cache hit/miss decisions must be synchronized across ranks before "
-                        "any rank may skip Ulysses collectives"
+                    "blocktaylorseer": (
+                        "block-selective phase caches are not yet synchronized across Ulysses SP ranks"
                     ),
-                    "feature_cache": (
-                        "cache hit/miss decisions must be synchronized across ranks and "
-                        "cached residuals need a shard-consistent lifecycle"
-                    ),
-                    "magcache": (
-                        "cache hit/miss decisions must be synchronized across ranks before "
-                        "any rank may skip Ulysses collectives"
-                    ),
-                    "taylorseer": (
-                        "cache/extrapolation decisions must be synchronized across ranks and "
-                        "history must remain shard-consistent"
-                    ),
-                    "teacache": (
-                        "cache hit/miss decisions must be synchronized across ranks before "
-                        "any rank may skip Ulysses collectives"
-                    ),
+                    "firstblock": ("block-selective caches are not yet synchronized across Ulysses SP ranks"),
+                    "dualblock": ("block-selective caches are not yet synchronized across Ulysses SP ranks"),
+                    "dynamicblock": ("block-selective caches are not yet synchronized across Ulysses SP ranks"),
                     "approximate_attention": (
                         "both features replace the Wan SelfAttention processor; sparse "
                         "metadata/routing must be rebuilt after Ulysses head exchange"
@@ -452,8 +454,54 @@ class NativeModuleLoader:
                         "and a graph-safe communicator path not provided by the current runner"
                     ),
                 }
+                if not supports_sp_synced_cache:
+                    # Generic modules do not broadcast step-skip decisions across SP ranks;
+                    # fail closed so per-rank cache state cannot diverge and deadlock NCCL.
+                    conflict_reasons.update(
+                        {
+                            "teacache": (
+                                "cache history must remain shard-consistent across Ulysses SP ranks "
+                                "and synchronized before collective skip decisions"
+                            ),
+                            "magcache": (
+                                "cache history must remain shard-consistent across Ulysses SP ranks "
+                                "and synchronized before collective skip decisions"
+                            ),
+                            "adacache": (
+                                "cache history must remain shard-consistent across Ulysses SP ranks "
+                                "and synchronized before collective skip decisions"
+                            ),
+                            "taylorseer": (
+                                "cache history must remain shard-consistent across Ulysses SP ranks "
+                                "and synchronized before collective skip decisions"
+                            ),
+                            "feature_cache": (
+                                "cache history must remain shard-consistent across Ulysses SP ranks "
+                                "and synchronized before collective skip decisions"
+                            ),
+                        }
+                    )
+                else:
+                    # Whole-stack residual caches (TeaCache / MagCache / AdaCache /
+                    # TaylorSeer) broadcast their decision signal from SP rank 0
+                    # inside the model forward so every rank agrees on skipping
+                    # Ulysses collectives. Block-selective caches still fail closed.
+                    raw_fc = policy.options.get("feature_cache")
+                    if isinstance(raw_fc, Mapping):
+                        fc_algo = str(raw_fc.get("algorithm", "")).strip().casefold()
+                        if fc_algo in {"firstblock", "dualblock", "dynamicblock", "blocktaylorseer"}:
+                            conflict_reasons["feature_cache"] = (
+                                f"block-selective feature_cache={fc_algo!r} is not yet synchronized "
+                                "across Ulysses SP ranks"
+                            )
                 active_conflicts = [
-                    (name, reason) for name, reason in conflict_reasons.items() if bool(policy.options.get(name))
+                    (name, reason)
+                    for name, reason in conflict_reasons.items()
+                    if (
+                        _cuda_graph_enabled(policy.options.get(name))
+                        if name == "cuda_graph"
+                        else bool(policy.options.get(name))
+                    )
                 ]
                 if active_conflicts:
                     details = "; ".join(f"{name}: {reason}" for name, reason in active_conflicts)
@@ -467,6 +515,7 @@ class NativeModuleLoader:
                 sequence_parallel_state = enable_sequence_parallel(
                     module,
                     sequence_parallel_degree,
+                    allow_head_padding=bool(policy.options.get("sequence_parallel_pad_heads", False)),
                 )
                 module._worldfoundry_sequence_parallel = sequence_parallel_state
                 applied.record_sequence_parallel(

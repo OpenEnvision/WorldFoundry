@@ -97,7 +97,12 @@ class SequenceParallelSelfAttentionProcessor:
         if hasattr(attention, "qkv"):
             from .qkv_fusion import project_fused_qkv
 
-            q, k, v = project_fused_qkv(attention.qkv, x)
+            q, k, v = project_fused_qkv(
+                attention.qkv,
+                x,
+                fusion_state=getattr(attention, "_worldfoundry_qkv_fusion_state", None),
+                receipt_token=getattr(attention, "_worldfoundry_qkv_receipt_token", None),
+            )
         else:
             q = attention.q(x)
             k = attention.k(x)
@@ -147,7 +152,9 @@ class SequenceParallelSelfAttentionProcessor:
             elif torch.compiler.is_compiling():
                 from .fused_rope import record_compiled_fused_rope_graph_trace
 
-                record_compiled_fused_rope_graph_trace(runtime_state)
+                receipt_token = getattr(attention, "_worldfoundry_fused_rope_token", None)
+                if isinstance(receipt_token, str):
+                    record_compiled_fused_rope_graph_trace(receipt_token)
                 q, k = fused_call()
             else:
                 from worldfoundry.core.kernels.registry import (
@@ -173,8 +180,18 @@ class SequenceParallelSelfAttentionProcessor:
         k = rearrange(k, "b s (h d) -> b s h d", h=num_heads)
         v = rearrange(v, "b s (h d) -> b s h d", h=num_heads)
 
+        sp_world = int(self._state.sp_degree)
+        pad_heads = (-num_heads) % sp_world
+        if pad_heads:
+            # Padded Ulysses: align head axis to sp_world before all-to-all and
+            # crop the dummy heads after inverse scatter so non-divisor head
+            # counts (e.g. 12-head Wan 1.3B at SP=8) remain mathematically exact.
+            q = torch.cat((q, q.new_zeros(b, s_local, pad_heads, q.shape[3])), dim=2)
+            k = torch.cat((k, k.new_zeros(b, s_local, pad_heads, k.shape[3])), dim=2)
+            v = torch.cat((v, v.new_zeros(b, s_local, pad_heads, v.shape[3])), dim=2)
+
         # Ulysses via the in-tree native NCCL all-to-all (no xfuser dependency).
-        # scatter heads / gather sequence: [B, S/P, H, D] -> [B, S, H/P, D].
+        # scatter heads / gather sequence: [B, S/P, H_pad, D] -> [B, S, H_pad/P, D].
         q, k, v = all_to_all_4d_many(
             (q, k, v),
             group,
@@ -191,16 +208,26 @@ class SequenceParallelSelfAttentionProcessor:
         local_heads = q.shape[2]
         head_dim = q.shape[3]
         attention_module = attention.attn
-        out = packed_sequence_attention(
-            q=q.flatten(2),
-            k=k.flatten(2),
-            v=v.flatten(2),
-            num_heads=local_heads,
-            compatibility_mode=bool(getattr(attention_module, "compatibility_mode", False)),
-            backend=getattr(attention_module, "attention_backend", None),
-        ).reshape(b, -1, local_heads, head_dim)
+        force_dense = bool(getattr(attention_module, "_worldfoundry_force_dense", False))
+        attention_backend = "torch" if force_dense else getattr(attention_module, "attention_backend", None)
+        attention_options = None if force_dense else getattr(attention_module, "_worldfoundry_attention_options", None)
+        if not force_dense and attention_backend == "sol_attn":
+            sink_override = getattr(attention_module, "_worldfoundry_sol_sink_tokens", None)
+            if sink_override is not None:
+                attention_options = {**(attention_options or {}), "sink_tokens": int(sink_override)}
+        attention_kwargs: dict[str, Any] = {
+            "q": q.flatten(2),
+            "k": k.flatten(2),
+            "v": v.flatten(2),
+            "num_heads": local_heads,
+            "compatibility_mode": bool(getattr(attention_module, "compatibility_mode", False)),
+            "backend": attention_backend,
+        }
+        if isinstance(attention_options, dict) and attention_options:
+            attention_kwargs["backend_options"] = attention_options
+        out = packed_sequence_attention(**attention_kwargs).reshape(b, -1, local_heads, head_dim)
 
-        # scatter sequence / gather heads: [B, S, H/P, D] -> [B, S/P, H, D].
+        # scatter sequence / gather heads: [B, S, H_pad/P, D] -> [B, S/P, H_pad, D].
         out = all_to_all_4D(
             out,
             group,
@@ -208,11 +235,18 @@ class SequenceParallelSelfAttentionProcessor:
             gather_dim=2,
             assume_even=True,
         )
+        if pad_heads:
+            out = out[:, :, :num_heads, :].contiguous()
         out = out.flatten(2)  # [B, S/P, dim]
         return attention.o(out)
 
 
-def enable_sequence_parallel(model: nn.Module, sp_degree: int) -> _SPState:
+def enable_sequence_parallel(
+    model: nn.Module,
+    sp_degree: int,
+    *,
+    allow_head_padding: bool = False,
+) -> _SPState:
     """Install the SP self-attention processor on every Wan ``SelfAttention``.
 
     Requires an already-initialized sequence-parallel process group of size
@@ -234,7 +268,15 @@ def enable_sequence_parallel(model: nn.Module, sp_degree: int) -> _SPState:
         ):
             heads_seen.add(module.num_heads)
             if module.num_heads % sp_degree != 0:
-                raise ValueError(f"Wan num_heads={module.num_heads} is not divisible by sequence_parallel={sp_degree}")
+                if not allow_head_padding:
+                    raise ValueError(
+                        f"SelfAttention num_heads={module.num_heads} is not divisible by sp_degree={sp_degree}; "
+                        "pass allow_head_padding=True to enable padded Ulysses"
+                    )
+                state.backend = "native-padded-ulysses"
+                note = f"padded Ulysses enabled: num_heads={module.num_heads}, sp_degree={sp_degree}"
+                if note not in state.notes:
+                    state.notes.append(note)
             # QKV fusion installs an instance-level fast forward that bypasses
             # processors. Restore the class forward so this Ulysses processor
             # owns dispatch while retaining the merged ``qkv`` projection.

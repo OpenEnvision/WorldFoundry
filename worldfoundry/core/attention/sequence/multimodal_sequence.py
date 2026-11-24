@@ -120,6 +120,40 @@ def attention(
         b, s, a, d = x.shape
         out = x.reshape(b, s, -1)
         return out
+    elif attn_mode in {
+        "cudnn_fp8",
+        "flash_attention_4",
+        "sol_attn",
+        "triton_tma",
+        "scaled_int8_fp8",
+        "sage_attention",
+        "sage_attention_3",
+    }:
+        if causal or drop_rate != 0.0:
+            raise ValueError(f"Attention backend {attn_mode!r} does not support causal masking or dropout here")
+        from worldfoundry.core.attention.backends.dispatch import attention_forward
+
+        pair_mask = None
+        if attn_mask is not None:
+            mask_bool = attn_mask.to(torch.bool) if attn_mask.dtype != torch.bool else attn_mask
+            if mask_bool.ndim == 2:
+                if not bool(mask_bool.all()):
+                    pair_mask = mask_bool[:, None, :, None] & mask_bool[:, None, None, :]
+            else:
+                pair_mask = attn_mask
+        x = attention_forward(
+            q,
+            k,
+            v,
+            q_pattern="b s n d",
+            k_pattern="b s n d",
+            v_pattern="b s n d",
+            out_pattern="b s n d",
+            attn_mask=pair_mask,
+            backend=attn_mode,
+        )
+        b, s, _h, _d = x.shape
+        return x.reshape(b, s, -1)
     else:
         raise NotImplementedError(f"Unsupported attention backend: {attn_mode}")
 
@@ -253,35 +287,33 @@ def sequence_parallel_attention(
         # transpose back
         hidden_states = hidden_states.transpose(1, 2)
 
-    elif attn_mode == "flash_attention_2":
-        text_mask = cast(torch.Tensor, text_mask)
+    elif attn_mode in {"flash_attention_2", "flash_attention_3"}:
         query = torch.cat([query, encoder_query], dim=1)
         key = torch.cat([key, encoder_key], dim=1)
         value = torch.cat([value, encoder_value], dim=1)
-        attn_mask = F.pad(text_mask, (sequence_length, 0), value=True)
-        hidden_states = masked_attention(
-            query,
-            key,
-            value,
-            query_mask=attn_mask,
-            key_mask=attn_mask,
-            version=2,
-        )
+        if text_mask is None:
+            from worldfoundry.core.attention.backends.dispatch import attention_forward
 
-    elif attn_mode == "flash_attention_3":
-        text_mask = cast(torch.Tensor, text_mask)
-        query = torch.cat([query, encoder_query], dim=1)
-        key = torch.cat([key, encoder_key], dim=1)
-        value = torch.cat([value, encoder_value], dim=1)
-        attn_mask = F.pad(text_mask, (sequence_length, 0), value=True)
-        hidden_states = masked_attention(
-            query,
-            key,
-            value,
-            query_mask=attn_mask,
-            key_mask=attn_mask,
-            version=3,
-        )
+            hidden_states = attention_forward(
+                query,
+                key,
+                value,
+                q_pattern="b s n d",
+                k_pattern="b s n d",
+                v_pattern="b s n d",
+                out_pattern="b s n d",
+                backend=attn_mode,
+            )
+        else:
+            attn_mask = F.pad(text_mask, (sequence_length, 0), value=True)
+            hidden_states = masked_attention(
+                query,
+                key,
+                value,
+                query_mask=attn_mask,
+                key_mask=attn_mask,
+                version=3 if attn_mode == "flash_attention_3" else 2,
+            )
 
     elif attn_mode == "flex_block_attention":
         attn_param = cast(dict[str, Any], attn_param)
@@ -348,6 +380,40 @@ def sequence_parallel_attention(
         )
         hidden_states, sparse_ratio = hidden_states
         hidden_states = hidden_states.permute(0, 2, 1, 3)
+
+    elif attn_mode in {
+        "cudnn_fp8",
+        "flash_attention_4",
+        "sol_attn",
+        "triton_tma",
+        "scaled_int8_fp8",
+        "sage_attention_3",
+    }:
+        from worldfoundry.core.attention.backends.dispatch import attention_forward
+
+        query = torch.cat([query, encoder_query], dim=1)
+        key = torch.cat([key, encoder_key], dim=1)
+        value = torch.cat([value, encoder_value], dim=1)
+        # Preserve explicit unmasked contract for non-masked fast kernels; if a
+        # non-trivial text_mask has padding tokens, delegate cleanly to masked SDPA
+        # only when the provider supports masks, otherwise fail closed inside dispatch.
+        pair_mask = None
+        if text_mask is not None:
+            text_mask_bool = text_mask.to(torch.bool) if text_mask.dtype != torch.bool else text_mask
+            if not bool(text_mask_bool.all()):
+                full_mask = F.pad(text_mask_bool, (sequence_length, 0), value=True)
+                pair_mask = full_mask[:, None, :, None] & full_mask[:, None, None, :]
+        hidden_states = attention_forward(
+            query,
+            key,
+            value,
+            q_pattern="b s n d",
+            k_pattern="b s n d",
+            v_pattern="b s n d",
+            out_pattern="b s n d",
+            attn_mask=pair_mask,
+            backend=attn_mode,
+        )
 
     else:
         raise NotImplementedError(f"Unsupported attention mode: {attn_mode}")

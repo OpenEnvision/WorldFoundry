@@ -60,18 +60,24 @@ def _validate_model(model: nn.Module, policy: Any) -> str:
         raise ValueError("projection quantization cannot coexist with an existing quantization transform")
     if any("Cached" in type(child).__name__ or "Causal" in type(child).__name__ for child in model.modules()):
         raise ValueError("projection quantization has not been validated with stateful or causal graphs")
-    if any(
+    allow_compose = bool(policy is not None and policy.options.get("allow_approximate_composition", False))
+    if not allow_compose and any(
         getattr(child, "attention_backend", None)
         in {"sol", "sol_attn", "sage", "sage_attention", "sage_attention_3", "cudnn_fp8"}
         for child in model.modules()
     ):
         raise ValueError("projection quantization has not been validated with approximate attention backends")
-    for attribute in (
-        "_worldfoundry_layerwise_cpu_offload_handle",
-        "_worldfoundry_sequence_parallel",
-        "_worldfoundry_static_cross_kv",
-        "_worldfoundry_easycache_config",
-    ):
+    blocked_attrs = (
+        ("_worldfoundry_layerwise_cpu_offload_handle",)
+        if allow_compose
+        else (
+            "_worldfoundry_layerwise_cpu_offload_handle",
+            "_worldfoundry_sequence_parallel",
+            "_worldfoundry_static_cross_kv",
+            "_worldfoundry_easycache_config",
+        )
+    )
+    for attribute in blocked_attrs:
         if getattr(model, attribute, None) is not None:
             raise ValueError(f"projection quantization has not been validated with {attribute}")
     if policy is not None:
@@ -79,30 +85,49 @@ def _validate_model(model: nn.Module, policy: Any) -> str:
             raise ValueError("projection quantization cannot coexist with the generic quantization policy")
         if policy.offload.mode is not OffloadMode.NONE:
             raise ValueError("projection quantization requires resident weights")
-        conflicts = [
-            key
-            for key in (
-                "cuda_graph",
-                "sequence_parallel",
-                "sp_degree",
-                "device_map",
-                "static_cross_kv",
-                "feature_cache",
-                "teacache",
-                "magcache",
-                "adacache",
-                "taylorseer",
-                "blocktaylorseer",
-                "custom",
-                "approximate_attention",
-                "inplace_residual",
+        if allow_compose:
+            raw_graph = policy.options.get("cuda_graph")
+            graph_blocked = (
+                bool(raw_graph)
+                if not isinstance(raw_graph, str)
+                else raw_graph.strip().casefold() not in {"", "off", "none", "false", "disabled", "piecewise"}
             )
-            if policy.options.get(key)
-        ]
+            conflicts = [
+                key
+                for key in (
+                    "device_map",
+                    "blocktaylorseer",
+                    "approximate_attention",
+                )
+                if policy.options.get(key)
+            ]
+            if graph_blocked:
+                conflicts.append("cuda_graph")
+        else:
+            conflicts = [
+                key
+                for key in (
+                    "cuda_graph",
+                    "sequence_parallel",
+                    "sp_degree",
+                    "device_map",
+                    "static_cross_kv",
+                    "feature_cache",
+                    "teacache",
+                    "magcache",
+                    "adacache",
+                    "taylorseer",
+                    "blocktaylorseer",
+                    "custom",
+                    "approximate_attention",
+                    "inplace_residual",
+                )
+                if policy.options.get(key)
+            ]
         if policy.compile:
             conflicts.append("compile")
         plugins = policy.options.get("accelerations", {})
-        if isinstance(plugins, Mapping):
+        if isinstance(plugins, Mapping) and not allow_compose:
             if plugins.get("easycache") is not None and plugins.get("easycache") is not False:
                 conflicts.append("easycache")
             fusion = plugins.get("sana_block_fusion", {})
