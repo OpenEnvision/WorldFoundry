@@ -122,7 +122,7 @@ class LingBotMapResult:
         return np.concatenate([flat, pad], axis=0)
 
     def _project_depth_to_points(self, max_points: int = 50000) -> tuple[np.ndarray, np.ndarray] | None:
-        """Project depth to world-space points using LingBot-Map C2W extrinsics."""
+        """Project depth to world-space points using LingBot-Map W2C extrinsics."""
         depth = self.numpy_data.get("depth")
         intrinsic = self.numpy_data.get("intrinsic")
         extrinsic = self.numpy_data.get("extrinsic")
@@ -172,10 +172,17 @@ class LingBotMapResult:
             if extrinsic_arr is not None and len(extrinsic_arr):
                 ext = extrinsic_arr[min(frame_idx, len(extrinsic_arr) - 1)]
                 if ext.shape == (3, 4):
-                    camera_to_world = np.eye(4, dtype=np.float32)
-                    camera_to_world[:3, :] = ext
+                    world_to_camera = np.eye(4, dtype=np.float32)
+                    world_to_camera[:3, :] = ext
                 elif ext.shape == (4, 4):
-                    camera_to_world = ext
+                    world_to_camera = ext
+                else:
+                    world_to_camera = None
+                if world_to_camera is not None:
+                    try:
+                        camera_to_world = np.linalg.inv(world_to_camera)
+                    except np.linalg.LinAlgError:
+                        camera_to_world = None
                 else:
                     camera_to_world = None
                 if camera_to_world is not None:

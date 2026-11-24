@@ -1460,6 +1460,9 @@ class ResidentWorldRuntime:
                     sparse_video_path=sparse_video_path,
                 )
             except ValueError:
+                if self._generation_inflight and not self.queued_segment_generation:
+                    self._reset_request = self._base_request
+                    self._clear_session()
                 raise
             except BaseException:
                 if self._generation_inflight:
