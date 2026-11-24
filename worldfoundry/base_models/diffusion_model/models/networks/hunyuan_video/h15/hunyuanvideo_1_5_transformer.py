@@ -1011,7 +1011,7 @@ class HunyuanVideo_1_5_DiffusionTransformer(nn.Module, NativeConfigMixin):
             # Validate once outside the block stack and pass torch.bool (or None if all-valid)
             # so parallel_attention skips per-block .max()/.min()/.all() host syncs
             # and captures cleanly inside piecewise CUDA Graphs.
-            if not torch.cuda.is_current_stream_capturing():
+            if not (block_text_mask.is_cuda and torch.cuda.is_current_stream_capturing()):
                 if block_text_mask.dtype in {torch.int64, torch.int32}:
                     assert block_text_mask.max() <= 1 and block_text_mask.min() >= 0, (
                         "Integer attention mask must be between 0 and 1 for torch attention."

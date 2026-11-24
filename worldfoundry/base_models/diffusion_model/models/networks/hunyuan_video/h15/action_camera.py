@@ -1961,7 +1961,7 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
             block_text_mask is not None
             and resolved_bi_mode
             in {None, "torch", "flash", "sdpa", "cudnn", "flash_attention_3", "sol_attn", "cudnn_fp8"}
-            and not torch.cuda.is_current_stream_capturing()
+            and not (block_text_mask.is_cuda and torch.cuda.is_current_stream_capturing())
         ):
             if block_text_mask.dtype in {torch.int64, torch.int32}:
                 assert block_text_mask.max() <= 1 and block_text_mask.min() >= 0, (
