@@ -8,6 +8,7 @@
     "interactive-inference",
     "inference-optimization",
     "diffusion-acceleration",
+    "videogen-acceleration-benchmarks",
     "supported-models",
     "studio",
     "add-model",

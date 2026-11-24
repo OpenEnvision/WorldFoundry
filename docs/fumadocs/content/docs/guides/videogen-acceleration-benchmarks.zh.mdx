@@ -1,0 +1,55 @@
+---
+title: 视频生成与世界模型加速基准
+description: 15 个基础模型在 NVIDIA H200 上的客观推理加速基准，以及与同类开源/厂商框架的坦诚对比。
+---
+
+WorldFoundry 在同一套开源推理栈中统一覆盖 **15 个基础模型**（11 个旗舰视频生成模型 + 4 个实时自回归/交互世界模型）。所有汇报档位均要求**零回退运行时回执**（`fallbacks: []`、`capture_failed: 0`、`dense_fallback_calls: 0`）与 **4 帧 RGB 人工视觉抽检**双重把关。
+
+## 评测方法论与硬件声明
+
+- **软硬件基线**：裸机 **NVIDIA H200 SXM（141 GiB HBM3e，SM90，NVSwitch）**，PyTorch `2.11.0+cu128`、CUDA 12.8、Triton 3.6.0、Hopper FlashAttention-3 `3.0.1`、SM90 CUTLASS `sol_attn` 与内置 Hopper TMA `PISA`。
+- **并发与独占严格区分**：
+  - **零并发独占（Clean）**：独占 GPU、零外部进程（覆盖 **15 个模型中的 11 个**及单卡 `LTX-2.5`）。
+  - **同会话配对（Paired）**：`Wan2.2-TI2V-5B`、`Wan2.2-T2V-A14B`、`HunyuanVideo-13B` 与 `2x H200 LTX-2.5 CFG=2` 期间宿主机存在外部后台训练任务（每卡 ~33.5 GiB）。我们在同一张卡上背靠背配对测得 `L0` 与加速档位，仅汇报**同会话相对加速比（`L0 / L_opt`）**，不将并发壁钟秒数冒充独占耗时（经 `SANA-Video` 并发 `2.862x` vs 独占 `2.836x`、`LingBot-Video` 并发 `3.059x` vs 独占 `3.069x` 交叉验证，配对倍率误差低于 `1%`）；功能正确性、CUDA Graph 捕获/回放、零 fallback 回执、PSNR/SSIM 与视觉画质不受并发影响。
+- **跨架构精度差异披露**：NVIDIA SOL Engine 部分结果基于 Blackwell **B200 SM100 原生 NVFP4**；WorldFoundry 在 H200 上采用 **SM90 行级 FP8 W8A8（`use_fast_accum=False` 全 FP32 累加）**。SM100 NVFP4 权重打包与分发已完成实现与单测，待物理 B200 实测补齐。
+
+## 旗舰视频生成模型基准（11 个模型，NVIDIA H200）
+
+| # | 模型 | 测试几何 | 参考加速路线（SOL Engine 公开参考） | WorldFoundry H200 实测结果 | 环境 | 画质与回执 |
+| ---: | --- | --- | --- | --- | --- | --- |
+| 1 | **Cosmos3-Super (64B)** | `704x1280x33f`, 35 步 | TeaCache + 步选择 NVFP4（`~2.27x`） | **1x H200**：`77.94s -> 33.02s`（**`2.36x`**）；比特级精确 `und` 静态 KV 缓存（减显存 `56.2 GiB`，`122.8->66.6 GiB`）+ 步选择 FP8 + FA3 GQA + TeaCache + Piecewise Graph | Clean | `fp8_und_kv (2/2)` `20.35 dB / 0.9286`；`sol_balanced` `16.42 dB / 0.8255`；`fallbacks=[]` |
+| 2 | **LTX-2.3 (22B 音视频)** | `768x1280x65f`, 8+3 步 | 融合 + 缓存 + PISA + NVFP4 + 剪枝（`~2.38x`） | **1x H200**：`4.648s -> 1.974s`（**`2.35x` vs W1 / `2.27x` vs W3 / `2.51x` DiT**，FP8+PISA+FBCache 推荐默认）；**`1.782s`（`2.61x` / `2.86x` DiT）**（TeaCache，无剪枝） | Clean | 双 Prompt + 真实 I2V（`39.19 dB`），PISA `90/90` 零回退；FBCache `audio_rms_ratio=0.839` |
+| 3 | **SANA-Video (2B)** | `480x832x81f`, 50 步 | EasyCache + 融合 + 编译（`~2.77x`） | **1x H200**：`55.76s -> 27.19s`（`2.05x` 无损，`27.99 dB`）-> **`19.66s`（`2.84x`）**（EasyCache 0.08 + 编译 FA3） | Clean | `27.43 dB / SSIM 0.9891`；`80/80` 编译态 FA3 实测验证；`fallbacks=[]` |
+| 4 | **Wan2.2-TI2V-5B** | `704x1280x121f`, 50 步 | EasyCache + 融合 + 编译（`~2.89x`） | **1x H200**：纯 BF16 EasyCache+PISA+编译 VideoVAE38（**`3.01x` E2E / `3.04x` DiT**，VAE `2.72x`）；FP8 **`3.06x` E2E / `3.09x` DiT**；无 PISA FP8 `compile_fullgraph` **`2.87x` E2E / `2.89x` DiT** | Paired | 4 帧视觉锐利无色斑；真实 I2V（`per-token`）通过；`fallbacks=[]` |
+| 5 | **Wan2.2-T2V-A14B (28B)** | `480x832x81f`, 40 步 | 融合 + EasyCache + PISA（`~2.17x`） | **1x H200**：PISA + EasyCache（双专家边界重置）+ 编译 VideoVAE（**`2.29x` E2E / `2.29x` DiT**，VAE `2.96x`）；**2x H200 `CFG=2`**：**`4.27x` vs 1x L0 / `2.17x` vs 2x L0** | Paired | `SSIM 0.711`，专家切换 `1` 次干净重置，零串扰；`fallbacks=[]` |
+| 6 | **LingBot-Video (1.3B)** | `480x832x121f`, 40 步 | 融合 + PISA + EasyCache（`~2.60x`） | **1x H200**：`114.59s -> 86.94s`（`1.32x`）-> `67.33s`（`1.70x` PISA）-> **`37.03s`（`3.10x` E2E / `3.22x` DiT）** | Clean | `19.39 dB / SSIM 0.9207`；`fallbacks=[]` |
+| 7 | **HunyuanVideo-13B** | `720x1280x65f`, 50 步 | 融合 + TeaCache + Sol-Attn（`~5.03x`） | **1x H200**：Sol-Attn(`tau=1.0`) + TeaCache + FP8 + Graph（**`5.25x` DiT**；保守档 `4.33x` @ `25.98 dB`）；BF16 Tiled VAE `1.29x`；**2x H200 `SP=2`**：**`8.59x`** vs 1x L0 | Paired | `22.51 dB / SSIM 0.9097`，跨卡 `sp-sync` 一致性共识，`0.56s` 干净释放；`fallbacks=[]` |
+| 8 | **Wan2.1-T2V-14B** | `480p` & `720p`, 81 帧 50 步 | 融合 + EasyCache + Sol-Attn（`~3.48x`） | **4x H200**：480p `82.00s`（`94.4%` 扩展效率）-> **`22.50s`（`3.64x` vs 4x / `13.86x` vs 1x）**；720p `316.90s -> 79.02s`（**`4.01x`** vs 4x）；单卡 EasyCache+Sol-Attn+Piecewise Graph SM90 实卡验通 | Clean (4x) | FP64 Triton RoPE（`13.63x`），`use_fast_accum=False`，480p/720p 清晰锐利；`fallbacks=[]` |
+| 9 | **LTX-2.5 (22B)** | `768x1280x65f`, 24 步 CFG=3 / 8+3 | 并行优化 + FBCache + 融合（`~4.68x`） | **1x H200（Clean）**：`dev` `30.38s -> 13.34s`（**`2.28x`**），`distilled` `3.68s -> 2.29s`（`1.61x`）；**2x H200 `CFG=2`（Paired）**：**`5.46x` E2E / `5.33x` DiT**（`39.29 GiB/卡`） | Clean (1x) / Paired (2x) | `26.26 dB / SSIM 0.9907`（2x CFG=2），`zero_fallbacks_verified=True` |
+| 10 | **MiniMax-H3 (31B)** | `512p 4s` & `768p 5s` | 上下文并行 + 融合 + Sol-Attn + FBCache（`~3.95x`） | 36L VAE **`10.97x`**（`58.36 dB`）；**1x H200**：768p 20s **`38.64s`（`3.22x`）**；**2x H200 `SP=2`**：768p 20s **`20.97s`（`5.93x`）**，768p 50s **`41.88s`（`7.42x`）**，512p CFG=2 **`14.36s`（`4.20x`）** | Clean | Rank0/Rank1 最大误差 `0.0`，`kv_splits=4`，关键帧 `fl2va` `25.53 dB`；`fallbacks=[]` |
+| 11 | **MiniMax-H3 超级加速** | `5s` & `10s` `768p` | 4 步 H3 草稿 + 3 步 LTX-2.5 精修（`22.2x` / `27.7x`） | **1x H200**：**5s** `361.41s -> 8.92s`（**`40.54x`**）；**10s** `1,054.84s -> 19.82s`（**`53.22x`**）；双声道立体声 MP4 封装 + 阶段卸载（`57.14 GiB`，`cos=1.000000`） | Clean | 稳态 E2E 复用缓存文本编码；5s 基线跑满 50 步（`361.41s`） |
+
+## 实时流式世界模型基准（零并发 H200）
+
+| 模型 | 负载 | 官方 / 同类参考 | WorldFoundry H200 实测 | 回执 |
+| --- | --- | --- | --- | --- |
+| **Matrix-Game-2.0** | `universal` (69f) / `templerun` (117f) | ~25 FPS (H100) | **无损 BF16 默认**：**`57.72–60.52 FPS`**（`65.9–67.0 dB`，latent `PSNR=inf`）；**FA3**：**`67.55 FPS`** | `capture=1, eager=0, recompiles=0, fallbacks=[]` |
+| **LongLive-1.3B** | 81f / 153f / 3-Prompt 切换 | 24.8 FPS（FP8） | **无损 BF16（`O(1)` 4 图段）**：**`27.17 FPS`**（`PSNR=inf` / `55.84 dB`）；**FA3**：**`30.09–30.16 FPS`** | `O(1)` 恒定 4 图段，Prompt 切换零失效 |
+| **Self-Forcing 1.3B** | 81f / 153f 流式 | ~17 FPS 官方；~20–24 FPS 同类 | **无损 BF16 + FA3 + 重叠流水**：81f **`27.90 FPS`**（`TTFT 313 ms`），153f **`28.16 FPS`** | `O(1)` 恒定 5 图段，重叠与串行比特级一致 |
+| **HY-WorldPlay (34 GB)** | Bi 12-lat (45f) & AR 8ctx | Eager `2,853 ms` / `701 ms` | **Bi**：2x SP=2 Full FP8 `603.4 ms`（**`4.73x`**）；**AR**：2x SP=2 `191.9 ms`（**`20.84 FPS / 3.65x`**） | RGB VAE 验证（BF16+FA3 `54.9 dB`，Full FP8 `37.1 dB`） |
+
+## 与同类框架的客观对比
+
+- **WorldFoundry 优势**：单一开源栈覆盖 **15 个模型**；自回归世界模型在无损 BF16 下达到 **30–67.5 FPS** 且图段/显存 `O(1)`；全链路零回退 JSON 回执、FP32 累加 FP8（`use_fast_accum=False`）、FP64 Triton RoPE 与强制人工视觉把关。
+- **同类框架当前仍领先之处**：
+  - **NVIDIA SOL Engine**：拥有物理 **Blackwell B200 NVFP4** 实测数据（WorldFoundry 已实现 SM100 NVFP4 打包与分发，但目前实卡评测基于 Hopper H200 FP8）。
+  - **SGLang-Diffusion**：在多租户连续批处理（continuous batching）与 OpenAI 兼容在线服务平面方面更成熟。
+  - **隐空间级联适配器**：MiniMax-H3 超级加速当前通过解码上采样 + LTX VAE 编码完成阶段衔接（5s 耗时 `1.72s`），训练专用隐空间适配器可进一步压缩衔接开销。
+
+## 画质拦截与主动否决记录
+
+- **已拦截 — LTX-2.3 蒸馏 Stage-2 Token Pruning**：3 步蒸馏阶段剪枝 20–25% Token（`1.60s / 2.91x`，`15.4 dB`）导致天空/树冠彩虹色斑，已在 `total_steps < 6` 时默认自动旁路。
+- **已拦截 — HunyuanVideo-13B `tau=1.25`**：虽达 `5.84x`，但 PSNR 降至 `20.80 dB` 且尾帧狐狸动作偏移，已否决并采用 `tau=1.0 + dense_single=(0,-2,-1)`（`5.25x`，`22.51 dB`）。
+- **已修复 — Hopper FP22 累加漂移与 FP32 RoPE 漂移**：深层 DiT FP8 默认开启 `use_fast_accum=False`（开销低于 `3%`）并采用 FP64 寄存器驻留 Triton RoPE（比 `complex128` 快 `13.63x`）。
+
+完整复现命令与详细数据见 `benchmarks/videogen/BENCHMARK_REPORT.md`。
