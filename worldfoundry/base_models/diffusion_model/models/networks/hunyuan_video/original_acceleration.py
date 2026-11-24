@@ -2375,6 +2375,17 @@ class Hunyuan13BEasyCache:
 def _resolve_sp_context(enabled: bool) -> tuple[bool, Any, int, int]:
     if not enabled:
         return False, None, 1, 0
+    import torch.distributed as dist
+
+    if not (dist.is_available() and dist.is_initialized()):
+        return False, None, 1, 0
+    from worldfoundry.core.distributed.sequence_parallel.runtime import get_sequence_parallel_group
+
+    sp_group = get_sequence_parallel_group()
+    if sp_group is not None:
+        sp_size = int(dist.get_world_size(sp_group))
+        if sp_size > 1:
+            return True, sp_group, sp_size, int(dist.get_rank(sp_group))
     from worldfoundry.core.distributed.model_parallel.sequence_mesh_state import get_parallel_state
 
     pstate = get_parallel_state()

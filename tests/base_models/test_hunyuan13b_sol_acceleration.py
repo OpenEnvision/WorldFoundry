@@ -1062,3 +1062,29 @@ def test_denoiser_graph_downgrade_teacache_safety_reapply_and_lifecycle() -> Non
             assert torch.isfinite(out_tile).all()
         assert rt_tile.receipt()["fallbacks"] == []
         assert rt_tile.receipt()["attention"]["sol_attn_calls"] > 0
+
+
+def test_hunyuan13b_resolve_sp_context_supports_runtime_sp_group(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify _resolve_sp_context recognizes groups initialized via sequence_parallel.runtime."""
+    import torch.distributed as dist
+
+    from worldfoundry.base_models.diffusion_model.models.networks.hunyuan_video.original_acceleration import (
+        _resolve_sp_context,
+    )
+    from worldfoundry.core.distributed.sequence_parallel import runtime as sp_runtime
+
+    fake_group = object()
+    monkeypatch.setattr(dist, "is_available", lambda: True)
+    monkeypatch.setattr(dist, "is_initialized", lambda: True)
+    monkeypatch.setattr(dist, "get_world_size", lambda group=None: 2 if group is fake_group else 1)
+    monkeypatch.setattr(dist, "get_rank", lambda group=None: 1 if group is fake_group else 0)
+    monkeypatch.setattr(sp_runtime, "get_sequence_parallel_group", lambda: fake_group)
+
+    enabled, grp, world_size, rank = _resolve_sp_context(True)
+    assert enabled is True
+    assert grp is fake_group
+    assert world_size == 2
+    assert rank == 1
+    assert _resolve_sp_context(False) == (False, None, 1, 0)
+    monkeypatch.setattr(dist, "is_initialized", lambda: False)
+    assert _resolve_sp_context(True) == (False, None, 1, 0)
