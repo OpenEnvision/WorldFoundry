@@ -732,10 +732,65 @@ class TransformerBlock(nn.Module):
         super().__init__()
         self.layers = nn.ModuleList([TransformerLayer(model_config, i) for i in range(model_config.num_layers)])
         # Layer-by-layer CPU offload: when set to a compute device, each layer is
-        # streamed CPU->device just before it runs and moved back after, so the
+        # streamed CPU->device just before it runs and restored to CPU after, so the
         # 228GB preview MoE never has more than one layer resident on the GPU.
         # Weights otherwise live in CPU RAM. Off by default (all-resident path).
         self.layer_offload_device: torch.device | None = None
+        self._offload_cpu_cache: dict[
+            int,
+            tuple[list[tuple[nn.Parameter, torch.Tensor]], list[tuple[nn.Module, str, torch.Tensor]]],
+        ] = {}
+        self._pin_disabled = False
+
+    def _get_offload_cpu_entries(
+        self,
+        layer_idx: int,
+        layer: nn.Module,
+        offload: torch.device,
+    ) -> tuple[list[tuple[nn.Parameter, torch.Tensor]], list[tuple[nn.Module, str, torch.Tensor]]]:
+        cached = self._offload_cpu_cache.get(layer_idx)
+        if cached is not None:
+            param_entries, buf_entries = cached
+            if all(param.data is cpu_t for param, cpu_t in param_entries) and all(
+                mod._buffers.get(name) is cpu_b for mod, name, cpu_b in buf_entries
+            ):
+                return cached
+
+        cpu_by_src: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
+
+        def _to_pinned_cpu(tensor: torch.Tensor) -> torch.Tensor:
+            src_id = id(tensor)
+            existing = cpu_by_src.get(src_id)
+            if existing is not None:
+                return existing[1]
+            cpu_t = tensor if tensor.device.type == "cpu" else tensor.to("cpu")
+            if offload.type == "cuda" and not self._pin_disabled and not cpu_t.is_pinned():
+                try:
+                    cpu_t = cpu_t.pin_memory()
+                except RuntimeError:
+                    self._pin_disabled = True
+            # Keep original wrapper referenced until the loop ends so its Python id cannot be reused.
+            cpu_by_src[src_id] = (tensor, cpu_t)
+            return cpu_t
+
+        param_entries: list[tuple[nn.Parameter, torch.Tensor]] = []
+        for param in layer.parameters():
+            cpu_t = _to_pinned_cpu(param.data)
+            param.data = cpu_t
+            param_entries.append((param, cpu_t))
+
+        buf_entries: list[tuple[nn.Module, str, torch.Tensor]] = []
+        for mod in layer.modules():
+            for name, buf in mod._buffers.items():
+                if buf is None:
+                    continue
+                cpu_b = _to_pinned_cpu(buf)
+                mod._buffers[name] = cpu_b
+                buf_entries.append((mod, name, cpu_b))
+
+        entries = (param_entries, buf_entries)
+        self._offload_cpu_cache[layer_idx] = entries
+        return entries
 
     def forward(
         self,
@@ -748,12 +803,28 @@ class TransformerBlock(nn.Module):
         x = x.to(_BF16)
         x = modality_dispatcher._permute(x)
         offload = self.layer_offload_device
-        for layer in self.layers:
-            if offload is not None:
+        if offload is None:
+            for layer in self.layers:
+                x = layer(x, rope, varlen_handler, modality_dispatcher, cp_split_sizes)
+        elif torch.is_grad_enabled():
+            for layer in self.layers:
                 layer.to(offload)
-            x = layer(x, rope, varlen_handler, modality_dispatcher, cp_split_sizes)
-            if offload is not None:
+                x = layer(x, rope, varlen_handler, modality_dispatcher, cp_split_sizes)
                 layer.to("cpu")
+        else:
+            for layer_idx, layer in enumerate(self.layers):
+                param_entries, buf_entries = self._get_offload_cpu_entries(layer_idx, layer, offload)
+                try:
+                    for param, cpu_t in param_entries:
+                        param.data = cpu_t.to(offload, non_blocking=True)
+                    for mod, name, cpu_b in buf_entries:
+                        mod._buffers[name] = cpu_b.to(offload, non_blocking=True)
+                    x = layer(x, rope, varlen_handler, modality_dispatcher, cp_split_sizes)
+                finally:
+                    for param, cpu_t in param_entries:
+                        param.data = cpu_t
+                    for mod, name, cpu_b in buf_entries:
+                        mod._buffers[name] = cpu_b
         x = modality_dispatcher._inv_permute(x)
         return x
 
